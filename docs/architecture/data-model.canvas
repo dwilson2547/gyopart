@@ -1,0 +1,155 @@
+{
+  "nodes": [
+    {
+      "id": "grp_ji",
+      "type": "group",
+      "label": "junkyard_inventory schema (Postgres)",
+      "x": -1050,
+      "y": -600,
+      "width": 800,
+      "height": 1000
+    },
+    {
+      "id": "n_loc",
+      "type": "text",
+      "text": "## Location\n**id**, name\naddress, city, state, zip\nlat, lng, phone, url\nsource *(scraper name)*",
+      "x": -1020,
+      "y": -560,
+      "width": 320,
+      "height": 160,
+      "color": "4"
+    },
+    {
+      "id": "n_veh",
+      "type": "text",
+      "text": "## Vehicle\n**id**, vin *(dedup key, 17 chars)*\nyear, make, model, trim\nextras *(JSONB — yard-specific fields)*\ncar_id, car_id_resolved\ncar_id_method, car_id_confidence\nlocation_id → Location",
+      "x": -1020,
+      "y": -360,
+      "width": 320,
+      "height": 220,
+      "color": "4"
+    },
+    {
+      "id": "n_srun",
+      "type": "text",
+      "text": "## ScrapeRun\n**id**, source\nlocation_id → Location\nstarted_at, finished_at\nvehicle_count, status",
+      "x": -1020,
+      "y": -100,
+      "width": 320,
+      "height": 140,
+      "color": "4"
+    },
+    {
+      "id": "n_rule",
+      "type": "text",
+      "text": "## MappingRule\n**id**, scope, priority\nmatch_make, match_model, match_trim\nreplacement_make, replacement_model\nis_active, created_by",
+      "x": -680,
+      "y": -560,
+      "width": 300,
+      "height": 160,
+      "color": "4"
+    },
+    {
+      "id": "n_disc",
+      "type": "text",
+      "text": "## MappingDiscrepancy\n**id**, vehicle_id → Vehicle\nraw_year, raw_make, raw_model, raw_trim\nfuzzy_make/model_match, fuzzy_scores\ncandidate_car_id, status\ncreated_at, last_processed_at",
+      "x": -680,
+      "y": -360,
+      "width": 300,
+      "height": 220,
+      "color": "4"
+    },
+    {
+      "id": "n_vcache",
+      "type": "text",
+      "text": "## VinCache\n**vin** *(PK, 17 chars)*\nmake, model, model_year, trim\nerror_code, fetched_at",
+      "x": -680,
+      "y": -100,
+      "width": 300,
+      "height": 120,
+      "color": "4"
+    },
+    {
+      "id": "grp_pi",
+      "type": "group",
+      "label": "parts_interchange schema (Postgres)",
+      "x": -150,
+      "y": -600,
+      "width": 720,
+      "height": 700
+    },
+    {
+      "id": "n_yr",
+      "type": "text",
+      "text": "## Year\n**id**, name *(e.g. \"2015\")*",
+      "x": -120,
+      "y": -560,
+      "width": 200,
+      "height": 80,
+      "color": "4"
+    },
+    {
+      "id": "n_mk",
+      "type": "text",
+      "text": "## Make\n**id**, name",
+      "x": 130,
+      "y": -560,
+      "width": 200,
+      "height": 80,
+      "color": "4"
+    },
+    {
+      "id": "n_mdl",
+      "type": "text",
+      "text": "## Model\n**id**, name\nmake_id → Make",
+      "x": 130,
+      "y": -440,
+      "width": 200,
+      "height": 100,
+      "color": "4"
+    },
+    {
+      "id": "n_car",
+      "type": "text",
+      "text": "## Car\n**id**\nyear_id → Year\nmake_id → Make\nmodel_id → Model",
+      "x": -120,
+      "y": -300,
+      "width": 200,
+      "height": 120,
+      "color": "4"
+    },
+    {
+      "id": "n_part",
+      "type": "text",
+      "text": "## Part\n**id**, name, category\ndescription",
+      "x": 130,
+      "y": -300,
+      "width": 200,
+      "height": 100,
+      "color": "4"
+    },
+    {
+      "id": "n_cp",
+      "type": "text",
+      "text": "## CarParts *(junction)*\ncar_id → Car\npart_id → Part",
+      "x": -10,
+      "y": -140,
+      "width": 220,
+      "height": 100,
+      "color": "4"
+    }
+  ],
+  "edges": [
+    {"id": "e_disc_veh", "fromNode": "n_disc", "toNode": "n_veh", "fromSide": "left", "toSide": "right", "label": "vehicle_id"},
+    {"id": "e_veh_loc", "fromNode": "n_veh", "toNode": "n_loc", "fromSide": "top", "toSide": "bottom", "label": "location_id"},
+    {"id": "e_veh_vc",  "fromNode": "n_veh", "toNode": "n_vcache", "fromSide": "bottom", "toSide": "top", "label": "vin"},
+    {"id": "e_srun_loc","fromNode": "n_srun","toNode": "n_loc", "fromSide": "top", "toSide": "bottom", "label": "location_id"},
+    {"id": "e_mdl_mk",  "fromNode": "n_mdl", "toNode": "n_mk", "fromSide": "top", "toSide": "bottom", "label": "make_id"},
+    {"id": "e_car_yr",  "fromNode": "n_car", "toNode": "n_yr", "fromSide": "top", "toSide": "bottom", "label": "year_id"},
+    {"id": "e_car_mk",  "fromNode": "n_car", "toNode": "n_mk", "fromSide": "right", "toSide": "left", "label": "make_id"},
+    {"id": "e_car_mdl", "fromNode": "n_car", "toNode": "n_mdl", "fromSide": "right", "toSide": "bottom", "label": "model_id"},
+    {"id": "e_cp_car",  "fromNode": "n_cp",  "toNode": "n_car",  "fromSide": "left",  "toSide": "bottom", "label": "car_id"},
+    {"id": "e_cp_part", "fromNode": "n_cp",  "toNode": "n_part", "fromSide": "right", "toSide": "bottom", "label": "part_id"},
+    {"id": "e_veh_car", "fromNode": "n_veh", "toNode": "n_car",  "fromSide": "right", "toSide": "left",   "label": "car_id → id\n(resolved mapping)", "color": "6"}
+  ]
+}
