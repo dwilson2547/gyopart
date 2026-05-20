@@ -1,0 +1,150 @@
+{
+  "nodes": [
+    {
+      "id": "n_user",
+      "type": "text",
+      "text": "## User\ngyopart.com visitor\n*(knows their zip code)*",
+      "x": -500,
+      "y": -900,
+      "width": 220,
+      "height": 100,
+      "color": "6"
+    },
+    {
+      "id": "n_ui",
+      "type": "text",
+      "text": "## gyopart-ui\nVite + React :5173\nCascading vehicle picker",
+      "x": -200,
+      "y": -900,
+      "width": 280,
+      "height": 100,
+      "color": "5"
+    },
+    {
+      "id": "n_picker",
+      "type": "text",
+      "text": "## Cascading Vehicle Picker\nYear → Make → Model → Trim → Engine\n`/v1/vehicles/{years,makes,models,trims,engines}`\n*(gyopart-api :8200)*",
+      "x": -200,
+      "y": -760,
+      "width": 320,
+      "height": 120,
+      "color": "5"
+    },
+    {
+      "id": "n_pi_db",
+      "type": "text",
+      "text": "## parts_interchange DB\nYear, Make, Model, Car\nPart, CarParts",
+      "x": 220,
+      "y": -760,
+      "width": 280,
+      "height": 100,
+      "color": "4"
+    },
+    {
+      "id": "n_parts_list",
+      "type": "text",
+      "text": "## Parts List\n`/v1/parts?car_id=N`\npaginated + filterable by category",
+      "x": -200,
+      "y": -600,
+      "width": 300,
+      "height": 100,
+      "color": "5"
+    },
+    {
+      "id": "n_user_input",
+      "type": "text",
+      "text": "## User Selects\nPart from list\n+ enters zip code",
+      "x": -500,
+      "y": -600,
+      "width": 240,
+      "height": 100,
+      "color": "6"
+    },
+    {
+      "id": "n_search",
+      "type": "text",
+      "text": "## Search Request\n`GET /v1/search?part_id=N&zip=NNNNN`\n*(gyopart-api :8200)*",
+      "x": -200,
+      "y": -460,
+      "width": 300,
+      "height": 100,
+      "color": "5"
+    },
+    {
+      "id": "n_car_ids",
+      "type": "text",
+      "text": "## Resolve Compatible car_ids\nLookup part_id in CarParts junction\n→ list of car_ids sharing this part",
+      "x": -200,
+      "y": -320,
+      "width": 300,
+      "height": 100,
+      "color": "5"
+    },
+    {
+      "id": "n_inv_call",
+      "type": "text",
+      "text": "## Call inventory_api\n`GET /inventory/search`\n`?car_ids=1,2,3&zip=48093&radius_miles=50`",
+      "x": -200,
+      "y": -180,
+      "width": 300,
+      "height": 100,
+      "color": "5"
+    },
+    {
+      "id": "n_inv_api",
+      "type": "text",
+      "text": "## inventory_api\nFastAPI\nInventory search service",
+      "x": 220,
+      "y": -180,
+      "width": 260,
+      "height": 100,
+      "color": "5"
+    },
+    {
+      "id": "n_inv_search",
+      "type": "text",
+      "text": "## Inventory Search\nzip → lat/lng *(uszipcode, offline)*\nHaversine distance filter\nQuery Vehicle WHERE car_id IN (…)",
+      "x": 220,
+      "y": -40,
+      "width": 280,
+      "height": 120,
+      "color": "5"
+    },
+    {
+      "id": "n_ji_db",
+      "type": "text",
+      "text": "## junkyard_inventory DB\nLocation + Vehicle\n*(car_id resolved by pipeline)*",
+      "x": 560,
+      "y": -40,
+      "width": 280,
+      "height": 100,
+      "color": "4"
+    },
+    {
+      "id": "n_results",
+      "type": "text",
+      "text": "## Ranked Results\nLocations sorted by distance\nwith matching vehicle lists\nand match counts per yard",
+      "x": -200,
+      "y": 120,
+      "width": 300,
+      "height": 120,
+      "color": "4"
+    }
+  ],
+  "edges": [
+    {"id": "e1",  "fromNode": "n_user",      "toNode": "n_ui",        "fromSide": "right",  "toSide": "left",   "label": "browser"},
+    {"id": "e2",  "fromNode": "n_ui",        "toNode": "n_picker",    "fromSide": "bottom", "toSide": "top"},
+    {"id": "e3",  "fromNode": "n_picker",    "toNode": "n_pi_db",     "fromSide": "right",  "toSide": "left",   "label": "vehicle lookups"},
+    {"id": "e4",  "fromNode": "n_picker",    "toNode": "n_parts_list","fromSide": "bottom", "toSide": "top"},
+    {"id": "e5",  "fromNode": "n_parts_list","toNode": "n_pi_db",     "fromSide": "right",  "toSide": "left",   "label": "parts for car_id"},
+    {"id": "e6",  "fromNode": "n_user_input","toNode": "n_search",    "fromSide": "right",  "toSide": "left",   "label": "part_id + zip"},
+    {"id": "e7",  "fromNode": "n_search",    "toNode": "n_car_ids",   "fromSide": "bottom", "toSide": "top"},
+    {"id": "e8",  "fromNode": "n_car_ids",   "toNode": "n_pi_db",     "fromSide": "right",  "toSide": "bottom", "label": "car_parts lookup"},
+    {"id": "e9",  "fromNode": "n_car_ids",   "toNode": "n_inv_call",  "fromSide": "bottom", "toSide": "top",    "label": "car_ids resolved"},
+    {"id": "e10", "fromNode": "n_inv_call",  "toNode": "n_inv_api",   "fromSide": "right",  "toSide": "left"},
+    {"id": "e11", "fromNode": "n_inv_api",   "toNode": "n_inv_search","fromSide": "bottom", "toSide": "top"},
+    {"id": "e12", "fromNode": "n_inv_search","toNode": "n_ji_db",     "fromSide": "right",  "toSide": "left",   "label": "vehicle query"},
+    {"id": "e13", "fromNode": "n_inv_search","toNode": "n_results",   "fromSide": "left",   "toSide": "right",  "label": "sorted locations"},
+    {"id": "e14", "fromNode": "n_results",   "toNode": "n_ui",        "fromSide": "top",    "toSide": "bottom", "label": "rendered list"}
+  ]
+}
