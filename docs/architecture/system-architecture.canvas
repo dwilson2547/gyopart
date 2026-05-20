@@ -84,7 +84,7 @@
       "id": "n_claude",
       "type": "text",
       "text": "## Claude API\n(Anthropic)\nLLM rule suggestions",
-      "x": -720,
+      "x": 40,
       "y": 380,
       "width": 260,
       "height": 100,
@@ -134,9 +134,9 @@
       "id": "grp_platform",
       "type": "group",
       "label": "junkyard-platform",
-      "x": -800,
+      "x": -1120,
       "y": 80,
-      "width": 440,
+      "width": 720,
       "height": 720
     },
     {
