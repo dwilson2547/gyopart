@@ -83,7 +83,7 @@
     {
       "id": "n_srun",
       "type": "text",
-      "text": "## Update ScrapeRun\nvehicle_count++\ntimestamp updated",
+      "text": "## Update ScrapeRun\nnew_vehicles++\ncompleted_at timestamp",
       "x": -140,
       "y": -200,
       "width": 280,
@@ -108,7 +108,7 @@
       "y": -60,
       "width": 280,
       "height": 120,
-      "color": "3"
+      "color": "4"
     }
   ],
   "edges": [

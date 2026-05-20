@@ -33,7 +33,7 @@
     {
       "id": "n_pi_db",
       "type": "text",
-      "text": "## parts_interchange DB\nYear / Make / Model / Car\nPart / CarParts",
+      "text": "## parts_interchange DB\nYear / Make / Model / Trim / Engine\nCar / Part / CarParts",
       "x": -280,
       "y": -280,
       "width": 300,
