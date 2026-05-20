@@ -1,0 +1,170 @@
+{
+  "nodes": [
+    {
+      "id": "n_disc",
+      "type": "text",
+      "text": "## MappingDiscrepancy\n`status = unresolved`\n*(created by mapping pipeline)*",
+      "x": -160,
+      "y": -900,
+      "width": 320,
+      "height": 100,
+      "color": "1"
+    },
+    {
+      "id": "n_admin",
+      "type": "text",
+      "text": "## Admin\nX-Admin-Key auth",
+      "x": -540,
+      "y": -900,
+      "width": 220,
+      "height": 80,
+      "color": "6"
+    },
+    {
+      "id": "n_admin_ui",
+      "type": "text",
+      "text": "## /admin/ui/discrepancies\nadmin_api :8101 *(HTMX)*\nLists unresolved discrepancies",
+      "x": -160,
+      "y": -760,
+      "width": 320,
+      "height": 100,
+      "color": "5"
+    },
+    {
+      "id": "n_llm",
+      "type": "text",
+      "text": "## LLM Suggester\nClaude API via ANTHROPIC_MODEL env\nGenerates MappingRule suggestion\n`is_active = false, created_by = llm_suggested`",
+      "x": -160,
+      "y": -620,
+      "width": 320,
+      "height": 120,
+      "color": "5"
+    },
+    {
+      "id": "n_claude",
+      "type": "text",
+      "text": "## Claude API\n*(Anthropic)*\nmodel = ANTHROPIC_MODEL env",
+      "x": 260,
+      "y": -620,
+      "width": 260,
+      "height": 100,
+      "color": "2"
+    },
+    {
+      "id": "n_confidence",
+      "type": "text",
+      "text": "Confidence ≥ 0.80?",
+      "x": -100,
+      "y": -460,
+      "width": 200,
+      "height": 80,
+      "color": "3"
+    },
+    {
+      "id": "n_llm_queue",
+      "type": "text",
+      "text": "## /admin/ui/llm-queue\nRule shown for approval\n`is_active = false`",
+      "x": 260,
+      "y": -460,
+      "width": 280,
+      "height": 100,
+      "color": "5"
+    },
+    {
+      "id": "n_manual_review",
+      "type": "text",
+      "text": "## Manual Review\nShown for human inspection\n*(low confidence suggestion)*",
+      "x": -540,
+      "y": -460,
+      "width": 280,
+      "height": 100,
+      "color": "5"
+    },
+    {
+      "id": "n_approve",
+      "type": "text",
+      "text": "Admin approves rule?",
+      "x": -100,
+      "y": -320,
+      "width": 200,
+      "height": 80,
+      "color": "3"
+    },
+    {
+      "id": "n_activate",
+      "type": "text",
+      "text": "## Rule Activated\n`is_active = true`\nreprocess_job triggered",
+      "x": 260,
+      "y": -180,
+      "width": 280,
+      "height": 100,
+      "color": "5"
+    },
+    {
+      "id": "n_reject",
+      "type": "text",
+      "text": "## Rule Deleted",
+      "x": -540,
+      "y": -180,
+      "width": 220,
+      "height": 80,
+      "color": "1"
+    },
+    {
+      "id": "n_reprocess",
+      "type": "text",
+      "text": "## reprocess_job\nRe-runs mapping pipeline\non all affected vehicles",
+      "x": 260,
+      "y": -40,
+      "width": 280,
+      "height": 100,
+      "color": "5"
+    },
+    {
+      "id": "n_resolved_rule",
+      "type": "text",
+      "text": "## ✓ Resolved via Rule\ncar_id assigned by pipeline\nMappingDiscrepancy closed",
+      "x": 260,
+      "y": 100,
+      "width": 280,
+      "height": 100,
+      "color": "4"
+    },
+    {
+      "id": "n_manual_override",
+      "type": "text",
+      "text": "## Manual Override\nAdmin assigns car_id directly\n`MappingDiscrepancy.status = manual`\n→ Resolved immediately",
+      "x": -820,
+      "y": -760,
+      "width": 280,
+      "height": 120,
+      "color": "5"
+    },
+    {
+      "id": "n_resolved_manual",
+      "type": "text",
+      "text": "## ✓ Resolved (manual)\n`status = manual`\ncar_id set directly on Vehicle",
+      "x": -820,
+      "y": -600,
+      "width": 280,
+      "height": 80,
+      "color": "4"
+    }
+  ],
+  "edges": [
+    {"id": "e1",  "fromNode": "n_admin",          "toNode": "n_admin_ui",       "fromSide": "right",  "toSide": "left"},
+    {"id": "e2",  "fromNode": "n_disc",            "toNode": "n_admin_ui",       "fromSide": "bottom", "toSide": "top"},
+    {"id": "e3",  "fromNode": "n_admin_ui",        "toNode": "n_llm",            "fromSide": "bottom", "toSide": "top",   "label": "trigger suggestion"},
+    {"id": "e4",  "fromNode": "n_llm",             "toNode": "n_claude",         "fromSide": "right",  "toSide": "left",  "label": "API call"},
+    {"id": "e5",  "fromNode": "n_llm",             "toNode": "n_confidence",     "fromSide": "bottom", "toSide": "top",   "label": "rule + confidence score"},
+    {"id": "e6",  "fromNode": "n_confidence",      "toNode": "n_llm_queue",      "fromSide": "right",  "toSide": "left",  "label": "yes"},
+    {"id": "e7",  "fromNode": "n_confidence",      "toNode": "n_manual_review",  "fromSide": "left",   "toSide": "right", "label": "no", "color": "1"},
+    {"id": "e8",  "fromNode": "n_llm_queue",       "toNode": "n_approve",        "fromSide": "bottom", "toSide": "right", "label": "admin reviews"},
+    {"id": "e9",  "fromNode": "n_approve",         "toNode": "n_activate",       "fromSide": "right",  "toSide": "left",  "label": "yes"},
+    {"id": "e10", "fromNode": "n_approve",         "toNode": "n_reject",         "fromSide": "left",   "toSide": "right", "label": "no", "color": "1"},
+    {"id": "e11", "fromNode": "n_activate",        "toNode": "n_reprocess",      "fromSide": "bottom", "toSide": "top"},
+    {"id": "e12", "fromNode": "n_reprocess",       "toNode": "n_resolved_rule",  "fromSide": "bottom", "toSide": "top"},
+    {"id": "e13", "fromNode": "n_admin_ui",        "toNode": "n_manual_override","fromSide": "left",   "toSide": "right", "label": "manual override path"},
+    {"id": "e14", "fromNode": "n_manual_override", "toNode": "n_resolved_manual","fromSide": "bottom", "toSide": "top"}
+  ]
+}
