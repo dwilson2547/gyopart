@@ -1,0 +1,128 @@
+{
+  "nodes": [
+    {
+      "id": "n_trigger",
+      "type": "text",
+      "text": "## Scraper CLI\nPython scraper triggered\n*(CLI or scheduled run)*",
+      "x": -140,
+      "y": -900,
+      "width": 280,
+      "height": 100,
+      "color": "5"
+    },
+    {
+      "id": "n_site",
+      "type": "text",
+      "text": "## Junkyard Website\nWordPress / WP Car Manager\nCustom REST API / HTMX\nStatic HTML table",
+      "x": -560,
+      "y": -900,
+      "width": 280,
+      "height": 120,
+      "color": "2"
+    },
+    {
+      "id": "n_fetch",
+      "type": "text",
+      "text": "## Fetch Vehicle List\nPlatform-specific HTTP requests\n*(may require session / cookies)*",
+      "x": -140,
+      "y": -760,
+      "width": 280,
+      "height": 100,
+      "color": "5"
+    },
+    {
+      "id": "n_parse",
+      "type": "text",
+      "text": "## Parse Vehicle Record\nyear, make, model, trim\nVIN, row, section, location name",
+      "x": -140,
+      "y": -620,
+      "width": 280,
+      "height": 100,
+      "color": "5"
+    },
+    {
+      "id": "n_loc",
+      "type": "text",
+      "text": "## Lookup / Create Location\njunkyard_common\nLocation table in junkyard_inventory",
+      "x": 240,
+      "y": -700,
+      "width": 280,
+      "height": 100,
+      "color": "5"
+    },
+    {
+      "id": "n_dedup",
+      "type": "text",
+      "text": "VIN already in Vehicle\nfor this Location?",
+      "x": -100,
+      "y": -480,
+      "width": 200,
+      "height": 80,
+      "color": "3"
+    },
+    {
+      "id": "n_skip",
+      "type": "text",
+      "text": "## Skip\n*(already ingested)*",
+      "x": 240,
+      "y": -480,
+      "width": 200,
+      "height": 80,
+      "color": "1"
+    },
+    {
+      "id": "n_insert",
+      "type": "text",
+      "text": "## Insert Vehicle\njunkyard_common ORM models\n`car_id_resolved = false`\n*(enters pipeline queue)*",
+      "x": -140,
+      "y": -360,
+      "width": 280,
+      "height": 120,
+      "color": "5"
+    },
+    {
+      "id": "n_srun",
+      "type": "text",
+      "text": "## Update ScrapeRun\nvehicle_count++\ntimestamp updated",
+      "x": -140,
+      "y": -200,
+      "width": 280,
+      "height": 100,
+      "color": "5"
+    },
+    {
+      "id": "n_ji_db",
+      "type": "text",
+      "text": "## junkyard_inventory DB\nLocation + Vehicle + ScrapeRun\n*(Postgres via junkyard_common)*",
+      "x": 240,
+      "y": -360,
+      "width": 300,
+      "height": 100,
+      "color": "4"
+    },
+    {
+      "id": "n_queue",
+      "type": "text",
+      "text": "## Pipeline Queue\nNew vehicles with\n`car_id_resolved = false`\nready for mapping pipeline",
+      "x": -140,
+      "y": -60,
+      "width": 280,
+      "height": 120,
+      "color": "3"
+    }
+  ],
+  "edges": [
+    {"id": "e1",  "fromNode": "n_trigger", "toNode": "n_site",   "fromSide": "left",   "toSide": "right",  "label": "HTTP requests"},
+    {"id": "e2",  "fromNode": "n_site",    "toNode": "n_fetch",  "fromSide": "right",  "toSide": "left",   "label": "vehicle list"},
+    {"id": "e3",  "fromNode": "n_fetch",   "toNode": "n_parse",  "fromSide": "bottom", "toSide": "top"},
+    {"id": "e4",  "fromNode": "n_parse",   "toNode": "n_loc",    "fromSide": "right",  "toSide": "top",    "label": "yard info"},
+    {"id": "e5",  "fromNode": "n_parse",   "toNode": "n_dedup",  "fromSide": "bottom", "toSide": "top"},
+    {"id": "e6",  "fromNode": "n_loc",     "toNode": "n_ji_db",  "fromSide": "bottom", "toSide": "top",    "label": "get_or_create"},
+    {"id": "e7",  "fromNode": "n_dedup",   "toNode": "n_skip",   "fromSide": "right",  "toSide": "left",   "label": "yes"},
+    {"id": "e8",  "fromNode": "n_dedup",   "toNode": "n_insert", "fromSide": "bottom", "toSide": "top",    "label": "no"},
+    {"id": "e9",  "fromNode": "n_insert",  "toNode": "n_ji_db",  "fromSide": "right",  "toSide": "left",   "label": "insert"},
+    {"id": "e10", "fromNode": "n_insert",  "toNode": "n_srun",   "fromSide": "bottom", "toSide": "top"},
+    {"id": "e11", "fromNode": "n_srun",    "toNode": "n_ji_db",  "fromSide": "right",  "toSide": "bottom", "label": "update"},
+    {"id": "e12", "fromNode": "n_insert",  "toNode": "n_queue",  "fromSide": "bottom", "toSide": "top",    "label": "new vehicle"}
+  ]
+}
