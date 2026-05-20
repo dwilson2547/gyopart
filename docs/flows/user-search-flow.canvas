@@ -145,6 +145,7 @@
     {"id": "e11", "fromNode": "n_inv_api",   "toNode": "n_inv_search","fromSide": "bottom", "toSide": "top"},
     {"id": "e12", "fromNode": "n_inv_search","toNode": "n_ji_db",     "fromSide": "right",  "toSide": "left",   "label": "vehicle query"},
     {"id": "e13", "fromNode": "n_inv_search","toNode": "n_results",   "fromSide": "left",   "toSide": "right",  "label": "sorted locations"},
-    {"id": "e14", "fromNode": "n_results",   "toNode": "n_ui",        "fromSide": "top",    "toSide": "bottom", "label": "rendered list"}
+    {"id": "e14", "fromNode": "n_results",   "toNode": "n_ui",        "fromSide": "top",    "toSide": "bottom", "label": "rendered list"},
+    {"id": "e15", "fromNode": "n_parts_list", "toNode": "n_user_input", "fromSide": "bottom", "toSide": "top", "label": "selects part"}
   ]
 }
