@@ -1,0 +1,128 @@
+{
+  "nodes": [
+    {
+      "id": "n_entry",
+      "type": "text",
+      "text": "## Unresolved Vehicle\n`car_id_resolved = false`\n*(queried from junkyard_inventory)*",
+      "x": -160,
+      "y": -900,
+      "width": 320,
+      "height": 100,
+      "color": "4"
+    },
+    {
+      "id": "n_vin_valid",
+      "type": "text",
+      "text": "VIN present?\n*(non-null, 17 chars)*",
+      "x": -110,
+      "y": -760,
+      "width": 220,
+      "height": 80,
+      "color": "3"
+    },
+    {
+      "id": "n_decode",
+      "type": "text",
+      "text": "## Decode VIN\nVinCache lookup first\n→ NHTSA fetch on miss\n*(1s rate limit between calls)*",
+      "x": -140,
+      "y": -630,
+      "width": 280,
+      "height": 120,
+      "color": "5"
+    },
+    {
+      "id": "n_vcache",
+      "type": "text",
+      "text": "## VinCache\njunkyard_inventory schema\nvin, make, model, model_year\ntrim, error_code, fetched_at",
+      "x": 220,
+      "y": -720,
+      "width": 280,
+      "height": 140,
+      "color": "4"
+    },
+    {
+      "id": "n_nhtsa",
+      "type": "text",
+      "text": "## NHTSA vpic API\nvpic.nhtsa.dot.gov\n`/decodevin/{vin}?format=json`",
+      "x": 220,
+      "y": -540,
+      "width": 280,
+      "height": 100,
+      "color": "2"
+    },
+    {
+      "id": "n_pi_resolve",
+      "type": "text",
+      "text": "Exact match in parts_interchange?\n*(year + make + model)*",
+      "x": -120,
+      "y": -460,
+      "width": 240,
+      "height": 80,
+      "color": "3"
+    },
+    {
+      "id": "n_resolved_vin",
+      "type": "text",
+      "text": "## ✓ Resolved\n`car_id_method = vin_decode`\n`car_id_confidence = 1.0`",
+      "x": 220,
+      "y": -320,
+      "width": 280,
+      "height": 100,
+      "color": "4"
+    },
+    {
+      "id": "n_rule_engine",
+      "type": "text",
+      "text": "## Rule Engine\nApply active MappingRules\nordered by scope + priority\n*(transform make / model / trim)*",
+      "x": -140,
+      "y": -320,
+      "width": 280,
+      "height": 120,
+      "color": "5"
+    },
+    {
+      "id": "n_ymmt",
+      "type": "text",
+      "text": "Fuzzy YMMT match ≥ 0.85?\n*(against parts_interchange cars)*",
+      "x": -120,
+      "y": -160,
+      "width": 240,
+      "height": 80,
+      "color": "3"
+    },
+    {
+      "id": "n_resolved_ymmt",
+      "type": "text",
+      "text": "## ✓ Resolved\n`car_id_method = ymmt_match`\n*(or rule_applied if rules transformed)*\nconfidence = match score",
+      "x": 220,
+      "y": -20,
+      "width": 300,
+      "height": 120,
+      "color": "4"
+    },
+    {
+      "id": "n_discrepancy",
+      "type": "text",
+      "text": "## ✗ MappingDiscrepancy\n`status = unresolved`\nfuzzy scores + raw data stored\nfor admin review",
+      "x": -460,
+      "y": -20,
+      "width": 300,
+      "height": 120,
+      "color": "1"
+    }
+  ],
+  "edges": [
+    {"id": "e1",  "fromNode": "n_entry",      "toNode": "n_vin_valid",   "fromSide": "bottom", "toSide": "top"},
+    {"id": "e2",  "fromNode": "n_vin_valid",   "toNode": "n_decode",      "fromSide": "bottom", "toSide": "top",    "label": "yes"},
+    {"id": "e3",  "fromNode": "n_vin_valid",   "toNode": "n_rule_engine", "fromSide": "left",   "toSide": "top",    "label": "no — skip VIN path", "color": "1"},
+    {"id": "e4",  "fromNode": "n_decode",      "toNode": "n_vcache",      "fromSide": "right",  "toSide": "left",   "label": "check / cache result"},
+    {"id": "e5",  "fromNode": "n_decode",      "toNode": "n_nhtsa",       "fromSide": "right",  "toSide": "left",   "label": "cache miss → fetch"},
+    {"id": "e6",  "fromNode": "n_decode",      "toNode": "n_pi_resolve",  "fromSide": "bottom", "toSide": "top",    "label": "decoded (make + model + year)"},
+    {"id": "e7",  "fromNode": "n_decode",      "toNode": "n_rule_engine", "fromSide": "left",   "toSide": "top",    "label": "decode failed / None", "color": "1"},
+    {"id": "e8",  "fromNode": "n_pi_resolve",  "toNode": "n_resolved_vin","fromSide": "right",  "toSide": "left",   "label": "match found"},
+    {"id": "e9",  "fromNode": "n_pi_resolve",  "toNode": "n_rule_engine", "fromSide": "bottom", "toSide": "top",    "label": "no PI match"},
+    {"id": "e10", "fromNode": "n_rule_engine", "toNode": "n_ymmt",        "fromSide": "bottom", "toSide": "top"},
+    {"id": "e11", "fromNode": "n_ymmt",        "toNode": "n_resolved_ymmt","fromSide": "right", "toSide": "left",   "label": "match ≥ 0.85"},
+    {"id": "e12", "fromNode": "n_ymmt",        "toNode": "n_discrepancy", "fromSide": "left",   "toSide": "right",  "label": "no match", "color": "1"}
+  ]
+}
