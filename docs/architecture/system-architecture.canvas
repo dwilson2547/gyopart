@@ -114,7 +114,7 @@
       "id": "n_nhtsa",
       "type": "text",
       "text": "## NHTSA vpic API\nvpic.nhtsa.dot.gov\nVIN decode (cached)",
-      "x": -720,
+      "x": 40,
       "y": 620,
       "width": 280,
       "height": 100,
