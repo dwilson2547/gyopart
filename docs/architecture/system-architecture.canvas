@@ -1,0 +1,212 @@
+{
+  "nodes": [
+    {
+      "id": "n_user",
+      "type": "text",
+      "text": "## User\ngyopart.com visitor",
+      "x": -1400,
+      "y": -130,
+      "width": 220,
+      "height": 80,
+      "color": "6"
+    },
+    {
+      "id": "n_ui",
+      "type": "text",
+      "text": "## gyopart-ui\nVite + React\n:5173",
+      "x": -1100,
+      "y": -130,
+      "width": 260,
+      "height": 100,
+      "color": "5"
+    },
+    {
+      "id": "n_api",
+      "type": "text",
+      "text": "## gyopart-api\nFastAPI\n:8200",
+      "x": -720,
+      "y": -130,
+      "width": 260,
+      "height": 100,
+      "color": "5"
+    },
+    {
+      "id": "n_pi_db",
+      "type": "text",
+      "text": "## parts_interchange DB\nYear / Make / Model / Car\nPart / CarParts",
+      "x": -280,
+      "y": -280,
+      "width": 300,
+      "height": 100,
+      "color": "4"
+    },
+    {
+      "id": "n_inv_api",
+      "type": "text",
+      "text": "## inventory_api\nFastAPI\nInventory search",
+      "x": -720,
+      "y": 150,
+      "width": 260,
+      "height": 100,
+      "color": "5"
+    },
+    {
+      "id": "n_ji_db",
+      "type": "text",
+      "text": "## junkyard_inventory DB\nLocation / Vehicle\nMappingRule / MappingDiscrepancy\nScrapeRun / VinCache",
+      "x": -280,
+      "y": 150,
+      "width": 300,
+      "height": 140,
+      "color": "4"
+    },
+    {
+      "id": "n_admin",
+      "type": "text",
+      "text": "## Admin\nX-Admin-Key auth",
+      "x": -1400,
+      "y": 380,
+      "width": 220,
+      "height": 80,
+      "color": "6"
+    },
+    {
+      "id": "n_admin_api",
+      "type": "text",
+      "text": "## admin_api\nFastAPI + HTMX\n:8101",
+      "x": -1100,
+      "y": 380,
+      "width": 260,
+      "height": 100,
+      "color": "5"
+    },
+    {
+      "id": "n_claude",
+      "type": "text",
+      "text": "## Claude API\n(Anthropic)\nLLM rule suggestions",
+      "x": -720,
+      "y": 380,
+      "width": 260,
+      "height": 100,
+      "color": "2"
+    },
+    {
+      "id": "n_pipeline",
+      "type": "text",
+      "text": "## Mapping Pipeline CLI\npipeline/resolution_pipeline.py\nVIN decode → rule engine → YMMT",
+      "x": -1100,
+      "y": 620,
+      "width": 300,
+      "height": 120,
+      "color": "5"
+    },
+    {
+      "id": "n_scrapers",
+      "type": "text",
+      "text": "## Junkyard Scrapers\njunkyard-inventory-scrapers/\nPer-yard Python scrapers",
+      "x": -1400,
+      "y": 620,
+      "width": 280,
+      "height": 100,
+      "color": "5"
+    },
+    {
+      "id": "n_nhtsa",
+      "type": "text",
+      "text": "## NHTSA vpic API\nvpic.nhtsa.dot.gov\nVIN decode (cached)",
+      "x": -720,
+      "y": 620,
+      "width": 280,
+      "height": 100,
+      "color": "2"
+    },
+    {
+      "id": "n_websites",
+      "type": "text",
+      "text": "## Junkyard Websites\nWordPress / Custom REST\nHTMX / Static HTML",
+      "x": -1400,
+      "y": 800,
+      "width": 280,
+      "height": 100,
+      "color": "2"
+    },
+    {
+      "id": "grp_platform",
+      "type": "group",
+      "label": "junkyard-platform",
+      "x": -800,
+      "y": 80,
+      "width": 440,
+      "height": 720
+    },
+    {
+      "id": "grp_links",
+      "type": "group",
+      "label": "Dive Deeper",
+      "x": -1420,
+      "y": 1020,
+      "width": 1480,
+      "height": 220
+    },
+    {
+      "id": "fl_datamodel",
+      "type": "file",
+      "file": "architecture/data-model.canvas",
+      "x": -1400,
+      "y": 1040,
+      "width": 260,
+      "height": 160
+    },
+    {
+      "id": "fl_vin",
+      "type": "file",
+      "file": "flows/vin-mapping-pipeline.canvas",
+      "x": -1120,
+      "y": 1040,
+      "width": 280,
+      "height": 160
+    },
+    {
+      "id": "fl_search",
+      "type": "file",
+      "file": "flows/user-search-flow.canvas",
+      "x": -820,
+      "y": 1040,
+      "width": 280,
+      "height": 160
+    },
+    {
+      "id": "fl_scraper",
+      "type": "file",
+      "file": "flows/scraper-ingestion.canvas",
+      "x": -520,
+      "y": 1040,
+      "width": 280,
+      "height": 160
+    },
+    {
+      "id": "fl_admin",
+      "type": "file",
+      "file": "flows/admin-discrepancy-resolution.canvas",
+      "x": -220,
+      "y": 1040,
+      "width": 320,
+      "height": 160
+    }
+  ],
+  "edges": [
+    {"id": "e1",  "fromNode": "n_user",     "toNode": "n_ui",       "fromSide": "right",  "toSide": "left",   "label": "browser"},
+    {"id": "e2",  "fromNode": "n_ui",       "toNode": "n_api",      "fromSide": "right",  "toSide": "left",   "label": "API calls"},
+    {"id": "e3",  "fromNode": "n_api",      "toNode": "n_pi_db",    "fromSide": "right",  "toSide": "left",   "label": "vehicles + parts"},
+    {"id": "e4",  "fromNode": "n_api",      "toNode": "n_inv_api",  "fromSide": "bottom", "toSide": "top",    "label": "car_ids + zip + radius"},
+    {"id": "e5",  "fromNode": "n_inv_api",  "toNode": "n_ji_db",    "fromSide": "right",  "toSide": "left",   "label": "vehicle search"},
+    {"id": "e6",  "fromNode": "n_admin",    "toNode": "n_admin_api","fromSide": "right",  "toSide": "left"},
+    {"id": "e7",  "fromNode": "n_admin_api","toNode": "n_ji_db",    "fromSide": "right",  "toSide": "bottom", "label": "discrepancies + rules"},
+    {"id": "e8",  "fromNode": "n_admin_api","toNode": "n_claude",   "fromSide": "right",  "toSide": "left",   "label": "rule suggestions"},
+    {"id": "e9",  "fromNode": "n_pipeline", "toNode": "n_ji_db",    "fromSide": "right",  "toSide": "bottom", "label": "car_id resolution"},
+    {"id": "e10", "fromNode": "n_pipeline", "toNode": "n_pi_db",    "fromSide": "right",  "toSide": "bottom", "label": "YMMT lookup"},
+    {"id": "e11", "fromNode": "n_pipeline", "toNode": "n_nhtsa",    "fromSide": "right",  "toSide": "left",   "label": "VIN decode"},
+    {"id": "e12", "fromNode": "n_scrapers", "toNode": "n_websites", "fromSide": "bottom", "toSide": "top",    "label": "HTTP scrape"},
+    {"id": "e13", "fromNode": "n_scrapers", "toNode": "n_ji_db",    "fromSide": "right",  "toSide": "bottom", "label": "vehicles"}
+  ]
+}
