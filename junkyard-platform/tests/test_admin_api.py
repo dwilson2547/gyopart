@@ -398,7 +398,7 @@ def test_discrepancy_group_nhtsa_fields_set():
     assert g.nhtsa_year == "2005"
 
 
-def test_get_grouped_discrepancies_enriches_nhtsa(tmp_path):
+def test_get_grouped_discrepancies_enriches_nhtsa():
     """get_grouped_discrepancies attaches nhtsa_make/model/year from VinCache."""
     from admin_api.discrepancies import get_grouped_discrepancies
 
@@ -411,12 +411,18 @@ def test_get_grouped_discrepancies_enriches_nhtsa(tmp_path):
         "candidate_car_id": None,
     }
 
+    vin_row = MagicMock()
+    vin_row.id = 42
+    vin_row.make = "DODGE"
+    vin_row.model = "RAM 1500"
+    vin_row.model_year = "2003"
+
     mock_session = MagicMock()
     mock_session.__enter__ = MagicMock(return_value=mock_session)
     mock_session.__exit__ = MagicMock(return_value=False)
     mock_session.execute.side_effect = [
         MagicMock(mappings=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[base_group])))),
-        MagicMock(all=MagicMock(return_value=[(42, "DODGE", "RAM 1500", "2003")])),
+        MagicMock(all=MagicMock(return_value=[vin_row])),
     ]
 
     with patch("admin_api.discrepancies.Session", return_value=mock_session):
