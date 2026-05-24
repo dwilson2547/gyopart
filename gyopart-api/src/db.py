@@ -5,12 +5,9 @@ from typing import Annotated, Generator
 from fastapi import Depends
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
-from sqlalchemy.orm import DeclarativeBase, Session
+from sqlalchemy.orm import Session
 
-
-class Base(DeclarativeBase):
-    pass
-
+from parts_interchange_common.models import Base
 
 _engine: Engine | None = None
 
@@ -21,6 +18,10 @@ def _get_engine() -> Engine:
         from src.config import settings
         _engine = create_engine(settings.parts_database_url, pool_pre_ping=True)
     return _engine
+
+
+def create_tables() -> None:
+    Base.metadata.create_all(_get_engine())
 
 
 def get_db() -> Generator[Session, None, None]:

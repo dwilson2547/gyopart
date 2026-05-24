@@ -1,0 +1,24 @@
+services:
+  gyopart-api:
+    image: dwilson2547/gyopart-api:latest
+    build:
+      context: ./gyopart-api
+      dockerfile: Dockerfile
+
+  gyopart-ui:
+    image: dwilson2547/gyopart-ui:latest
+    build:
+      context: ./gyopart-ui
+      dockerfile: Dockerfile
+
+  inventory-api:
+    image: dwilson2547/inventory-api:latest
+    build:
+      context: ./junkyard-platform
+      dockerfile: Dockerfile.inventory-api
+
+  admin-api:
+    image: dwilson2547/admin-api:latest
+    build:
+      context: ./junkyard-platform
+      dockerfile: Dockerfile.admin-api

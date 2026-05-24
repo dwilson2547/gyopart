@@ -1,0 +1,32 @@
+namespace:
+  create: true
+  name: gyopart
+
+domain: gyopart.local
+
+images:
+  gyopartApi: dwilson2547/gyopart-api:latest
+  gyopartUi: dwilson2547/gyopart-ui:latest
+  inventoryApi: dwilson2547/inventory-api:latest
+  adminApi: dwilson2547/admin-api:latest
+
+imagePullPolicy: Always
+
+postgres:
+  host: postgres.postgres.svc.cluster.local
+  junkyardSecret: junkyard-credentials
+  partsSecret: parts-interchange-credentials
+
+ingress:
+  enabled: true
+  className: nginx
+
+monitoring:
+  otelCollector:
+    httpEndpoint: "http://otel-collector.monitoring.svc.cluster.local:4318"
+    grpcEndpoint: "otel-collector.monitoring.svc.cluster.local:4317"
+
+llmSuggester:
+  enabled: false
+  schedule: "0 2 * * *"
+  anthropicSecret: anthropic-credentials

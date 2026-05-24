@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inventory-api
+  namespace: {{ include "gyopart.namespace" . }}
+  labels:
+    app: inventory-api
+    {{- include "gyopart.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: inventory-api
+  template:
+    metadata:
+      labels:
+        app: inventory-api
+        {{- include "gyopart.labels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: inventory-api
+          image: {{ .Values.images.inventoryApi }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          ports:
+            - containerPort: 8100
+          env:
+            - name: JUNKYARD_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.junkyardSecret }}
+                  key: JUNKYARD_USER
+            - name: JUNKYARD_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.junkyardSecret }}
+                  key: JUNKYARD_PASSWORD
+            - name: JUNKYARD_DATABASE_URL
+              value: "postgresql://$(JUNKYARD_USER):$(JUNKYARD_PASSWORD)@{{ .Values.postgres.host }}:5432/junkyard_inventory"
+          readinessProbe:
+            httpGet:
+              path: /docs
+              port: 8100
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 10
+          livenessProbe:
+            httpGet:
+              path: /docs
+              port: 8100
+            initialDelaySeconds: 15
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: inventory-api
+  namespace: {{ include "gyopart.namespace" . }}
+  labels:
+    app: inventory-api
+    {{- include "gyopart.labels" . | nindent 4 }}
+spec:
+  selector:
+    app: inventory-api
+  ports:
+    - port: 8100
+      targetPort: 8100

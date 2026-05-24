@@ -10,6 +10,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 
+from junkyard_common.models import Base
 from admin_api.discrepancies import VALID_STATUSES, get_grouped_discrepancies
 from admin_api.discrepancies import router as discrepancies_router
 from admin_api.rules import list_rules
@@ -31,6 +32,7 @@ async def lifespan(app: FastAPI):
         pool_pre_ping=True,
         connect_args={"options": "-c statement_timeout=10000"},
     )
+    Base.metadata.create_all(_engine)
     yield
     _engine.dispose()
 

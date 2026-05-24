@@ -5,7 +5,7 @@ import type {
 } from './types'
 
 const http = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8200',
+  baseURL: import.meta.env.VITE_API_BASE_URL ?? '',
 })
 
 export const api = {

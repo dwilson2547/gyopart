@@ -8,7 +8,7 @@ Usage:
   python load_csvs.py --csv-dir /tmp/parts_csvs [--init-schema]
   python load_csvs.py --reset-db   # drop all tables (pair with generate --fresh)
 
-  --init-schema  Run schema.sql first to create tables (safe to rerun).
+  --init-schema  Run create_all() to create tables (safe to rerun).
   --reset-db     Drop and recreate the public schema (wipes all data).
                  Always pair this with generate_csvs.py --fresh so IDs
                  are in sync.  After reset, re-run with --init-schema.
@@ -51,10 +51,26 @@ SERIAL_TABLES = [
     'category', 'subcategory', 'image', 'part', 'car', 'diagram',
 ]
 
+# Tables whose CSVs don't include every schema column.
+# Explicit column lists prevent COPY from choking on schema additions.
+COPY_COLUMNS = {
+    'image': '(id, name, bucket_path, url, alt_text, saved, uploaded, manufacturer_id)',
+}
+
 
 def _connect():
     from config import get_psycopg2_params
     return psycopg2.connect(**get_psycopg2_params())
+
+
+def init_schema():
+    from config import get_db_url
+    from sqlalchemy import create_engine
+    from parts_interchange_common.models import Base
+    engine = create_engine(get_db_url())
+    Base.metadata.create_all(engine)
+    engine.dispose()
+    print("Schema ready.")
 
 
 def reset_db():
@@ -70,24 +86,14 @@ def reset_db():
     print("Database reset. Run load with --init-schema to recreate tables.")
 
 
-def load(csv_dir: str, init_schema: bool = False, make: str = None):
+
+def load(csv_dir: str, create_tables: bool = False, make: str = None):
+    if create_tables:
+        init_schema()
+
     conn = _connect()
     conn.autocommit = False
     cur = conn.cursor()
-
-    if init_schema:
-        schema_path = os.path.join(CURRENT_DIR, 'schema.sql')
-        print(f"Creating schema from {schema_path} ...")
-        with open(schema_path) as f:
-            cur.execute(f.read())
-        conn.commit()
-        print("Schema ready.\n")
-
-    # Disable FK constraint triggers for the duration of the bulk load.
-    # This lets us stream tables in dependency order without worrying about
-    # temporary constraint violations while sequences are still being loaded.
-    cur.execute("SET session_replication_role = replica;")
-    conn.commit()
 
     if make:
         make_dir = os.path.join(csv_dir, make.lower())
@@ -129,8 +135,9 @@ def load(csv_dir: str, init_schema: bool = False, make: str = None):
                 sys.stdout.write(f"  {label:<32} ({size_mb:>8.1f} MB) ... ")
                 sys.stdout.flush()
 
+                cols = COPY_COLUMNS.get(table, '')
                 with open(csv_path, 'r', encoding='utf-8') as f:
-                    cur.copy_expert(f'COPY {table} FROM STDIN CSV', f)
+                    cur.copy_expert(f'COPY {table} {cols} FROM STDIN CSV', f)
                 conn.commit()
 
                 elapsed = time.time() - t0
@@ -139,9 +146,6 @@ def load(csv_dir: str, init_schema: bool = False, make: str = None):
     except Exception:
         conn.rollback()
         raise
-    finally:
-        cur.execute("SET session_replication_role = DEFAULT;")
-        conn.commit()
 
     # After bulk load with explicit IDs, reset each SERIAL sequence so that
     # subsequent application inserts get correct next values.
@@ -167,7 +171,7 @@ def main():
     parser.add_argument('--make',
                         help='Load only this manufacturer, e.g. --make acura')
     parser.add_argument('--init-schema', action='store_true',
-                        help='Run schema.sql before loading (creates tables if they do not exist)')
+                        help='Run create_all() before loading (creates tables if they do not exist)')
     parser.add_argument('--reset-db', action='store_true',
                         help='Drop and recreate the public schema (wipes all data). '
                              'Pair with generate_csvs.py --fresh. Does not load any CSVs.')

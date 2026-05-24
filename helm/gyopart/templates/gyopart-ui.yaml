@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gyopart-ui
+  namespace: {{ include "gyopart.namespace" . }}
+  labels:
+    app: gyopart-ui
+    {{- include "gyopart.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gyopart-ui
+  template:
+    metadata:
+      labels:
+        app: gyopart-ui
+        {{- include "gyopart.labels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: gyopart-ui
+          image: {{ .Values.images.gyopartUi }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gyopart-ui
+  namespace: {{ include "gyopart.namespace" . }}
+  labels:
+    app: gyopart-ui
+    {{- include "gyopart.labels" . | nindent 4 }}
+spec:
+  selector:
+    app: gyopart-ui
+  ports:
+    - port: 80
+      targetPort: 80

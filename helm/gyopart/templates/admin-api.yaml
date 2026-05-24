@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: admin-api
+  namespace: {{ include "gyopart.namespace" . }}
+  labels:
+    app: admin-api
+    {{- include "gyopart.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: admin-api
+  template:
+    metadata:
+      labels:
+        app: admin-api
+        {{- include "gyopart.labels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: admin-api
+          image: {{ .Values.images.adminApi }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          ports:
+            - containerPort: 8300
+          env:
+            - name: JUNKYARD_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.junkyardSecret }}
+                  key: JUNKYARD_USER
+            - name: JUNKYARD_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.junkyardSecret }}
+                  key: JUNKYARD_PASSWORD
+            - name: JUNKYARD_DATABASE_URL
+              value: "postgresql://$(JUNKYARD_USER):$(JUNKYARD_PASSWORD)@{{ .Values.postgres.host }}:5432/junkyard_inventory"
+            - name: ADMIN_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.junkyardSecret }}
+                  key: ADMIN_API_KEY
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8300
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8300
+            initialDelaySeconds: 15
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: admin-api
+  namespace: {{ include "gyopart.namespace" . }}
+  labels:
+    app: admin-api
+    {{- include "gyopart.labels" . | nindent 4 }}
+spec:
+  selector:
+    app: admin-api
+  ports:
+    - port: 8300
+      targetPort: 8300

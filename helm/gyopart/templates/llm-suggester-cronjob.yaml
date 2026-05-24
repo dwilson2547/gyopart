@@ -1,0 +1,44 @@
+{{- if .Values.llmSuggester.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: llm-suggester
+  namespace: {{ include "gyopart.namespace" . }}
+  labels:
+    app: llm-suggester
+    {{- include "gyopart.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.llmSuggester.schedule | quote }}
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: llm-suggester
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: llm-suggester
+              image: {{ .Values.images.adminApi }}
+              imagePullPolicy: {{ .Values.imagePullPolicy }}
+              command: ["python", "-m", "admin_api.llm_suggester"]
+              env:
+                - name: JUNKYARD_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.postgres.junkyardSecret }}
+                      key: JUNKYARD_USER
+                - name: JUNKYARD_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.postgres.junkyardSecret }}
+                      key: JUNKYARD_PASSWORD
+                - name: JUNKYARD_DATABASE_URL
+                  value: "postgresql://$(JUNKYARD_USER):$(JUNKYARD_PASSWORD)@{{ .Values.postgres.host }}:5432/junkyard_inventory"
+                - name: ANTHROPIC_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.llmSuggester.anthropicSecret }}
+                      key: ANTHROPIC_API_KEY
+{{- end }}

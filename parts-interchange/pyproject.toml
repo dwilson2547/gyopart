@@ -1,0 +1,7 @@
+[project]
+name = "dwilson-parts-interchange-common"
+version = "0.1.0"
+dependencies = ["sqlalchemy>=2.0", "psycopg2-binary"]
+
+[tool.setuptools.packages.find]
+include = ["parts_interchange_common*"]

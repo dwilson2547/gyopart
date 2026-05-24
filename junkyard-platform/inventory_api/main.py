@@ -9,6 +9,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from uszipcode import SearchEngine
 
+from junkyard_common.models import Base
 from inventory_api.models import SearchResponse
 from inventory_api.search import search_inventory
 
@@ -26,6 +27,7 @@ async def lifespan(app: FastAPI):
         pool_pre_ping=True,
         connect_args={"options": "-c statement_timeout=5000"},
     )
+    Base.metadata.create_all(_engine)
     yield
     _engine.dispose()
 

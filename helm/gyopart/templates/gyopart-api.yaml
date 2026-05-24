@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gyopart-api
+  namespace: {{ include "gyopart.namespace" . }}
+  labels:
+    app: gyopart-api
+    {{- include "gyopart.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gyopart-api
+  template:
+    metadata:
+      labels:
+        app: gyopart-api
+        {{- include "gyopart.labels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: gyopart-api
+          image: {{ .Values.images.gyopartApi }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          ports:
+            - containerPort: 8200
+          env:
+            - name: PARTS_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.partsSecret }}
+                  key: PARTS_USER
+            - name: PARTS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.partsSecret }}
+                  key: PARTS_PASSWORD
+            - name: PARTS_DATABASE_URL
+              value: "postgresql://$(PARTS_USER):$(PARTS_PASSWORD)@{{ .Values.postgres.host }}:5432/parts_interchange"
+            - name: INVENTORY_API_URL
+              value: "http://inventory-api:8100"
+            - name: CORS_ORIGINS
+              value: "http://{{ .Values.domain }}"
+          readinessProbe:
+            httpGet:
+              path: /docs
+              port: 8200
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 10
+          livenessProbe:
+            httpGet:
+              path: /docs
+              port: 8200
+            initialDelaySeconds: 15
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gyopart-api
+  namespace: {{ include "gyopart.namespace" . }}
+  labels:
+    app: gyopart-api
+    {{- include "gyopart.labels" . | nindent 4 }}
+spec:
+  selector:
+    app: gyopart-api
+  ports:
+    - port: 8200
+      targetPort: 8200

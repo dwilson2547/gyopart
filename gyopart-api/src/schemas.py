@@ -50,6 +50,36 @@ class PartOut(_OrmBase):
     other_names: str | None
 
 
+class CategoryOut(_OrmBase):
+    id: int
+    name: str
+
+
+class DiagramOut(_OrmBase):
+    id: int
+    category_id: int | None
+    sub_category_id: int | None
+    image_id: int | None
+
+
+class DiagramPartOut(_OrmBase):
+    part_index: str | None
+    id: int
+    title: str | None
+    part_number: str | None
+    description: str | None
+    other_names: str | None
+
+
+class DiagramDetailOut(BaseModel):
+    id: int
+    category_id: int | None
+    sub_category_id: int | None
+    image_url: str | None
+    image_alt: str | None
+    parts: list[DiagramPartOut]
+
+
 class PagedPartsResponse(BaseModel):
     items: list[PartOut]
     total: int

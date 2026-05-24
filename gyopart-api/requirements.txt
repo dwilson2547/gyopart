@@ -1,3 +1,4 @@
+dwilson-parts-interchange-common
 fastapi>=0.111
 uvicorn[standard]>=0.29
 sqlalchemy>=2.0

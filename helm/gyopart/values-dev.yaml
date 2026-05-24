@@ -1,0 +1,12 @@
+namespace:
+  create: true
+  name: gyopart-dev
+
+domain: gyopart-dev.local
+
+imagePullPolicy: IfNotPresent
+
+postgres:
+  host: postgres-dev.postgres.svc.cluster.local
+  junkyardSecret: junkyard-credentials
+  partsSecret: parts-interchange-credentials
