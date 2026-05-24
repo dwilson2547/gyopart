@@ -65,7 +65,7 @@
     <td style="display:flex;gap:0.4rem;flex-wrap:wrap;align-items:flex-start">
       {% if status in ('unresolved', 'no_match_in_dataset') %}
       <button class="btn btn-primary" style="font-size:0.8rem"
-        onclick="toggleRuleForm({{ loop.index }}, '{{ g.source }}', {{ g.raw_make|tojson }}, {{ g.raw_model|tojson }}, {{ g.nhtsa_make|tojson }}, {{ g.nhtsa_model|tojson }})">
+        onclick='toggleRuleForm({{ loop.index }}, {{ g.source|tojson }}, {{ g.raw_make|tojson }}, {{ g.raw_model|tojson }}, {{ g.nhtsa_make|tojson }}, {{ g.nhtsa_model|tojson }})'>
         Create Rule
       </button>
       <form hx-post="/admin/discrepancies/ignore"
@@ -129,13 +129,13 @@
           <button class="btn btn-success" type="submit">Save</button>
           {% if g.nhtsa_make %}
           <button class="btn btn-secondary" type="button" style="font-size:0.75rem"
-            onclick="useNhtsaMake({{ loop.index }}, {{ g.raw_make|tojson }}, {{ g.nhtsa_make|tojson }})">
+            onclick='useNhtsaMake({{ loop.index }}, {{ g.raw_make|tojson }}, {{ g.nhtsa_make|tojson }})'>
             ↑ NHTSA Make
           </button>
           {% endif %}
           {% if g.nhtsa_model %}
           <button class="btn btn-secondary" type="button" style="font-size:0.75rem"
-            onclick="useNhtsaModel({{ loop.index }}, {{ g.raw_model|tojson }}, {{ g.nhtsa_make|tojson }}, {{ g.nhtsa_model|tojson }})">
+            onclick='useNhtsaModel({{ loop.index }}, {{ g.raw_model|tojson }}, {{ g.nhtsa_make|tojson }}, {{ g.nhtsa_model|tojson }})'>
             ↑ NHTSA Model
           </button>
           {% endif %}
