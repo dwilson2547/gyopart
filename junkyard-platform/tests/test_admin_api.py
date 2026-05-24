@@ -396,3 +396,60 @@ def test_discrepancy_group_nhtsa_fields_set():
     assert g.nhtsa_make == "DODGE"
     assert g.nhtsa_model == "RAM 1500"
     assert g.nhtsa_year == "2005"
+
+
+def test_get_grouped_discrepancies_enriches_nhtsa(tmp_path):
+    """get_grouped_discrepancies attaches nhtsa_make/model/year from VinCache."""
+    from admin_api.discrepancies import get_grouped_discrepancies
+
+    base_group = {
+        "source": "pic_n_pull", "raw_make": "DODGE", "raw_model": "RAM PICKUP",
+        "count": 5, "min_year": 2001, "max_year": 2008,
+        "vehicle_ids": [42],
+        "best_make_match": None, "best_make_score": None,
+        "best_model_match": None, "best_model_score": None,
+        "candidate_car_id": None,
+    }
+
+    mock_session = MagicMock()
+    mock_session.__enter__ = MagicMock(return_value=mock_session)
+    mock_session.__exit__ = MagicMock(return_value=False)
+    mock_session.execute.side_effect = [
+        MagicMock(mappings=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[base_group])))),
+        MagicMock(all=MagicMock(return_value=[(42, "DODGE", "RAM 1500", "2003")])),
+    ]
+
+    with patch("admin_api.discrepancies.Session", return_value=mock_session):
+        result = get_grouped_discrepancies(MagicMock(), "unresolved")
+
+    assert result[0]["nhtsa_make"] == "DODGE"
+    assert result[0]["nhtsa_model"] == "RAM 1500"
+    assert result[0]["nhtsa_year"] == "2003"
+
+
+def test_get_grouped_discrepancies_nhtsa_missing_vin():
+    """Groups with no VinCache match get nhtsa fields set to None."""
+    from admin_api.discrepancies import get_grouped_discrepancies
+
+    base_group = {
+        "source": "x", "raw_make": "DODGE", "raw_model": "RAM",
+        "count": 1, "min_year": 2000, "max_year": 2000,
+        "vehicle_ids": [99],
+        "best_make_match": None, "best_make_score": None,
+        "best_model_match": None, "best_model_score": None,
+        "candidate_car_id": None,
+    }
+    mock_session = MagicMock()
+    mock_session.__enter__ = MagicMock(return_value=mock_session)
+    mock_session.__exit__ = MagicMock(return_value=False)
+    mock_session.execute.side_effect = [
+        MagicMock(mappings=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[base_group])))),
+        MagicMock(all=MagicMock(return_value=[])),  # no VinCache hit
+    ]
+
+    with patch("admin_api.discrepancies.Session", return_value=mock_session):
+        result = get_grouped_discrepancies(MagicMock(), "unresolved")
+
+    assert result[0]["nhtsa_make"] is None
+    assert result[0]["nhtsa_model"] is None
+    assert result[0]["nhtsa_year"] is None

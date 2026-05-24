@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
-from junkyard_common.models import MappingDiscrepancy, Vehicle
+from junkyard_common.models import MappingDiscrepancy, Vehicle, VinCache
 from pipeline.pi_schema import pi_make_table, pi_model_table
 
 router = APIRouter(prefix="/admin/discrepancies", tags=["discrepancies"])
@@ -39,11 +39,32 @@ def get_grouped_discrepancies(engine: Engine, status: str) -> list[dict]:
             .group_by(Vehicle.source, MappingDiscrepancy.raw_make, MappingDiscrepancy.raw_model)
             .order_by(func.count().desc())
         ).mappings().all()
-    result = []
-    for r in rows:
-        d = dict(r)
-        d["vehicle_ids"] = list(d.get("vehicle_ids") or [])
-        result.append(d)
+
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["vehicle_ids"] = list(d.get("vehicle_ids") or [])
+            result.append(d)
+
+        # Enrich each group with NHTSA decode from a sample vehicle's VIN
+        sample_ids = [g["vehicle_ids"][0] for g in result if g["vehicle_ids"]]
+        if sample_ids:
+            vin_rows = session.execute(
+                select(Vehicle.id, VinCache.make, VinCache.model, VinCache.model_year)
+                .join(VinCache, Vehicle.vin == VinCache.vin)
+                .where(Vehicle.id.in_(sample_ids))
+            ).all()
+            nhtsa_by_id = {row[0]: (row[1], row[2], row[3]) for row in vin_rows}
+        else:
+            nhtsa_by_id = {}
+
+        for g in result:
+            sample_id = g["vehicle_ids"][0] if g["vehicle_ids"] else None
+            nhtsa = nhtsa_by_id.get(sample_id) if sample_id is not None else None
+            g["nhtsa_make"] = nhtsa[0] if nhtsa else None
+            g["nhtsa_model"] = nhtsa[1] if nhtsa else None
+            g["nhtsa_year"] = nhtsa[2] if nhtsa else None
+
     return result
 
 
