@@ -148,8 +148,10 @@
 {% endif %}
 
 <script>
-const PI_MAKES_OPTIONS = `{% for m in pi_makes %}<option value="{{ m }}">{{ m }}</option>
-{% endfor %}`;
+const PI_MAKES = {{ pi_makes | tojson }};
+const PI_MAKES_OPTIONS = PI_MAKES.map(function(m) {
+  return '<option value="' + m.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;') + '">' + m.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</option>';
+}).join('');
 
 function toggleRuleForm(idx, source, rawMake, rawModel, nhtsaMake, nhtsaModel) {
   var row = document.getElementById('rule-form-' + idx);
@@ -200,17 +202,18 @@ function useNhtsaMake(idx, rawMake, nhtsaMake) {
   document.getElementById('field-' + idx).value = 'make';
   document.getElementById('raw-value-' + idx).value = rawMake || '';
   onDiscrepancyFieldChange(idx, 'make');
-  setTimeout(function() {
-    var sel = document.getElementById('canonical-' + idx);
-    if (sel) sel.value = nhtsaMake;
-  }, 0);
+  var sel = document.getElementById('canonical-' + idx);
+  if (sel) sel.value = nhtsaMake;
 }
 
 async function useNhtsaModel(idx, rawModel, nhtsaMake, nhtsaModel) {
   document.getElementById('field-' + idx).value = 'model';
   document.getElementById('raw-value-' + idx).value = rawModel || '';
   document.getElementById('make-context-' + idx).value = nhtsaMake || '';
-  onDiscrepancyFieldChange(idx, 'model');
+  var wrap = document.getElementById('canonical-wrap-' + idx);
+  wrap.innerHTML = '<label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:2px">Canonical Value</label>'
+    + '<select name="canonical_value" id="canonical-' + idx + '" required style="width:180px">'
+    + '<option value="">Loading…</option></select>';
   var url = nhtsaMake ? '/admin/pi-models?make=' + encodeURIComponent(nhtsaMake) : '/admin/pi-models';
   var resp = await fetch(url);
   var data = await resp.json();
