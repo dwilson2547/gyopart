@@ -12,6 +12,7 @@ from junkyard_common.models import MappingDiscrepancy, Vehicle
 from pipeline.pi_schema import pi_make_table, pi_model_table
 
 router = APIRouter(prefix="/admin/discrepancies", tags=["discrepancies"])
+admin_router = APIRouter(prefix="/admin", tags=["admin"])
 
 VALID_STATUSES = {"unresolved", "pending_rule", "no_match_in_dataset", "ignored"}
 
@@ -60,6 +61,24 @@ def get_pi_models_all(pi_engine: Engine) -> list[str]:
     return [r[0] for r in rows]
 
 
+def get_pi_models_filtered(make: str | None, pi_engine: Engine | None) -> list[str]:
+    if pi_engine is None:
+        return []
+    with pi_engine.connect() as conn:
+        if make:
+            rows = conn.execute(
+                select(pi_model_table.c.name)
+                .join(pi_make_table, pi_model_table.c.make_id == pi_make_table.c.id)
+                .where(func.lower(pi_make_table.c.name) == func.lower(make))
+                .order_by(pi_model_table.c.name)
+            ).all()
+        else:
+            rows = conn.execute(
+                select(pi_model_table.c.name).distinct().order_by(pi_model_table.c.name)
+            ).all()
+    return [r[0] for r in rows]
+
+
 def ignore_group(engine: Engine, source: str, raw_make: str | None, raw_model: str | None) -> int:
     with Session(engine) as session:
         discrepancies = session.execute(
@@ -85,6 +104,11 @@ def _get_engine() -> Engine:
     return _engine
 
 
+def _get_pi_engine() -> Engine | None:
+    from admin_api.main import _pi_engine
+    return _pi_engine
+
+
 class _IgnoreRequest(BaseModel):
     source: str
     raw_make: str | None = None
@@ -106,3 +130,8 @@ def list_discrepancies(status: str, engine: Engine = Depends(_get_engine)):
 def ignore_discrepancy_group(body: _IgnoreRequest, engine: Engine = Depends(_get_engine)):
     updated = ignore_group(engine, body.source, body.raw_make, body.raw_model)
     return {"updated": updated}
+
+
+@admin_router.get("/pi-models")
+def get_models_endpoint(make: str | None = None, pi_engine: Engine | None = Depends(_get_pi_engine)):
+    return {"models": get_pi_models_filtered(make, pi_engine)}

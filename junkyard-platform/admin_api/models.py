@@ -16,6 +16,9 @@ class DiscrepancyGroup(BaseModel):
     best_model_match: str | None
     best_model_score: float | None
     candidate_car_id: int | None
+    nhtsa_make: str | None = None
+    nhtsa_model: str | None = None
+    nhtsa_year: str | None = None
 
 
 class DiscrepancyListResponse(BaseModel):

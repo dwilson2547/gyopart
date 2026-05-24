@@ -13,12 +13,14 @@ from sqlalchemy.engine import Engine
 from junkyard_common.models import Base
 from admin_api.discrepancies import VALID_STATUSES, get_grouped_discrepancies, get_pi_makes, get_pi_models_all
 from admin_api.discrepancies import router as discrepancies_router
+from admin_api.discrepancies import admin_router as discrepancies_admin_router
 from admin_api.rules import list_rules
 from admin_api.rules import router as rules_router
 from admin_api.rules import vehicles_router
 
 _engine: Engine | None = None
 _pi_engine: Engine | None = None
+_ADMIN_KEY: str | None = None
 _templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 
@@ -104,6 +106,7 @@ async def root():
 
 
 app.include_router(discrepancies_router)
+app.include_router(discrepancies_admin_router)
 app.include_router(rules_router)
 app.include_router(vehicles_router)
 app.include_router(_ui_router)

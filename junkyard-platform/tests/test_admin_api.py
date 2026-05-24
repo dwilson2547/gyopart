@@ -346,3 +346,53 @@ def test_integration_rules_returns_200():
         )
     assert resp.status_code == 200
     assert "rules" in resp.json()
+
+
+def test_pi_models_no_filter_returns_all():
+    """GET /admin/pi-models with no make param returns all models."""
+    with patch("admin_api.discrepancies.get_pi_models_filtered", return_value=["F-150", "Mustang"]) as mock:
+        with _patched_client() as client:
+            resp = client.get("/admin/pi-models")
+    assert resp.status_code == 200
+    assert resp.json() == {"models": ["F-150", "Mustang"]}
+    mock.assert_called_once_with(None, _admin_main._pi_engine)
+
+
+def test_pi_models_with_make_filter():
+    """GET /admin/pi-models?make=Ford returns filtered models."""
+    with patch("admin_api.discrepancies.get_pi_models_filtered", return_value=["F-150"]) as mock:
+        with _patched_client() as client:
+            resp = client.get("/admin/pi-models?make=Ford")
+    assert resp.status_code == 200
+    assert resp.json() == {"models": ["F-150"]}
+    mock.assert_called_once_with("Ford", _admin_main._pi_engine)
+
+
+def test_discrepancy_group_has_nhtsa_fields():
+    """DiscrepancyGroup accepts nhtsa_make/model/year with None defaults."""
+    from admin_api.models import DiscrepancyGroup
+    g = DiscrepancyGroup(
+        source="x", raw_make="DODGE", raw_model="RAM PICKUP",
+        count=5, vehicle_ids=[1],
+        best_make_match=None, best_make_score=None,
+        best_model_match=None, best_model_score=None,
+        candidate_car_id=None,
+    )
+    assert g.nhtsa_make is None
+    assert g.nhtsa_model is None
+    assert g.nhtsa_year is None
+
+
+def test_discrepancy_group_nhtsa_fields_set():
+    from admin_api.models import DiscrepancyGroup
+    g = DiscrepancyGroup(
+        source="x", raw_make="DODGE", raw_model="RAM PICKUP",
+        count=5, vehicle_ids=[1],
+        best_make_match=None, best_make_score=None,
+        best_model_match=None, best_model_score=None,
+        candidate_car_id=None,
+        nhtsa_make="DODGE", nhtsa_model="RAM 1500", nhtsa_year="2005",
+    )
+    assert g.nhtsa_make == "DODGE"
+    assert g.nhtsa_model == "RAM 1500"
+    assert g.nhtsa_year == "2005"
