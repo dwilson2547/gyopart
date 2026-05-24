@@ -93,6 +93,31 @@ def approve_rule(engine: Engine, rule_id: int, approved_by: str) -> dict:
         return _rule_to_dict(rule)
 
 
+def get_rule_by_id(engine: Engine, rule_id: int) -> dict | None:
+    with Session(engine) as session:
+        rule = session.get(MappingRule, rule_id)
+        if rule is None:
+            return None
+        return _rule_to_dict(rule)
+
+
+def update_rule(engine: Engine, rule_id: int, req: CreateRuleRequest) -> dict:
+    with Session(engine) as session:
+        rule = session.get(MappingRule, rule_id)
+        if rule is None:
+            raise HTTPException(status_code=404, detail="rule not found")
+        rule.field = req.field
+        rule.rule_type = req.rule_type
+        rule.raw_value = req.raw_value
+        rule.canonical_value = req.canonical_value
+        rule.make_context = req.make_context
+        rule.scope = req.scope
+        rule.priority = req.priority
+        session.commit()
+        session.refresh(rule)
+        return _rule_to_dict(rule)
+
+
 def deactivate_rule(engine: Engine, rule_id: int) -> dict:
     with Session(engine) as session:
         rule = session.get(MappingRule, rule_id)
@@ -208,6 +233,90 @@ def post_rule(
             f'</span></td></tr>'
         )
 
+    return rule
+
+
+@router.get("/{rule_id}/edit")
+def get_rule_edit(
+    request: Request,
+    rule_id: int,
+    engine: Engine = Depends(_get_engine),
+    pi_engine: Engine | None = Depends(_get_pi_engine),
+):
+    rule = get_rule_by_id(engine, rule_id)
+    if rule is None:
+        raise HTTPException(status_code=404, detail="rule not found")
+    pi_makes = get_pi_makes(pi_engine) if pi_engine else []
+    return _templates.TemplateResponse(
+        request, "_rule_edit_row.html", {"rule": rule, "pi_makes": pi_makes}
+    )
+
+
+@router.get("/{rule_id}")
+def get_rule(
+    request: Request,
+    rule_id: int,
+    engine: Engine = Depends(_get_engine),
+    pi_engine: Engine | None = Depends(_get_pi_engine),
+):
+    rule = get_rule_by_id(engine, rule_id)
+    if rule is None:
+        raise HTTPException(status_code=404, detail="rule not found")
+    pi_makes = get_pi_makes(pi_engine) if pi_engine else []
+    return _templates.TemplateResponse(
+        request, "_rule_row.html", {"rule": rule, "pi_makes": pi_makes}
+    )
+
+
+@router.patch("/{rule_id}")
+def patch_rule(
+    request: Request,
+    rule_id: int,
+    field: str = Form(...),
+    rule_type: str = Form(...),
+    raw_value: str = Form(...),
+    canonical_value: str = Form(...),
+    scope: str = Form("global"),
+    make_context: str | None = Form(None),
+    priority: int = Form(100),
+    engine: Engine = Depends(_get_engine),
+    pi_engine: Engine | None = Depends(_get_pi_engine),
+):
+    try:
+        req = CreateRuleRequest(
+            field=field, rule_type=rule_type, raw_value=raw_value,
+            canonical_value=canonical_value, scope=scope,
+            make_context=make_context, priority=priority,
+        )
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.errors())
+
+    if pi_engine is not None:
+        if req.field == "make":
+            valid = get_pi_makes(pi_engine)
+            if req.canonical_value not in valid:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Unknown make: {req.canonical_value!r}. Must be an exact PI make name.",
+                )
+        elif req.field == "model":
+            valid = (
+                get_pi_models_filtered(req.make_context, pi_engine)
+                if req.make_context
+                else get_pi_models_all(pi_engine)
+            )
+            if req.canonical_value not in valid:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Unknown model: {req.canonical_value!r}.",
+                )
+
+    rule = update_rule(engine, rule_id, req)
+    pi_makes = get_pi_makes(pi_engine) if pi_engine else []
+    if request.headers.get("HX-Request"):
+        return _templates.TemplateResponse(
+            request, "_rule_row.html", {"rule": rule, "pi_makes": pi_makes}
+        )
     return rule
 
 

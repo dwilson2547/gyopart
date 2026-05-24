@@ -8,7 +8,11 @@
   <td>{{ rule.scope }}</td>
   <td>{{ rule.applied_count }}</td>
   <td>{{ rule.created_by }}</td>
-  <td>
+  <td style="display:flex;gap:0.4rem">
+    <button class="btn btn-secondary"
+      hx-get="/admin/rules/{{ rule.id }}/edit"
+      hx-target="#rule-{{ rule.id }}"
+      hx-swap="outerHTML">Edit</button>
     <button class="btn btn-danger"
       hx-post="/admin/rules/{{ rule.id }}/deactivate"
       hx-target="#rule-{{ rule.id }}"

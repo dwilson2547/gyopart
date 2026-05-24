@@ -573,3 +573,109 @@ def test_create_rule_htmx_rules_page_returns_tr():
     assert resp.status_code == 200
     assert resp.headers["content-type"].startswith("text/html")
     assert b"<tr" in resp.content
+
+
+def test_get_rule_returns_row_html():
+    with patch("admin_api.rules.get_rule_by_id", return_value=_make_rule_row()):
+        with _patched_client() as client:
+            resp = client.get("/admin/rules/1")
+    assert resp.status_code == 200
+    assert b"CHEV" in resp.content
+    assert b"<tr" in resp.content
+
+
+def test_get_rule_not_found_returns_404():
+    with patch("admin_api.rules.get_rule_by_id", return_value=None):
+        with _patched_client() as client:
+            resp = client.get("/admin/rules/999")
+    assert resp.status_code == 404
+
+
+def test_get_rule_edit_returns_edit_form():
+    with patch("admin_api.rules.get_rule_by_id", return_value=_make_rule_row()):
+        with _patched_client() as client:
+            resp = client.get("/admin/rules/1/edit")
+    assert resp.status_code == 200
+    assert b'hx-patch="/admin/rules/1"' in resp.content
+    assert b"CHEV" in resp.content
+
+
+def test_get_rule_edit_not_found_returns_404():
+    with patch("admin_api.rules.get_rule_by_id", return_value=None):
+        with _patched_client() as client:
+            resp = client.get("/admin/rules/999/edit")
+    assert resp.status_code == 404
+
+
+def test_patch_rule_returns_json_without_htmx():
+    updated = _make_rule_row(raw_value="CHEVROLET")
+    with patch("admin_api.rules.update_rule", return_value=updated) as mock_update:
+        with _patched_client() as client:
+            resp = client.patch("/admin/rules/1", data={
+                "field": "make",
+                "rule_type": "exact",
+                "raw_value": "CHEVROLET",
+                "canonical_value": "Chevrolet",
+            })
+    assert resp.status_code == 200
+    assert resp.json()["raw_value"] == "CHEVROLET"
+    mock_update.assert_called_once()
+
+
+def test_patch_rule_htmx_returns_row_html():
+    updated = _make_rule_row(raw_value="CHEVROLET")
+    with patch("admin_api.rules.update_rule", return_value=updated):
+        with _patched_client() as client:
+            resp = client.patch(
+                "/admin/rules/1",
+                data={"field": "make", "rule_type": "exact", "raw_value": "CHEVROLET", "canonical_value": "Chevrolet"},
+                headers={"HX-Request": "true"},
+            )
+    assert resp.status_code == 200
+    assert b"<tr" in resp.content
+    assert b"CHEVROLET" in resp.content
+
+
+def test_patch_rule_invalid_field_returns_422():
+    with _patched_client() as client:
+        resp = client.patch("/admin/rules/1", data={
+            "field": "engine",
+            "rule_type": "exact",
+            "raw_value": "V8",
+            "canonical_value": "V8",
+        })
+    assert resp.status_code == 422
+
+
+def test_patch_rule_rejects_unknown_make():
+    with patch.object(_admin_main, "_pi_engine", MagicMock()), \
+         patch("admin_api.rules.get_pi_makes", return_value=["Chevrolet", "Ford"]), \
+         patch("admin_api.rules.update_rule") as mock_update:
+        with _patched_client() as client:
+            resp = client.patch("/admin/rules/1", data={
+                "field": "make",
+                "rule_type": "exact",
+                "raw_value": "CHEV",
+                "canonical_value": "Chevy",
+            })
+    assert resp.status_code == 422
+    mock_update.assert_not_called()
+
+
+def test_reprocess_returns_triggered():
+    with patch("pipeline.reprocess_job.run_reprocess"):
+        with _patched_client() as client:
+            resp = client.post("/admin/reprocess")
+    assert resp.status_code == 200
+    assert resp.json()["triggered"] is True
+
+
+def test_reprocess_htmx_returns_html_message():
+    with patch("pipeline.reprocess_job.run_reprocess"):
+        with _patched_client() as client:
+            resp = client.post(
+                "/admin/reprocess",
+                headers={"HX-Request": "true"},
+            )
+    assert resp.status_code == 200
+    assert b"Reprocessing" in resp.content

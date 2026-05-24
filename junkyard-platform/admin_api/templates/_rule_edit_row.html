@@ -1,0 +1,104 @@
+<tr id="rule-{{ rule.id }}">
+  <td colspan="9" style="padding:1rem">
+    <form hx-patch="/admin/rules/{{ rule.id }}"
+          hx-target="#rule-{{ rule.id }}"
+          hx-swap="outerHTML"
+          style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:flex-end">
+      <div>
+        <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:2px">Field</label>
+        <select name="field" id="edit-field-{{ rule.id }}"
+          onchange="onEditFieldChange_{{ rule.id }}(this.value)">
+          <option value="make" {% if rule.field == 'make' %}selected{% endif %}>make</option>
+          <option value="model" {% if rule.field == 'model' %}selected{% endif %}>model</option>
+          <option value="trim" {% if rule.field == 'trim' %}selected{% endif %}>trim</option>
+        </select>
+      </div>
+      <div>
+        <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:2px">Rule Type</label>
+        <select name="rule_type">
+          <option value="exact" {% if rule.rule_type == 'exact' %}selected{% endif %}>exact</option>
+          <option value="prefix" {% if rule.rule_type == 'prefix' %}selected{% endif %}>prefix</option>
+          <option value="regex" {% if rule.rule_type == 'regex' %}selected{% endif %}>regex</option>
+        </select>
+      </div>
+      <div>
+        <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:2px">Raw Value</label>
+        <input name="raw_value" value="{{ rule.raw_value }}" required style="width:140px">
+      </div>
+      <div id="edit-canonical-wrap-{{ rule.id }}">
+        <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:2px">Canonical Value</label>
+        <input name="canonical_value" value="{{ rule.canonical_value }}" required style="width:180px">
+      </div>
+      <div>
+        <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:2px">Make Context</label>
+        <input name="make_context" id="edit-make-context-{{ rule.id }}"
+          value="{{ rule.make_context or '' }}" placeholder="(optional)" style="width:120px">
+      </div>
+      <div>
+        <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:2px">Scope</label>
+        <select name="scope">
+          <option value="global" {% if rule.scope == 'global' %}selected{% endif %}>global</option>
+          <option value="source" {% if rule.scope == 'source' %}selected{% endif %}>source</option>
+          <option value="location" {% if rule.scope == 'location' %}selected{% endif %}>location</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:0.4rem;align-items:flex-end">
+        <button class="btn btn-success" type="submit">Save</button>
+        <button class="btn btn-secondary" type="button"
+          hx-get="/admin/rules/{{ rule.id }}"
+          hx-target="#rule-{{ rule.id }}"
+          hx-swap="outerHTML">Cancel</button>
+      </div>
+    </form>
+  </td>
+</tr>
+<script>
+(function() {
+  var ruleId = {{ rule.id }};
+  var PI_MAKES = {{ pi_makes | tojson }};
+  var currentCanonical = {{ rule.canonical_value | tojson }};
+  var PI_MAKES_OPTIONS = PI_MAKES.map(function(m) {
+    return '<option value="' + m.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;') + '">' + m.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</option>';
+  }).join('');
+
+  function onFieldChange(field) {
+    var wrap = document.getElementById('edit-canonical-wrap-' + ruleId);
+    if (field === 'make') {
+      wrap.innerHTML = '<label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:2px">Canonical Value</label>'
+        + '<select name="canonical_value" required style="width:180px">'
+        + PI_MAKES_OPTIONS + '</select>';
+      var sel = wrap.querySelector('select');
+      if (sel) sel.value = currentCanonical;
+    } else if (field === 'model') {
+      var makeCtx = document.getElementById('edit-make-context-' + ruleId);
+      var make = makeCtx ? makeCtx.value : '';
+      wrap.innerHTML = '<label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:2px">Canonical Value</label>'
+        + '<select name="canonical_value" required style="width:180px">'
+        + '<option value="">Loading…</option></select>';
+      loadModelOptions(make);
+    } else {
+      wrap.innerHTML = '<label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:2px">Canonical Value</label>'
+        + '<input name="canonical_value" value="' + currentCanonical.replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '" required style="width:180px">';
+    }
+  }
+
+  async function loadModelOptions(make) {
+    var url = make ? '/admin/pi-models?make=' + encodeURIComponent(make) : '/admin/pi-models';
+    var resp = await fetch(url);
+    var data = await resp.json();
+    var wrap = document.getElementById('edit-canonical-wrap-' + ruleId);
+    if (wrap) {
+      var sel = wrap.querySelector('select');
+      if (sel) {
+        sel.innerHTML = data.models.map(function(m) {
+          return '<option value="' + m.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;') + '">' + m.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</option>';
+        }).join('');
+        sel.value = currentCanonical;
+      }
+    }
+  }
+
+  window['onEditFieldChange_' + ruleId] = onFieldChange;
+  onFieldChange({{ rule.field | tojson }});
+})();
+</script>

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import os
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import Response
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request
+from fastapi.responses import HTMLResponse, Response
 from sqlalchemy import func, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
@@ -158,6 +158,17 @@ def ignore_discrepancy_group(
     if request.headers.get("HX-Request"):
         return Response(content="", status_code=200)
     return {"updated": updated}
+
+
+@admin_router.post("/reprocess")
+def post_reprocess(background_tasks: BackgroundTasks, request: Request):
+    def _run():
+        from pipeline.reprocess_job import run_reprocess as _r
+        _r(dry_run=False)
+    background_tasks.add_task(_run)
+    if request.headers.get("HX-Request"):
+        return HTMLResponse("Reprocessing started — refresh in a moment")
+    return {"triggered": True, "message": "Reprocessing started"}
 
 
 @admin_router.get("/pi-models")

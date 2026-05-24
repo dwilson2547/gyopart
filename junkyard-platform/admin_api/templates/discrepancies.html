@@ -3,13 +3,20 @@
 {% block content %}
 <h2>Mapping Discrepancies</h2>
 
-<div class="tabs">
-  {% for s, label in [("unresolved","Unresolved"),("pending_rule","Pending Rule"),("no_match_in_dataset","No Match"),("ignored","Ignored")] %}
-  <button class="tab {% if status == s %}active{% endif %}"
-    hx-get="/admin/ui/discrepancies?status={{ s }}"
-    hx-target="body"
-    hx-push-url="true">{{ label }}</button>
-  {% endfor %}
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+  <div class="tabs" style="margin-bottom:0">
+    {% for s, label in [("unresolved","Unresolved"),("pending_rule","Pending Rule"),("no_match_in_dataset","No Match"),("ignored","Ignored")] %}
+    <button class="tab {% if status == s %}active{% endif %}"
+      hx-get="/admin/ui/discrepancies?status={{ s }}"
+      hx-target="body"
+      hx-push-url="true">{{ label }}</button>
+    {% endfor %}
+  </div>
+  <div style="display:flex;align-items:center;gap:0.5rem">
+    <button hx-post="/admin/reprocess" hx-target="#pipeline-status" hx-swap="innerHTML"
+            class="btn btn-primary">Run Pipeline</button>
+    <span id="pipeline-status" style="font-size:0.85rem;color:#6c757d"></span>
+  </div>
 </div>
 
 {% if not groups %}
