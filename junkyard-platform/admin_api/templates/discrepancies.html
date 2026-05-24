@@ -3,13 +3,6 @@
 {% block content %}
 <h2>Mapping Discrepancies</h2>
 
-<datalist id="pi-makes">
-  {% for m in pi_makes %}<option value="{{ m }}">{% endfor %}
-</datalist>
-<datalist id="pi-models">
-  {% for m in pi_models %}<option value="{{ m }}">{% endfor %}
-</datalist>
-
 <div class="tabs">
   {% for s, label in [("unresolved","Unresolved"),("pending_rule","Pending Rule"),("no_match_in_dataset","No Match"),("ignored","Ignored")] %}
   <button class="tab {% if status == s %}active{% endif %}"
@@ -26,7 +19,9 @@
   <thead>
     <tr>
       <th>Source</th><th>Raw Make</th><th>Raw Model</th><th>Years</th><th>Count</th>
-      <th>Fuzzy Guess</th><th>Actions</th>
+      <th>NHTSA Decode</th>
+      <th>Make Match</th><th>Model Match</th>
+      <th>Actions</th>
     </tr>
   </thead>
   <tbody>
@@ -43,19 +38,34 @@
     </td>
     <td><span class="badge">{{ g.count }}</span></td>
     <td style="font-size:0.85rem">
-      {% if g.best_make_match %}
-        {{ g.best_make_match }} <small style="color:#888">({{ "%.0f"|format(g.best_make_score * 100) }}%)</small>
-        {% if g.best_model_match %}
-          / {{ g.best_model_match }} <small style="color:#888">({{ "%.0f"|format(g.best_model_score * 100) }}%)</small>
-        {% endif %}
+      {% if g.nhtsa_make %}
+        <code>{{ g.nhtsa_make }}</code>
+        {% if g.nhtsa_model %} / <code>{{ g.nhtsa_model }}</code>{% endif %}
+        {% if g.nhtsa_year %} <small style="color:#888">({{ g.nhtsa_year }})</small>{% endif %}
       {% else %}
-        <span style="color:#aaa">no match found</span>
+        <span style="color:#aaa">—</span>
+      {% endif %}
+    </td>
+    <td style="font-size:0.85rem">
+      {% if g.best_make_match %}
+        <span style="color:#28a745">✓</span> {{ g.best_make_match }}
+        <small style="color:#888">({{ "%.0f"|format(g.best_make_score * 100) }}%)</small>
+      {% else %}
+        <span style="color:#dc3545">✗</span> <span style="color:#aaa">no match</span>
+      {% endif %}
+    </td>
+    <td style="font-size:0.85rem">
+      {% if g.best_model_match %}
+        <span style="color:#28a745">✓</span> {{ g.best_model_match }}
+        <small style="color:#888">({{ "%.0f"|format(g.best_model_score * 100) }}%)</small>
+      {% else %}
+        <span style="color:#dc3545">✗</span> <span style="color:#aaa">no match</span>
       {% endif %}
     </td>
     <td style="display:flex;gap:0.4rem;flex-wrap:wrap">
       {% if status in ('unresolved', 'no_match_in_dataset') %}
       <button class="btn btn-primary" style="font-size:0.8rem"
-        onclick="toggleRuleForm({{ loop.index }}, '{{ g.source }}', {{ g.raw_make|tojson }}, {{ g.raw_model|tojson }})">
+        onclick="toggleRuleForm({{ loop.index }}, '{{ g.source }}', {{ g.raw_make|tojson }}, {{ g.raw_model|tojson }}, {{ g.nhtsa_make|tojson }}, {{ g.nhtsa_model|tojson }})">
         Create Rule
       </button>
       <button class="btn btn-secondary" style="font-size:0.8rem"
@@ -67,16 +77,15 @@
     </td>
   </tr>
   <tr id="rule-form-{{ loop.index }}" style="display:none;background:#f8f9fa">
-    <td colspan="7" style="padding:1rem">
+    <td colspan="9" style="padding:1rem">
       <form hx-post="/admin/rules"
-            hx-target="#group-{{ loop.index }}"
+            hx-target="#rule-form-{{ loop.index }}"
             hx-swap="outerHTML"
             style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:flex-end">
-        <input type="hidden" name="created_by" value="admin">
         <div>
           <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:2px">Field</label>
           <select name="field" id="field-{{ loop.index }}"
-            onchange="switchCanonicalList({{ loop.index }}, this.value)">
+            onchange="onDiscrepancyFieldChange({{ loop.index }}, this.value)">
             <option value="make">make</option>
             <option value="model">model</option>
             <option value="trim">trim</option>
@@ -94,11 +103,11 @@
           <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:2px">Raw Value</label>
           <input name="raw_value" id="raw-value-{{ loop.index }}" required style="width:140px">
         </div>
-        <div>
+        <div id="canonical-wrap-{{ loop.index }}">
           <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:2px">Canonical Value</label>
-          <input name="canonical_value" id="canonical-{{ loop.index }}"
-                 list="pi-makes" autocomplete="off" required style="width:160px"
-                 placeholder="Select or type…">
+          <select name="canonical_value" id="canonical-{{ loop.index }}" required style="width:180px">
+            {% for m in pi_makes %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
+          </select>
         </div>
         <div>
           <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:2px">Scope</label>
@@ -109,10 +118,22 @@
         </div>
         <div>
           <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:2px">Make Context</label>
-          <input name="make_context" placeholder="(optional)" style="width:120px">
+          <input name="make_context" id="make-context-{{ loop.index }}" placeholder="(optional)" style="width:120px">
         </div>
-        <div style="display:flex;gap:0.4rem">
+        <div style="display:flex;gap:0.4rem;flex-wrap:wrap;align-items:flex-end">
           <button class="btn btn-success" type="submit">Save</button>
+          {% if g.nhtsa_make %}
+          <button class="btn btn-secondary" type="button" style="font-size:0.75rem"
+            onclick="useNhtsaMake({{ loop.index }}, {{ g.raw_make|tojson }}, {{ g.nhtsa_make|tojson }})">
+            ↑ NHTSA Make
+          </button>
+          {% endif %}
+          {% if g.nhtsa_model %}
+          <button class="btn btn-secondary" type="button" style="font-size:0.75rem"
+            onclick="useNhtsaModel({{ loop.index }}, {{ g.raw_model|tojson }}, {{ g.nhtsa_make|tojson }}, {{ g.nhtsa_model|tojson }})">
+            ↑ NHTSA Model
+          </button>
+          {% endif %}
           <button class="btn btn-secondary" type="button"
             onclick="document.getElementById('rule-form-{{ loop.index }}').style.display='none'">
             Cancel
@@ -127,32 +148,78 @@
 {% endif %}
 
 <script>
-function toggleRuleForm(idx, source, rawMake, rawModel) {
+const PI_MAKES_OPTIONS = `{% for m in pi_makes %}<option value="{{ m }}">{{ m }}</option>
+{% endfor %}`;
+
+function toggleRuleForm(idx, source, rawMake, rawModel, nhtsaMake, nhtsaModel) {
   var row = document.getElementById('rule-form-' + idx);
   if (row.style.display === 'none') {
     row.style.display = '';
-    // Pre-fill raw value and scope
     document.getElementById('raw-value-' + idx).value = rawMake || rawModel || '';
     document.getElementById('scope-' + idx).value = source ? 'source' : 'global';
-    // Default field based on which value is set
     var field = document.getElementById('field-' + idx);
     if (rawMake && !rawModel) { field.value = 'make'; }
     else if (rawModel) { field.value = 'model'; }
-    switchCanonicalList(idx, field.value);
+    onDiscrepancyFieldChange(idx, field.value);
   } else {
     row.style.display = 'none';
   }
 }
 
-function switchCanonicalList(idx, field) {
-  var input = document.getElementById('canonical-' + idx);
-  var rawInput = document.getElementById('raw-value-' + idx);
+function onDiscrepancyFieldChange(idx, field) {
+  var wrap = document.getElementById('canonical-wrap-' + idx);
   if (field === 'make') {
-    input.setAttribute('list', 'pi-makes');
+    wrap.innerHTML = '<label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:2px">Canonical Value</label>'
+      + '<select name="canonical_value" id="canonical-' + idx + '" required style="width:180px">'
+      + PI_MAKES_OPTIONS + '</select>';
   } else if (field === 'model') {
-    input.setAttribute('list', 'pi-models');
+    var makeCtx = document.getElementById('make-context-' + idx).value;
+    wrap.innerHTML = '<label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:2px">Canonical Value</label>'
+      + '<select name="canonical_value" id="canonical-' + idx + '" required style="width:180px">'
+      + '<option value="">Loading…</option></select>';
+    loadDiscrepancyModelOptions(idx, makeCtx);
   } else {
-    input.removeAttribute('list');
+    wrap.innerHTML = '<label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:2px">Canonical Value</label>'
+      + '<input name="canonical_value" id="canonical-' + idx + '" placeholder="canonical trim" required style="width:180px">';
+  }
+}
+
+async function loadDiscrepancyModelOptions(idx, make) {
+  var url = make ? '/admin/pi-models?make=' + encodeURIComponent(make) : '/admin/pi-models';
+  var resp = await fetch(url);
+  var data = await resp.json();
+  var sel = document.getElementById('canonical-' + idx);
+  if (sel) {
+    sel.innerHTML = data.models.map(function(m) {
+      return '<option value="' + m.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;') + '">' + m.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</option>';
+    }).join('');
+  }
+}
+
+function useNhtsaMake(idx, rawMake, nhtsaMake) {
+  document.getElementById('field-' + idx).value = 'make';
+  document.getElementById('raw-value-' + idx).value = rawMake || '';
+  onDiscrepancyFieldChange(idx, 'make');
+  setTimeout(function() {
+    var sel = document.getElementById('canonical-' + idx);
+    if (sel) sel.value = nhtsaMake;
+  }, 0);
+}
+
+async function useNhtsaModel(idx, rawModel, nhtsaMake, nhtsaModel) {
+  document.getElementById('field-' + idx).value = 'model';
+  document.getElementById('raw-value-' + idx).value = rawModel || '';
+  document.getElementById('make-context-' + idx).value = nhtsaMake || '';
+  onDiscrepancyFieldChange(idx, 'model');
+  var url = nhtsaMake ? '/admin/pi-models?make=' + encodeURIComponent(nhtsaMake) : '/admin/pi-models';
+  var resp = await fetch(url);
+  var data = await resp.json();
+  var sel = document.getElementById('canonical-' + idx);
+  if (sel) {
+    sel.innerHTML = data.models.map(function(m) {
+      return '<option value="' + m.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;') + '">' + m.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</option>';
+    }).join('');
+    sel.value = nhtsaModel || '';
   }
 }
 </script>
