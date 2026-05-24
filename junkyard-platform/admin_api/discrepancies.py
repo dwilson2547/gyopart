@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import os
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi.responses import Response
 from sqlalchemy import func, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
@@ -135,12 +135,6 @@ def _get_pi_engine() -> Engine | None:
     return _pi_engine
 
 
-class _IgnoreRequest(BaseModel):
-    source: str
-    raw_make: str | None = None
-    raw_model: str | None = None
-
-
 @router.get("")
 def list_discrepancies(status: str, engine: Engine = Depends(_get_engine)):
     if status not in VALID_STATUSES:
@@ -153,8 +147,16 @@ def list_discrepancies(status: str, engine: Engine = Depends(_get_engine)):
 
 
 @router.post("/ignore")
-def ignore_discrepancy_group(body: _IgnoreRequest, engine: Engine = Depends(_get_engine)):
-    updated = ignore_group(engine, body.source, body.raw_make, body.raw_model)
+def ignore_discrepancy_group(
+    request: Request,
+    source: str = Form(...),
+    raw_make: str | None = Form(None),
+    raw_model: str | None = Form(None),
+    engine: Engine = Depends(_get_engine),
+):
+    updated = ignore_group(engine, source, raw_make or None, raw_model or None)
+    if request.headers.get("HX-Request"):
+        return Response(content="", status_code=200)
     return {"updated": updated}
 
 

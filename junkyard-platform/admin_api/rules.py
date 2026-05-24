@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
 from markupsafe import escape
 from pydantic import BaseModel, ValidationError
@@ -224,8 +224,11 @@ def post_approve_rule(
 
 
 @router.post("/{rule_id}/deactivate")
-def post_deactivate_rule(rule_id: int, engine: Engine = Depends(_get_engine)):
-    return deactivate_rule(engine, rule_id)
+def post_deactivate_rule(request: Request, rule_id: int, engine: Engine = Depends(_get_engine)):
+    result = deactivate_rule(engine, rule_id)
+    if request.headers.get("HX-Request"):
+        return Response(content="", status_code=200)
+    return result
 
 
 # ── Vehicle override routes ────────────────────────────────────────────────

@@ -62,17 +62,21 @@
         <span style="color:#dc3545">✗</span> <span style="color:#aaa">no match</span>
       {% endif %}
     </td>
-    <td style="display:flex;gap:0.4rem;flex-wrap:wrap">
+    <td style="display:flex;gap:0.4rem;flex-wrap:wrap;align-items:flex-start">
       {% if status in ('unresolved', 'no_match_in_dataset') %}
       <button class="btn btn-primary" style="font-size:0.8rem"
         onclick="toggleRuleForm({{ loop.index }}, '{{ g.source }}', {{ g.raw_make|tojson }}, {{ g.raw_model|tojson }}, {{ g.nhtsa_make|tojson }}, {{ g.nhtsa_model|tojson }})">
         Create Rule
       </button>
-      <button class="btn btn-secondary" style="font-size:0.8rem"
-        hx-post="/admin/discrepancies/ignore"
-        hx-vals="{{ {'source': g.source, 'raw_make': g.raw_make or '', 'raw_model': g.raw_model or ''} | tojson }}"
-        hx-target="#group-{{ loop.index }}"
-        hx-swap="outerHTML">Ignore</button>
+      <form hx-post="/admin/discrepancies/ignore"
+            hx-target="#group-{{ loop.index }}"
+            hx-swap="outerHTML"
+            style="margin:0;padding:0">
+        <input type="hidden" name="source" value="{{ g.source }}">
+        {% if g.raw_make is not none %}<input type="hidden" name="raw_make" value="{{ g.raw_make }}">{% endif %}
+        {% if g.raw_model is not none %}<input type="hidden" name="raw_model" value="{{ g.raw_model }}">{% endif %}
+        <button class="btn btn-secondary" style="font-size:0.8rem" type="submit">Ignore</button>
+      </form>
       {% endif %}
     </td>
   </tr>
@@ -82,6 +86,7 @@
             hx-target="#rule-form-{{ loop.index }}"
             hx-swap="outerHTML"
             style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:flex-end">
+        <input type="hidden" name="source" id="rule-source-{{ loop.index }}" value="">
         <div>
           <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:2px">Field</label>
           <select name="field" id="field-{{ loop.index }}"
@@ -158,7 +163,9 @@ function toggleRuleForm(idx, source, rawMake, rawModel, nhtsaMake, nhtsaModel) {
   if (row.style.display === 'none') {
     row.style.display = '';
     document.getElementById('raw-value-' + idx).value = rawMake || rawModel || '';
-    document.getElementById('scope-' + idx).value = source ? 'source' : 'global';
+    var scope = source ? 'source' : 'global';
+    document.getElementById('scope-' + idx).value = scope;
+    document.getElementById('rule-source-' + idx).value = scope === 'source' ? (source || '') : '';
     var field = document.getElementById('field-' + idx);
     if (rawMake && !rawModel) { field.value = 'make'; }
     else if (rawModel) { field.value = 'model'; }

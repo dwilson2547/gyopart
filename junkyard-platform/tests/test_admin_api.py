@@ -161,11 +161,36 @@ def test_ignore_discrepancy_group():
         with _patched_client() as client:
             resp = client.post(
                 "/admin/discrepancies/ignore",
-                json={"source": "pic_n_pull", "raw_make": "CHEV", "raw_model": "SILVERADO 1500"},
+                data={"source": "pic_n_pull", "raw_make": "CHEV", "raw_model": "SILVERADO 1500"},
             )
     assert resp.status_code == 200
     assert resp.json()["updated"] == 12
     mock_ignore.assert_called_once()
+
+
+def test_ignore_discrepancy_group_htmx_returns_empty():
+    with patch("admin_api.discrepancies.ignore_group", return_value=5):
+        with _patched_client() as client:
+            resp = client.post(
+                "/admin/discrepancies/ignore",
+                data={"source": "pic_n_pull", "raw_make": "CHEV"},
+                headers={"HX-Request": "true"},
+            )
+    assert resp.status_code == 200
+    assert resp.content == b""
+
+
+def test_ignore_discrepancy_group_null_fields():
+    """Ignore with missing raw_make/raw_model passes None to ignore_group."""
+    from unittest.mock import ANY
+    with patch("admin_api.discrepancies.ignore_group", return_value=3) as mock_ignore:
+        with _patched_client() as client:
+            resp = client.post(
+                "/admin/discrepancies/ignore",
+                data={"source": "pic_n_pull"},
+            )
+    assert resp.status_code == 200
+    mock_ignore.assert_called_once_with(ANY, "pic_n_pull", None, None)
 
 
 import datetime as _dt
@@ -234,6 +259,17 @@ def test_deactivate_rule():
             resp = client.post("/admin/rules/1/deactivate")
     assert resp.status_code == 200
     assert resp.json()["is_active"] is False
+
+
+def test_deactivate_rule_htmx_returns_empty():
+    with patch("admin_api.rules.deactivate_rule", return_value=_make_rule_row(is_active=False)):
+        with _patched_client() as client:
+            resp = client.post(
+                "/admin/rules/1/deactivate",
+                headers={"HX-Request": "true"},
+            )
+    assert resp.status_code == 200
+    assert resp.content == b""
 
 
 def test_manual_override_updates_vehicle():
