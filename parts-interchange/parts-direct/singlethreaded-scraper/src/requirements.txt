@@ -1,0 +1,13 @@
+beautifulsoup4==4.11.1
+selenium==4.5.0
+packaging==21.3
+requests_html==0.10.0
+stem==1.8.1
+Pillow==9.4.0
+lxml_html_clean
+sqlalchemy>=2.0
+psycopg2-binary>=2.9
+dwilson-cache-client==0.1.1
+dwilson-imgcache-client==0.3.0
+dwilson-request-auth-client==0.1.3
+httpx>=0.27.0

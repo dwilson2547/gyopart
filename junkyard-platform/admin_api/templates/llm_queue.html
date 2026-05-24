@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}LLM Queue{% endblock %}
+{% block content %}
+<h2>LLM Rule Suggestions</h2>
+<p style="color:#6c757d;font-size:0.9rem">Pending rules suggested by the LLM. Approve to activate and trigger reprocess, or reject to deactivate.</p>
+
+{% if not suggestions %}
+  <p>No pending LLM suggestions.</p>
+{% else %}
+<table>
+  <thead>
+    <tr><th>Source</th><th>Field</th><th>Raw → Canonical</th><th>Type</th><th>Confidence</th><th>Rationale</th><th>Affected</th><th>Actions</th></tr>
+  </thead>
+  <tbody>
+  {% for s in suggestions %}
+  <tr id="suggestion-{{ s.rule_id }}">
+    <td>{{ s.source }}</td>
+    <td>{{ s.field }}</td>
+    <td><code>{{ s.raw_value }}</code> → <code>{{ s.canonical_value }}</code></td>
+    <td>{{ s.rule_type }}</td>
+    <td>{{ "%.0f"|format(s.llm_confidence * 100) }}%</td>
+    <td style="max-width:250px;font-size:0.8rem">{{ s.llm_rationale }}</td>
+    <td><span class="badge">{{ s.affected_count }}</span></td>
+    <td style="display:flex;gap:0.4rem">
+      <button class="btn btn-success"
+        hx-post="/admin/rules/{{ s.rule_id }}/approve"
+        hx-vals='{"approved_by":"admin"}'
+        hx-target="#suggestion-{{ s.rule_id }}"
+        hx-swap="outerHTML"
+        hx-headers='{"X-Admin-Key":"{{ admin_key }}"}'>Approve</button>
+      <button class="btn btn-danger"
+        hx-post="/admin/rules/{{ s.rule_id }}/deactivate"
+        hx-target="#suggestion-{{ s.rule_id }}"
+        hx-swap="outerHTML"
+        hx-headers='{"X-Admin-Key":"{{ admin_key }}"}'>Reject</button>
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

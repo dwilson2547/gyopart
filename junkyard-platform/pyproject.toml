@@ -1,0 +1,7 @@
+[project]
+name = "dwilson-junkyard-common"
+version = "0.1.0"
+dependencies = ["sqlalchemy>=2.0", "psycopg2-binary"]
+
+[tool.setuptools.packages.find]
+include = ["junkyard_common*"]

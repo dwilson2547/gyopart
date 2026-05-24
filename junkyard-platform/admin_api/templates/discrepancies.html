@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Discrepancies{% endblock %}
+{% block content %}
+<h2>Mapping Discrepancies</h2>
+
+<div class="tabs">
+  {% for s, label in [("unresolved","Unresolved"),("pending_rule","Pending Rule"),("no_match_in_dataset","No Match"),("ignored","Ignored")] %}
+  <button class="tab {% if status == s %}active{% endif %}"
+    hx-get="/admin/ui/discrepancies?status={{ s }}"
+    hx-target="body"
+    hx-push-url="true">{{ label }}</button>
+  {% endfor %}
+</div>
+
+{% if not groups %}
+  <p>No discrepancies with status <strong>{{ status }}</strong>.</p>
+{% else %}
+<table>
+  <thead>
+    <tr>
+      <th>Source</th><th>Raw Make</th><th>Raw Model</th><th>Count</th>
+      <th>Best Make Match</th><th>Best Model Match</th><th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for g in groups %}
+  <tr id="group-{{ loop.index }}">
+    <td>{{ g.source }}</td>
+    <td><code>{{ g.raw_make or '—' }}</code></td>
+    <td><code>{{ g.raw_model or '—' }}</code></td>
+    <td><span class="badge">{{ g.count }}</span></td>
+    <td>{{ g.best_make_match or '—' }} {% if g.best_make_score %}<small>({{ "%.0f"|format(g.best_make_score * 100) }}%)</small>{% endif %}</td>
+    <td>{{ g.best_model_match or '—' }} {% if g.best_model_score %}<small>({{ "%.0f"|format(g.best_model_score * 100) }}%)</small>{% endif %}</td>
+    <td style="display:flex;gap:0.4rem">
+      {% if status in ('unresolved', 'no_match_in_dataset') %}
+      <button class="btn btn-secondary"
+        hx-post="/admin/discrepancies/ignore"
+        hx-vals="{{ {'source': g.source, 'raw_make': g.raw_make or '', 'raw_model': g.raw_model or ''} | tojson }}"
+        hx-target="#group-{{ loop.index }}"
+        hx-swap="outerHTML"
+        hx-headers='{"X-Admin-Key":"{{ admin_key }}"}'>Ignore</button>
+      {% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

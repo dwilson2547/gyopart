@@ -1,0 +1,18 @@
+FROM ubuntu:22.04
+
+RUN apt-get update && apt-get install -y pip sudo &&\
+ adduser --disabled-password --gecos '' dockuser &&\
+ adduser dockuser sudo &&\
+ echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers &&\
+ mkdir -p /opt/scraper
+
+USER dockuser
+
+ENV PATH="${PATH}:/home/dockuser/.local/bin"
+
+COPY src/ /opt/scraper
+WORKDIR /opt/scraper
+
+RUN pip3 install -r requirements.txt
+
+CMD python3 runv2.py

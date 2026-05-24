@@ -1,0 +1,1 @@
+docker run -it -p5050:5050 --env db_url=192.168.0.5:3606/parts-direct --env db_pass=299kR@lr\&2e53\%0vVHHkeA --env db_user=parts_direct_scraper --env BUCKET_SECRET=PfwNZiTislnV46NNkHby4gKHs3HuU59e --env BUCKET_URL=192.168.0.15:9768 --env BUCKET_ACCESS=BULvqjTNGfKQrIIu dwilson2547/parts-direct-dbms

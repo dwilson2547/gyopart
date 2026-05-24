@@ -1,0 +1,18 @@
+table {
+    .mat-mdc-row {
+        th {
+            font-weight: normal !important;
+        }
+    }
+    .mat-mdc-row.hovered {
+        background: #eee;
+    }
+    
+    .mat-mdc-row.highlighted {
+      background: #999;
+    }
+}
+img {
+    object-fit: scale-down;
+    max-height: 300px;
+}

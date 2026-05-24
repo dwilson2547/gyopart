@@ -1,0 +1,28 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-parts_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-parts_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-parts_interchange}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # Tuned for bulk load performance
+    command: >
+      postgres
+      -c shared_buffers=2GB
+      -c work_mem=64MB
+      -c maintenance_work_mem=512MB
+      -c effective_cache_size=6GB
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
+      -c max_wal_size=4GB
+      -c checkpoint_completion_target=0.9
+      -c wal_compression=on
+    restart: unless-stopped
+    shm_size: '512mb'
+
+volumes:
+  postgres_data:

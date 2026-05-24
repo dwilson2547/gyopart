@@ -1,0 +1,3 @@
+Home site url: https://www.pullapart.com/inventory/
+
+Please use the scraper development skill located at /home/daniel/documents/workspace/web_scrapers/scraper-development-skill to develop a scraper to persist the inventory of all of the pull-a-part junkyards, for reference you can also check the old/readme.md where i uncovered some of how the api worked but i ran into an issue where to get vehicle specific details i had to call an endpoint per vehicle which took forever. i expect to run this on some regular cadence unlike most of my scrapers so keep that in mind too. please store the data in a sqlite database and use sqlalchemy to store it, include a docs directory with relevant information including a detailed breakdown on the output data and format

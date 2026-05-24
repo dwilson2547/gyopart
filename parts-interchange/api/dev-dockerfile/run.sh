@@ -1,0 +1,1 @@
+docker run -it -v /home/daniel/documents/kubessh:/etc/ssh --entrypoint /bin/bash dev-dbms

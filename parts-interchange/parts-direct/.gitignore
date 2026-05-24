@@ -1,0 +1,14 @@
+.vscode
+*.json
+*.html
+*.bz2
+*.patch
+*.sync-conflict*
+images/
+webcache/
+data/
+parts-direct-data
+__pycache__
+
+dev.env
+deployments.tar.gz

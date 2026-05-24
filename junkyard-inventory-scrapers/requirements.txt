@@ -1,0 +1,8 @@
+dwilson-junkyard-common
+dwilson-cache-client
+dwilson-request-auth-client
+requests
+beautifulsoup4
+playwright
+sqlalchemy>=2.0
+psycopg2-binary

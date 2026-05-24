@@ -1,0 +1,24 @@
+<form [formGroup]="form" (ngSubmit)="submit()" (cancel)="close()">
+    <div class="px-lg-3 py-lg-3">
+        <h1>Feedback</h1>
+        <div class="mb-3">
+            <label class="form-label" for="txtName">Name (Optional)</label>
+            <input type="text" formControlName="name" class="form-control" [ngClass]="{'is-invalid': f['name'].errors}" placeholder="John Doe">
+        </div>
+        <div class="mb-3">
+            <label class="form-label" for="txtEmail">Email (Optional)</label>
+            <input type="email" formControlName="email" class="form-control" [ngClass]="{'is-invalid': f['email'].errors}" maxlength="250" placeholder="example@example.com">
+        </div>
+        <div class="mb-3">
+            <label class="form-label" for="txtComments">Comments</label>
+            <textarea class="form-control" formControlName="comments" rows="8" [ngClass]="{'is-invalid': f['comments'].errors}"></textarea>
+        </div>
+        <div class="mb-3">
+            <p>{{val['comments'].length >= 10 ? val['comments'].length : val['comments'].length - 10}}/3000</p>
+        </div>
+        <div class="mb-3 pb-lg-3">
+            <button type="button" (click)="close()" class="btn btn-secondary ms-2 float-end">Close</button>
+            <button type="submit" (click)="submit()" class="btn btn-primary float-end">Submit</button>
+        </div>
+    </div>
+</form>

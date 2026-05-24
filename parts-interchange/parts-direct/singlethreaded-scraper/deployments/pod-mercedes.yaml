@@ -1,0 +1,67 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: parts-direct-scraper-pod-mercedes
+spec:
+  volumes:
+    - name: pvc-c9c3aff2-5e41-46eb-bce5-3192026b2cb5
+      persistentVolumeClaim:
+        claimName: my-pvc
+    - name: dshm
+      emptyDir:
+        medium: Memory
+        sizeLimit: 1Gi
+  restartPolicy: OnFailure
+  containers:
+    - name: parts-direct-scraper-container-mercedes
+      image: dwilson2547/parts-direct-scraper:2.5
+      imagePullPolicy: Always
+      command: ["python3"]
+      args: ["-u","runv2.py","mercedes","k8s16"]
+      volumeMounts:
+        - mountPath: "/data"
+          name: pvc-c9c3aff2-5e41-46eb-bce5-3192026b2cb5
+        - mountPath: "/dev/shm"
+          name: dshm
+      env:
+      - name: chrome_proxy
+        value: "http://192.168.0.240:8118"
+      - name: sandbox_override
+        value: "y"
+      - name: save_dir
+        value: "/data"
+      - name: BUCKET_SECRET
+        valueFrom:
+          secretKeyRef:
+            name: bucket-secret
+            key: bucket-secret
+      - name: BUCKET_URL
+        valueFrom:
+          secretKeyRef:
+            name: bucket-url
+            key: bucket-url
+      - name: BUCKET_ACCESS
+        valueFrom:
+          secretKeyRef:
+            name: bucket-access
+            key: bucket-access
+      - name: INFLUX_BUCKET
+        valueFrom:
+          secretKeyRef:
+            name: influx-bucket
+            key: influx-bucket
+      - name: INFLUX_ORG
+        valueFrom:
+          secretKeyRef:
+            name: influx-org
+            key: influx-org
+      - name: INFLUX_URL
+        valueFrom:
+          secretKeyRef:
+            name: influx-url
+            key: influx-url
+      - name: INFLUX_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: influx-token
+            key: influx-token

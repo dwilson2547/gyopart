@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Junkyard Admin — {% block title %}{% endblock %}</title>
+  <script src="https://unpkg.com/htmx.org@1.9.12" integrity="sha384-ujb1lZYygJmzgSwoxRggbCHcjc0rB2uH1b6QGg8ooR/ksxul0d7UJ9Tp+5gSl5E" crossorigin="anonymous"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; background: #f8f9fa; }
+    nav { background: #212529; color: #fff; padding: 0.75rem 1.5rem; display: flex; gap: 1.5rem; align-items: center; }
+    nav a { color: #adb5bd; text-decoration: none; }
+    nav a.active, nav a:hover { color: #fff; }
+    nav strong { color: #fff; margin-right: 1rem; }
+    main { padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
+    table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 6px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+    th, td { padding: 0.6rem 0.85rem; text-align: left; border-bottom: 1px solid #dee2e6; font-size: 0.9rem; }
+    th { background: #f1f3f5; font-weight: 600; }
+    tr:hover td { background: #f8f9fa; }
+    .btn { padding: 0.3rem 0.75rem; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem; }
+    .btn-primary { background: #0d6efd; color: #fff; }
+    .btn-success { background: #198754; color: #fff; }
+    .btn-danger  { background: #dc3545; color: #fff; }
+    .btn-secondary { background: #6c757d; color: #fff; }
+    .tabs { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+    .tab { padding: 0.4rem 1rem; border: 1px solid #dee2e6; border-radius: 4px; cursor: pointer; background: #fff; font-size: 0.9rem; }
+    .tab.active { background: #0d6efd; color: #fff; border-color: #0d6efd; }
+    .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 10px; font-size: 0.78rem; background: #e9ecef; }
+    .form-row { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+    .form-row label { font-size: 0.85rem; font-weight: 500; }
+    .form-row select, .form-row input { padding: 0.3rem 0.5rem; border: 1px solid #ced4da; border-radius: 4px; font-size: 0.85rem; }
+    h2 { margin-top: 0; }
+  </style>
+</head>
+<body>
+  <nav>
+    <strong>Junkyard Admin</strong>
+    <a href="/admin/ui/discrepancies?status=unresolved" {% if active == 'discrepancies' %}class="active"{% endif %}>Discrepancies</a>
+    <a href="/admin/ui/rules" {% if active == 'rules' %}class="active"{% endif %}>Rules</a>
+    <a href="/admin/ui/llm-queue" {% if active == 'llm_queue' %}class="active"{% endif %}>LLM Queue</a>
+  </nav>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

@@ -1,0 +1,5 @@
+requests>=2.31.0
+sqlalchemy>=2.0
+lxml>=5.0            # optional — only needed if ElementTree has issues with large feeds
+dwilson-cache-client==0.1.1
+dwilson-request-auth-client==0.1.3

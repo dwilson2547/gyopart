@@ -1,0 +1,3 @@
+Junkyard inventory url: https://usautosupplymi.com/upull/sterling-heights/sterling-heights-inventory/
+
+goal here is to extract the inventory of the junkyard, i don't want to persist the images themselves but we can persist the links. this site doesn't offer vin so if theres any other key you can find to de-deplicate on im interested. use the skill found at /home/daniel/documents/workspace/web_scrapers/scraper-development-skill/SKILL.md to develop the scraper, i expect to run this on some regular cadence unlike most of my scrapers so keep that in mind too. please store the data in a sqlite database and use sqlalchemy to store it, include a docs directory with relevant information including a detailed breakdown on the output data and format

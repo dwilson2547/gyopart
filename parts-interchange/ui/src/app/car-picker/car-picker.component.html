@@ -1,0 +1,43 @@
+<h2 class="text-center">Car Picker</h2>
+<div class="form-group">
+    <div class="row py-1">
+        <div class="col-md-3">
+            <label for="ddlYear">Year</label>
+        </div>
+        <div class="col-md-9">
+            <ng-select style="font-family: roboto" [items]="years" bindLabel="name" bindValue="id" [(ngModel)]="ddlYear" (change)="set_year()"></ng-select>
+        </div>
+    </div>
+    <div class="row py-1">
+        <div class="col-md-3">
+            <label for="ddlMake">Make</label>
+        </div>
+        <div class="col-md-9">
+            <ng-select style="font-family: roboto" [items]="makes" bindLabel="name" bindValue="id" [(ngModel)]="ddlMake" (change)="set_make()"></ng-select>
+        </div>
+    </div>
+    <div class="row py-1">
+        <div class="col-md-3">
+            <label for="ddlModel">Model</label>
+        </div>
+        <div class="col-md-9">
+            <ng-select style="font-family: roboto" [items]="models" bindLabel="name" bindValue="id" [(ngModel)]="ddlModel" (change)="set_model()"></ng-select>
+        </div>
+    </div>
+    <div class="row py-1">
+        <div class="col-md-3">
+            <label for="ddlTrim">Trim</label>
+        </div>
+        <div class="col-md-9">
+            <ng-select style="font-family: roboto" [items]="trims" bindLabel="name" bindValue="id" [(ngModel)]="ddlTrim" (change)="set_trim()"></ng-select>
+        </div>
+    </div>
+    <div class="row py-1">
+        <div class="col-md-3">
+            <label for="ddlEngine">Engine</label>
+        </div>
+        <div class="col-md-9">
+            <ng-select style="font-family: roboto" [items]="engines" bindLabel="name" bindValue="id" [(ngModel)]="ddlEngine" (change)="set_engine()"></ng-select>
+        </div>
+    </div>
+</div>

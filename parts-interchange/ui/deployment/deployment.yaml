@@ -1,0 +1,115 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: parts-ui-dev-deployment
+  namespace: parts-direct-dev
+  labels:
+    app: parts-ui-dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: parts-ui-dev
+  template:
+    metadata:
+      labels:
+        app: parts-ui-dev
+    spec:
+      containers:
+        - name: parts-ui-dev-container
+          image: dwilson2547/parts-interchange-ui:1.2
+          ports:
+          - containerPort: 80
+          resources:
+            limits:
+              cpu: 4
+              memory: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: parts-ui-dev-entrypoint
+  namespace: parts-direct-dev
+spec:
+  type: NodePort
+  selector:
+    app: parts-ui-dev
+  ports:
+  - port: 80
+    targetPort: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-parts-ui-dev
+  namespace: parts-direct-dev
+spec:
+  rules:
+  - host: dev.parts-direct.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: parts-ui-dev-entrypoint
+            port:
+              number: 80
+  ingressClassName: nginx
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-parts-int-ui-dev
+  namespace: parts-direct-dev
+spec:
+  rules:
+  - host: parts-interchange.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: parts-ui-dev-entrypoint
+            port:
+              number: 80
+  ingressClassName: nginx
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-parts-dbms-dev
+  namespace: parts-direct-dev
+spec:
+  rules:
+  - host: dev.parts-direct.com
+    http:
+      paths:
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: parts-dbms-dev-entrypoint
+            port:
+              number: 8080
+  ingressClassName: nginx
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-parts-int-dbms-dev
+  namespace: parts-direct-dev
+spec:
+  rules:
+  - host: parts-interchange.com
+    http:
+      paths:
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: parts-dbms-dev-entrypoint
+            port:
+              number: 8080
+  ingressClassName: nginx

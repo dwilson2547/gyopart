@@ -1,0 +1,4 @@
+playwright>=1.44.0
+sqlalchemy>=2.0
+dwilson-cache-client==0.1.1
+dwilson-request-auth-client==0.1.3

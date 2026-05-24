@@ -1,0 +1,6 @@
+minio
+cherrypy
+flask
+flask_sqlalchemy
+PyMySQL
+cryptography

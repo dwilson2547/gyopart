@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Rules{% endblock %}
+{% block content %}
+<h2>Mapping Rules</h2>
+
+<details style="margin-bottom:1rem">
+  <summary style="cursor:pointer;font-weight:600">+ Create Rule</summary>
+  <form style="margin-top:0.75rem;background:#fff;padding:1rem;border-radius:6px;box-shadow:0 1px 3px rgba(0,0,0,.1)"
+    hx-post="/admin/rules"
+    hx-target="#rules-table"
+    hx-swap="outerHTML"
+    hx-headers='{"X-Admin-Key":"{{ admin_key }}"}'>
+    <div class="form-row">
+      <div><label>Field</label><br>
+        <select name="field">
+          <option value="make">make</option>
+          <option value="model">model</option>
+          <option value="trim">trim</option>
+        </select></div>
+      <div><label>Rule Type</label><br>
+        <select name="rule_type">
+          <option value="exact">exact</option>
+          <option value="prefix">prefix</option>
+          <option value="regex">regex</option>
+        </select></div>
+      <div><label>Raw Value</label><br><input name="raw_value" placeholder="CHEV" required></div>
+      <div><label>Canonical Value</label><br><input name="canonical_value" placeholder="Chevrolet" required></div>
+      <div><label>Make Context</label><br><input name="make_context" placeholder="(optional)"></div>
+      <div><label>Scope</label><br>
+        <select name="scope">
+          <option value="global">global</option>
+          <option value="source">source</option>
+        </select></div>
+      <div><label>Priority</label><br><input name="priority" type="number" value="100" style="width:70px"></div>
+    </div>
+    <button class="btn btn-success" type="submit">Save Rule</button>
+  </form>
+</details>
+
+<div id="rules-table">
+{% if not rules %}
+  <p>No active rules.</p>
+{% else %}
+<table>
+  <thead>
+    <tr><th>Field</th><th>Type</th><th>Raw</th><th>Canonical</th><th>Context</th><th>Scope</th><th>Applied</th><th>Created By</th><th>Actions</th></tr>
+  </thead>
+  <tbody>
+  {% for r in rules %}
+  <tr id="rule-{{ r.id }}">
+    <td>{{ r.field }}</td>
+    <td>{{ r.rule_type }}</td>
+    <td><code>{{ r.raw_value }}</code></td>
+    <td><code>{{ r.canonical_value }}</code></td>
+    <td>{{ r.make_context or '—' }}</td>
+    <td>{{ r.scope }}</td>
+    <td>{{ r.applied_count }}</td>
+    <td>{{ r.created_by }}</td>
+    <td>
+      <button class="btn btn-danger"
+        hx-post="/admin/rules/{{ r.id }}/deactivate"
+        hx-target="#rule-{{ r.id }}"
+        hx-swap="outerHTML"
+        hx-headers='{"X-Admin-Key":"{{ admin_key }}"}'>Deactivate</button>
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+</div>
+{% endblock %}

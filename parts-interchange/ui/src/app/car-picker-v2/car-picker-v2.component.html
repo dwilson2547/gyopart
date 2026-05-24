@@ -1,0 +1,58 @@
+<h2 class="text-center">Car Picker</h2>
+<div class="form-group">
+    <div class="row py-1">
+        <div class="col-md-3">
+            <label for="ddlYear">Year</label>
+        </div>
+        <div class="col-md-9">
+            <select2 [data]="s2_years" [value]="ddlYear" (update)="set_year($event)"></select2>
+        </div>
+    </div>
+    <div class="row py-1">
+        <div class="col-md-3">
+            <label for="ddlMake">Make</label>
+        </div>
+        <div class="col-md-9">
+            <select2 [data]="s2_makes" [value]="ddlMake" (update)="set_make($event)"></select2>
+        </div>
+    </div>
+    <div class="row py-1">
+        <div class="col-md-3">
+            <label for="ddlModel">Model</label>
+        </div>
+        <div class="col-md-9">
+            <select2 [data]="s2_models" [value]="ddlModel" (update)="set_model($event)"></select2>
+        </div>
+    </div>
+    <div class="row py-1">
+        <div class="col-md-3">
+            <label for="ddlTrim">Trim</label>
+        </div>
+        <div class="col-md-9">
+            <select2 [data]="s2_trims" [value]="ddlTrim" (update)="set_trim($event)"></select2>
+        </div>
+    </div>
+    <div class="row py-1">
+        <div class="col-md-3">
+            <label for="ddlEngine">Engine</label>
+        </div>
+        <div class="col-md-9">
+            <select2 [data]="s2_engines" [value]="ddlEngine" (update)="set_engine($event)"></select2>
+        </div>
+    </div>
+    <div class="row py-1">
+        <div class="col-md-3">
+
+        </div>
+        <div class="col-md-9">
+            <div class="row">
+                <div class="col-sm-6">
+                    <button class="btn btn-outline-secondary" style="width: 100%;" [disabled]="!ddlEngine" (click)="save_car()">Save</button>
+                </div>
+                <div class="col-sm-6">
+                    <button class="btn btn-outline-secondary" style="width: 100%;" (click)="load()">Clear</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
