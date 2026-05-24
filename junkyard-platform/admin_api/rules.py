@@ -2,18 +2,22 @@ from __future__ import annotations
 
 import datetime
 import os
+from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
+from markupsafe import escape
 from pydantic import BaseModel, ValidationError
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
-from admin_api.discrepancies import get_pi_makes, get_pi_models_all, get_pi_models_filtered
-
+from admin_api.discrepancies import _get_pi_engine, get_pi_makes, get_pi_models_all, get_pi_models_filtered
 from junkyard_common.models import MappingDiscrepancy, MappingRule, Vehicle
 from admin_api.models import CreateRuleRequest, ManualOverrideRequest
+
+_templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 router = APIRouter(prefix="/admin/rules", tags=["rules"])
 vehicles_router = APIRouter(prefix="/admin/vehicles", tags=["vehicles"])
@@ -134,11 +138,6 @@ def _get_engine() -> Engine:
     return _engine
 
 
-def _get_pi_engine() -> Engine | None:
-    from admin_api.main import _pi_engine
-    return _pi_engine
-
-
 # ── Rule routes ────────────────────────────────────────────────────────────
 
 class _ApproveRequest(BaseModel):
@@ -199,15 +198,13 @@ def post_rule(
     if request.headers.get("HX-Request"):
         hx_target = request.headers.get("HX-Target", "")
         if hx_target == "rules-tbody":
-            from fastapi.templating import Jinja2Templates
-            from pathlib import Path
-            templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
-            return templates.TemplateResponse(request, "_rule_row.html", {"rule": rule})
+            return _templates.TemplateResponse(request, "_rule_row.html", {"rule": rule})
         # Discrepancy form — return inline success row
         return HTMLResponse(
-            f'<tr id="rule-form-{hx_target.replace("rule-form-", "")}" style="display:none">'
+            f'<tr id="rule-form-{escape(hx_target.replace("rule-form-", ""))}" style="display:none">'
             f'<td colspan="9"><span style="color:#28a745;font-size:0.85rem">'
-            f'✓ Rule saved: <code>{rule["raw_value"]}</code> → <code>{rule["canonical_value"]}</code>'
+            f'✓ Rule saved: <code>{escape(rule["raw_value"])}</code>'
+            f' → <code>{escape(rule["canonical_value"])}</code>'
             f'</span></td></tr>'
         )
 
