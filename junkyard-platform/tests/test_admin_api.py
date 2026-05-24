@@ -523,3 +523,17 @@ def test_create_rule_skips_validation_without_pi_engine():
                 data={"field": "make", "rule_type": "exact", "raw_value": "XYZ", "canonical_value": "NotARealMake"},
             )
     assert resp.status_code == 200
+
+
+def test_create_rule_htmx_rules_page_returns_tr():
+    """Post from rules page returns a <tr> fragment for table insertion."""
+    with patch("admin_api.rules.create_rule", return_value=_make_rule_row()):
+        with _patched_client() as client:
+            resp = client.post(
+                "/admin/rules",
+                data={"field": "make", "rule_type": "exact", "raw_value": "DODGE", "canonical_value": "Dodge"},
+                headers={"HX-Request": "true", "HX-Target": "rules-tbody"},
+            )
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/html")
+    assert b"<tr" in resp.content

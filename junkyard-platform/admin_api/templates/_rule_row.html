@@ -1,0 +1,16 @@
+<tr id="rule-{{ rule.id }}">
+  <td>{{ rule.field }}</td>
+  <td>{{ rule.rule_type }}</td>
+  <td><code>{{ rule.raw_value }}</code></td>
+  <td><code>{{ rule.canonical_value }}</code></td>
+  <td>{{ rule.make_context or '—' }}</td>
+  <td>{{ rule.scope }}</td>
+  <td>{{ rule.applied_count }}</td>
+  <td>{{ rule.created_by }}</td>
+  <td>
+    <button class="btn btn-danger"
+      hx-post="/admin/rules/{{ rule.id }}/deactivate"
+      hx-target="#rule-{{ rule.id }}"
+      hx-swap="outerHTML">Deactivate</button>
+  </td>
+</tr>
