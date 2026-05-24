@@ -3,22 +3,15 @@
 {% block content %}
 <h2>Mapping Rules</h2>
 
-<datalist id="pi-makes">
-  {% for m in pi_makes %}<option value="{{ m }}">{% endfor %}
-</datalist>
-<datalist id="pi-models">
-  {% for m in pi_models %}<option value="{{ m }}">{% endfor %}
-</datalist>
-
 <details style="margin-bottom:1rem">
   <summary style="cursor:pointer;font-weight:600">+ Create Rule</summary>
   <form style="margin-top:0.75rem;background:#fff;padding:1rem;border-radius:6px;box-shadow:0 1px 3px rgba(0,0,0,.1)"
     hx-post="/admin/rules"
-    hx-target="#rules-table"
-    hx-swap="outerHTML">
+    hx-target="rules-tbody"
+    hx-swap="afterbegin">
     <div class="form-row">
       <div><label>Field</label><br>
-        <select name="field" onchange="switchRulesCanonical(this.value)">
+        <select name="field" id="rules-field" onchange="onRulesFieldChange(this.value)">
           <option value="make">make</option>
           <option value="model">model</option>
           <option value="trim">trim</option>
@@ -30,58 +23,83 @@
           <option value="regex">regex</option>
         </select></div>
       <div><label>Raw Value</label><br><input name="raw_value" placeholder="CHEV" required></div>
-      <div><label>Canonical Value</label><br>
-        <input name="canonical_value" id="rules-canonical"
-               list="pi-makes" autocomplete="off" placeholder="Select or type…" required></div>
-      <div><label>Make Context</label><br><input name="make_context" placeholder="(optional)"></div>
+      <div id="rules-canonical-wrap">
+        <label>Canonical Value</label><br>
+        <select name="canonical_value" id="rules-canonical" required style="min-width:160px">
+          {% for m in pi_makes %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
+        </select>
+      </div>
+      <div><label>Make Context</label><br>
+        <input name="make_context" id="rules-make-context" placeholder="(optional)"
+          oninput="onRulesMakeContextChange(this.value)">
+      </div>
       <div><label>Scope</label><br>
         <select name="scope">
           <option value="global">global</option>
           <option value="source">source</option>
         </select></div>
-      <div><label>Priority</label><br><input name="priority" type="number" value="100" style="width:70px"></div>
+      <div><label>Priority</label><br>
+        <input name="priority" type="number" value="100" style="width:70px"></div>
     </div>
     <button class="btn btn-success" type="submit">Save Rule</button>
   </form>
 </details>
-<script>
-function switchRulesCanonical(field) {
-  var input = document.getElementById('rules-canonical');
-  if (field === 'make') input.setAttribute('list', 'pi-makes');
-  else if (field === 'model') input.setAttribute('list', 'pi-models');
-  else input.removeAttribute('list');
-}
-</script>
 
-<div id="rules-table">
-{% if not rules %}
-  <p>No active rules.</p>
-{% else %}
 <table>
   <thead>
     <tr><th>Field</th><th>Type</th><th>Raw</th><th>Canonical</th><th>Context</th><th>Scope</th><th>Applied</th><th>Created By</th><th>Actions</th></tr>
   </thead>
-  <tbody>
-  {% for r in rules %}
-  <tr id="rule-{{ r.id }}">
-    <td>{{ r.field }}</td>
-    <td>{{ r.rule_type }}</td>
-    <td><code>{{ r.raw_value }}</code></td>
-    <td><code>{{ r.canonical_value }}</code></td>
-    <td>{{ r.make_context or '—' }}</td>
-    <td>{{ r.scope }}</td>
-    <td>{{ r.applied_count }}</td>
-    <td>{{ r.created_by }}</td>
-    <td>
-      <button class="btn btn-danger"
-        hx-post="/admin/rules/{{ r.id }}/deactivate"
-        hx-target="#rule-{{ r.id }}"
-        hx-swap="outerHTML">Deactivate</button>
-    </td>
-  </tr>
+  <tbody id="rules-tbody">
+  {% for rule in rules %}
+  {% include "_rule_row.html" %}
   {% endfor %}
   </tbody>
 </table>
+{% if not rules %}
+  <p id="rules-empty">No active rules.</p>
 {% endif %}
-</div>
+
+<script>
+const PI_MAKES_RULES = {{ pi_makes | tojson }};
+const PI_MAKES_OPTIONS_RULES = PI_MAKES_RULES.map(function(m) {
+  return '<option value="' + m.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;') + '">' + m.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</option>';
+}).join('');
+
+function onRulesFieldChange(field) {
+  var wrap = document.getElementById('rules-canonical-wrap');
+  if (field === 'make') {
+    wrap.innerHTML = '<label>Canonical Value</label><br>'
+      + '<select name="canonical_value" id="rules-canonical" required style="min-width:160px">'
+      + PI_MAKES_OPTIONS_RULES + '</select>';
+  } else if (field === 'model') {
+    var makeCtx = document.getElementById('rules-make-context').value;
+    wrap.innerHTML = '<label>Canonical Value</label><br>'
+      + '<select name="canonical_value" id="rules-canonical" required style="min-width:160px">'
+      + '<option value="">Loading…</option></select>';
+    loadRulesModelOptions(makeCtx);
+  } else {
+    wrap.innerHTML = '<label>Canonical Value</label><br>'
+      + '<input name="canonical_value" id="rules-canonical" placeholder="canonical trim" required style="min-width:160px">';
+  }
+}
+
+async function loadRulesModelOptions(make) {
+  var url = make ? '/admin/pi-models?make=' + encodeURIComponent(make) : '/admin/pi-models';
+  var resp = await fetch(url);
+  var data = await resp.json();
+  var sel = document.getElementById('rules-canonical');
+  if (sel && sel.tagName === 'SELECT') {
+    sel.innerHTML = data.models.map(function(m) {
+      return '<option value="' + m.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;') + '">' + m.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</option>';
+    }).join('');
+  }
+}
+
+function onRulesMakeContextChange(make) {
+  var field = document.getElementById('rules-field').value;
+  if (field === 'model') {
+    loadRulesModelOptions(make);
+  }
+}
+</script>
 {% endblock %}
