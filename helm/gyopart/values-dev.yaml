@@ -4,7 +4,7 @@ namespace:
 
 domain: gyopart-dev.local
 
-imagePullPolicy: IfNotPresent
+imagePullPolicy: Always
 
 postgres:
   host: postgres-dev.postgres.svc.cluster.local
