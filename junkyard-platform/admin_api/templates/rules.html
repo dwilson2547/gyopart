@@ -8,8 +8,7 @@
   <form style="margin-top:0.75rem;background:#fff;padding:1rem;border-radius:6px;box-shadow:0 1px 3px rgba(0,0,0,.1)"
     hx-post="/admin/rules"
     hx-target="#rules-table"
-    hx-swap="outerHTML"
-    hx-headers='{"X-Admin-Key":"{{ admin_key }}"}'>
+    hx-swap="outerHTML">
     <div class="form-row">
       <div><label>Field</label><br>
         <select name="field">
@@ -60,8 +59,7 @@
       <button class="btn btn-danger"
         hx-post="/admin/rules/{{ r.id }}/deactivate"
         hx-target="#rule-{{ r.id }}"
-        hx-swap="outerHTML"
-        hx-headers='{"X-Admin-Key":"{{ admin_key }}"}'>Deactivate</button>
+        hx-swap="outerHTML">Deactivate</button>
     </td>
   </tr>
   {% endfor %}

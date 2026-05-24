@@ -36,11 +36,6 @@ spec:
                   key: JUNKYARD_PASSWORD
             - name: JUNKYARD_DATABASE_URL
               value: "postgresql://$(JUNKYARD_USER):$(JUNKYARD_PASSWORD)@{{ .Values.postgres.host }}:5432/junkyard_inventory"
-            - name: ADMIN_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.postgres.junkyardSecret }}
-                  key: ADMIN_API_KEY
           readinessProbe:
             httpGet:
               path: /

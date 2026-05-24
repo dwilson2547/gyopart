@@ -37,8 +37,7 @@
         hx-post="/admin/discrepancies/ignore"
         hx-vals="{{ {'source': g.source, 'raw_make': g.raw_make or '', 'raw_model': g.raw_model or ''} | tojson }}"
         hx-target="#group-{{ loop.index }}"
-        hx-swap="outerHTML"
-        hx-headers='{"X-Admin-Key":"{{ admin_key }}"}'>Ignore</button>
+        hx-swap="outerHTML">Ignore</button>
       {% endif %}
     </td>
   </tr>
