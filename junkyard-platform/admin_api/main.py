@@ -11,19 +11,20 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 
 from junkyard_common.models import Base
-from admin_api.discrepancies import VALID_STATUSES, get_grouped_discrepancies
+from admin_api.discrepancies import VALID_STATUSES, get_grouped_discrepancies, get_pi_makes, get_pi_models_all
 from admin_api.discrepancies import router as discrepancies_router
 from admin_api.rules import list_rules
 from admin_api.rules import router as rules_router
 from admin_api.rules import vehicles_router
 
 _engine: Engine | None = None
+_pi_engine: Engine | None = None
 _templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _engine
+    global _engine, _pi_engine
     url = os.environ["JUNKYARD_DATABASE_URL"]
     _engine = create_engine(
         url,
@@ -31,8 +32,13 @@ async def lifespan(app: FastAPI):
         connect_args={"options": "-c statement_timeout=10000"},
     )
     Base.metadata.create_all(_engine)
+    parts_url = os.environ.get("PARTS_DATABASE_URL")
+    if parts_url:
+        _pi_engine = create_engine(parts_url, pool_pre_ping=True)
     yield
     _engine.dispose()
+    if _pi_engine:
+        _pi_engine.dispose()
 
 
 app = FastAPI(title="Junkyard Admin API", lifespan=lifespan)
@@ -45,18 +51,26 @@ async def ui_discrepancies(request: Request, status: str = "unresolved"):
     if status not in VALID_STATUSES:
         status = "unresolved"
     groups = get_grouped_discrepancies(_engine, status) if _engine else []
+    pi_makes = get_pi_makes(_pi_engine) if _pi_engine else []
+    pi_models = get_pi_models_all(_pi_engine) if _pi_engine else []
     return _templates.TemplateResponse(request, "discrepancies.html", {
         "groups": groups, "status": status,
         "active": "discrepancies",
+        "pi_makes": pi_makes,
+        "pi_models": pi_models,
     })
 
 
 @_ui_router.get("/rules", response_class=HTMLResponse, include_in_schema=False)
 async def ui_rules(request: Request):
     rules = list_rules(_engine) if _engine else []
+    pi_makes = get_pi_makes(_pi_engine) if _pi_engine else []
+    pi_models = get_pi_models_all(_pi_engine) if _pi_engine else []
     return _templates.TemplateResponse(request, "rules.html", {
         "rules": rules,
         "active": "rules",
+        "pi_makes": pi_makes,
+        "pi_models": pi_models,
     })
 
 

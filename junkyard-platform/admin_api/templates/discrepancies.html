@@ -3,6 +3,13 @@
 {% block content %}
 <h2>Mapping Discrepancies</h2>
 
+<datalist id="pi-makes">
+  {% for m in pi_makes %}<option value="{{ m }}">{% endfor %}
+</datalist>
+<datalist id="pi-models">
+  {% for m in pi_models %}<option value="{{ m }}">{% endfor %}
+</datalist>
+
 <div class="tabs">
   {% for s, label in [("unresolved","Unresolved"),("pending_rule","Pending Rule"),("no_match_in_dataset","No Match"),("ignored","Ignored")] %}
   <button class="tab {% if status == s %}active{% endif %}"
@@ -18,8 +25,8 @@
 <table>
   <thead>
     <tr>
-      <th>Source</th><th>Raw Make</th><th>Raw Model</th><th>Count</th>
-      <th>Best Make Match</th><th>Best Model Match</th><th>Actions</th>
+      <th>Source</th><th>Raw Make</th><th>Raw Model</th><th>Years</th><th>Count</th>
+      <th>Fuzzy Guess</th><th>Actions</th>
     </tr>
   </thead>
   <tbody>
@@ -28,12 +35,30 @@
     <td>{{ g.source }}</td>
     <td><code>{{ g.raw_make or '—' }}</code></td>
     <td><code>{{ g.raw_model or '—' }}</code></td>
+    <td style="white-space:nowrap">
+      {% if g.min_year and g.max_year %}
+        {% if g.min_year == g.max_year %}{{ g.min_year }}
+        {% else %}{{ g.min_year }}–{{ g.max_year }}{% endif %}
+      {% else %}—{% endif %}
+    </td>
     <td><span class="badge">{{ g.count }}</span></td>
-    <td>{{ g.best_make_match or '—' }} {% if g.best_make_score %}<small>({{ "%.0f"|format(g.best_make_score * 100) }}%)</small>{% endif %}</td>
-    <td>{{ g.best_model_match or '—' }} {% if g.best_model_score %}<small>({{ "%.0f"|format(g.best_model_score * 100) }}%)</small>{% endif %}</td>
-    <td style="display:flex;gap:0.4rem">
+    <td style="font-size:0.85rem">
+      {% if g.best_make_match %}
+        {{ g.best_make_match }} <small style="color:#888">({{ "%.0f"|format(g.best_make_score * 100) }}%)</small>
+        {% if g.best_model_match %}
+          / {{ g.best_model_match }} <small style="color:#888">({{ "%.0f"|format(g.best_model_score * 100) }}%)</small>
+        {% endif %}
+      {% else %}
+        <span style="color:#aaa">no match found</span>
+      {% endif %}
+    </td>
+    <td style="display:flex;gap:0.4rem;flex-wrap:wrap">
       {% if status in ('unresolved', 'no_match_in_dataset') %}
-      <button class="btn btn-secondary"
+      <button class="btn btn-primary" style="font-size:0.8rem"
+        onclick="toggleRuleForm({{ loop.index }}, '{{ g.source }}', {{ g.raw_make|tojson }}, {{ g.raw_model|tojson }})">
+        Create Rule
+      </button>
+      <button class="btn btn-secondary" style="font-size:0.8rem"
         hx-post="/admin/discrepancies/ignore"
         hx-vals="{{ {'source': g.source, 'raw_make': g.raw_make or '', 'raw_model': g.raw_model or ''} | tojson }}"
         hx-target="#group-{{ loop.index }}"
@@ -41,8 +66,94 @@
       {% endif %}
     </td>
   </tr>
+  <tr id="rule-form-{{ loop.index }}" style="display:none;background:#f8f9fa">
+    <td colspan="7" style="padding:1rem">
+      <form hx-post="/admin/rules"
+            hx-target="#group-{{ loop.index }}"
+            hx-swap="outerHTML"
+            style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:flex-end">
+        <input type="hidden" name="created_by" value="admin">
+        <div>
+          <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:2px">Field</label>
+          <select name="field" id="field-{{ loop.index }}"
+            onchange="switchCanonicalList({{ loop.index }}, this.value)">
+            <option value="make">make</option>
+            <option value="model">model</option>
+            <option value="trim">trim</option>
+          </select>
+        </div>
+        <div>
+          <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:2px">Rule Type</label>
+          <select name="rule_type">
+            <option value="exact">exact</option>
+            <option value="prefix">prefix</option>
+            <option value="regex">regex</option>
+          </select>
+        </div>
+        <div>
+          <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:2px">Raw Value</label>
+          <input name="raw_value" id="raw-value-{{ loop.index }}" required style="width:140px">
+        </div>
+        <div>
+          <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:2px">Canonical Value</label>
+          <input name="canonical_value" id="canonical-{{ loop.index }}"
+                 list="pi-makes" autocomplete="off" required style="width:160px"
+                 placeholder="Select or type…">
+        </div>
+        <div>
+          <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:2px">Scope</label>
+          <select name="scope" id="scope-{{ loop.index }}">
+            <option value="global">global</option>
+            <option value="source">source</option>
+          </select>
+        </div>
+        <div>
+          <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:2px">Make Context</label>
+          <input name="make_context" placeholder="(optional)" style="width:120px">
+        </div>
+        <div style="display:flex;gap:0.4rem">
+          <button class="btn btn-success" type="submit">Save</button>
+          <button class="btn btn-secondary" type="button"
+            onclick="document.getElementById('rule-form-{{ loop.index }}').style.display='none'">
+            Cancel
+          </button>
+        </div>
+      </form>
+    </td>
+  </tr>
   {% endfor %}
   </tbody>
 </table>
 {% endif %}
+
+<script>
+function toggleRuleForm(idx, source, rawMake, rawModel) {
+  var row = document.getElementById('rule-form-' + idx);
+  if (row.style.display === 'none') {
+    row.style.display = '';
+    // Pre-fill raw value and scope
+    document.getElementById('raw-value-' + idx).value = rawMake || rawModel || '';
+    document.getElementById('scope-' + idx).value = source ? 'source' : 'global';
+    // Default field based on which value is set
+    var field = document.getElementById('field-' + idx);
+    if (rawMake && !rawModel) { field.value = 'make'; }
+    else if (rawModel) { field.value = 'model'; }
+    switchCanonicalList(idx, field.value);
+  } else {
+    row.style.display = 'none';
+  }
+}
+
+function switchCanonicalList(idx, field) {
+  var input = document.getElementById('canonical-' + idx);
+  var rawInput = document.getElementById('raw-value-' + idx);
+  if (field === 'make') {
+    input.setAttribute('list', 'pi-makes');
+  } else if (field === 'model') {
+    input.setAttribute('list', 'pi-models');
+  } else {
+    input.removeAttribute('list');
+  }
+}
+</script>
 {% endblock %}

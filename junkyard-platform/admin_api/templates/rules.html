@@ -3,6 +3,13 @@
 {% block content %}
 <h2>Mapping Rules</h2>
 
+<datalist id="pi-makes">
+  {% for m in pi_makes %}<option value="{{ m }}">{% endfor %}
+</datalist>
+<datalist id="pi-models">
+  {% for m in pi_models %}<option value="{{ m }}">{% endfor %}
+</datalist>
+
 <details style="margin-bottom:1rem">
   <summary style="cursor:pointer;font-weight:600">+ Create Rule</summary>
   <form style="margin-top:0.75rem;background:#fff;padding:1rem;border-radius:6px;box-shadow:0 1px 3px rgba(0,0,0,.1)"
@@ -11,7 +18,7 @@
     hx-swap="outerHTML">
     <div class="form-row">
       <div><label>Field</label><br>
-        <select name="field">
+        <select name="field" onchange="switchRulesCanonical(this.value)">
           <option value="make">make</option>
           <option value="model">model</option>
           <option value="trim">trim</option>
@@ -23,7 +30,9 @@
           <option value="regex">regex</option>
         </select></div>
       <div><label>Raw Value</label><br><input name="raw_value" placeholder="CHEV" required></div>
-      <div><label>Canonical Value</label><br><input name="canonical_value" placeholder="Chevrolet" required></div>
+      <div><label>Canonical Value</label><br>
+        <input name="canonical_value" id="rules-canonical"
+               list="pi-makes" autocomplete="off" placeholder="Select or type…" required></div>
       <div><label>Make Context</label><br><input name="make_context" placeholder="(optional)"></div>
       <div><label>Scope</label><br>
         <select name="scope">
@@ -35,6 +44,14 @@
     <button class="btn btn-success" type="submit">Save Rule</button>
   </form>
 </details>
+<script>
+function switchRulesCanonical(field) {
+  var input = document.getElementById('rules-canonical');
+  if (field === 'make') input.setAttribute('list', 'pi-makes');
+  else if (field === 'model') input.setAttribute('list', 'pi-models');
+  else input.removeAttribute('list');
+}
+</script>
 
 <div id="rules-table">
 {% if not rules %}

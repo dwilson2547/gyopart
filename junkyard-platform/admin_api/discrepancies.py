@@ -9,6 +9,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from junkyard_common.models import MappingDiscrepancy, Vehicle
+from pipeline.pi_schema import pi_make_table, pi_model_table
 
 router = APIRouter(prefix="/admin/discrepancies", tags=["discrepancies"])
 
@@ -23,6 +24,8 @@ def get_grouped_discrepancies(engine: Engine, status: str) -> list[dict]:
                 MappingDiscrepancy.raw_make,
                 MappingDiscrepancy.raw_model,
                 func.count().label("count"),
+                func.min(Vehicle.year).label("min_year"),
+                func.max(Vehicle.year).label("max_year"),
                 func.array_agg(MappingDiscrepancy.vehicle_id).label("vehicle_ids"),
                 func.max(MappingDiscrepancy.fuzzy_make_match).label("best_make_match"),
                 func.max(MappingDiscrepancy.fuzzy_make_score).label("best_make_score"),
@@ -41,6 +44,20 @@ def get_grouped_discrepancies(engine: Engine, status: str) -> list[dict]:
         d["vehicle_ids"] = list(d.get("vehicle_ids") or [])
         result.append(d)
     return result
+
+
+def get_pi_makes(pi_engine: Engine) -> list[str]:
+    with pi_engine.connect() as conn:
+        rows = conn.execute(select(pi_make_table.c.name).order_by(pi_make_table.c.name)).all()
+    return [r[0] for r in rows]
+
+
+def get_pi_models_all(pi_engine: Engine) -> list[str]:
+    with pi_engine.connect() as conn:
+        rows = conn.execute(
+            select(pi_model_table.c.name).distinct().order_by(pi_model_table.c.name)
+        ).all()
+    return [r[0] for r in rows]
 
 
 def ignore_group(engine: Engine, source: str, raw_make: str | None, raw_model: str | None) -> int:

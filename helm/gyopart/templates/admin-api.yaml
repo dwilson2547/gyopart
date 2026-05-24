@@ -36,6 +36,18 @@ spec:
                   key: JUNKYARD_PASSWORD
             - name: JUNKYARD_DATABASE_URL
               value: "postgresql://$(JUNKYARD_USER):$(JUNKYARD_PASSWORD)@{{ .Values.postgres.host }}:5432/junkyard_inventory"
+            - name: PARTS_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.partsSecret }}
+                  key: PARTS_USER
+            - name: PARTS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.partsSecret }}
+                  key: PARTS_PASSWORD
+            - name: PARTS_DATABASE_URL
+              value: "postgresql://$(PARTS_USER):$(PARTS_PASSWORD)@{{ .Values.postgres.host }}:5432/parts_interchange"
           readinessProbe:
             httpGet:
               path: /
