@@ -459,3 +459,67 @@ def test_get_grouped_discrepancies_nhtsa_missing_vin():
     assert result[0]["nhtsa_make"] is None
     assert result[0]["nhtsa_model"] is None
     assert result[0]["nhtsa_year"] is None
+
+
+def test_create_rule_htmx_discrepancy_context_returns_html():
+    """Post from discrepancy form returns HTML success fragment, not JSON."""
+    with patch("admin_api.rules.create_rule", return_value=_make_rule_row()):
+        with _patched_client() as client:
+            resp = client.post(
+                "/admin/rules",
+                data={"field": "make", "rule_type": "exact", "raw_value": "DODGE", "canonical_value": "Dodge"},
+                headers={"HX-Request": "true", "HX-Target": "rule-form-1"},
+            )
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/html")
+    assert b"Rule saved" in resp.content
+
+
+def test_create_rule_json_response_without_htmx_header():
+    """Non-HTMX POST still returns JSON (API compatibility)."""
+    with patch("admin_api.rules.create_rule", return_value=_make_rule_row()):
+        with _patched_client() as client:
+            resp = client.post(
+                "/admin/rules",
+                data={"field": "make", "rule_type": "exact", "raw_value": "DODGE", "canonical_value": "Dodge"},
+            )
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("application/json")
+
+
+def test_create_rule_rejects_unknown_make():
+    """POST /admin/rules returns 422 when canonical_value is not a known make."""
+    with patch.object(_admin_main, "_pi_engine", MagicMock()), \
+         patch("admin_api.rules.get_pi_makes", return_value=["Chevrolet", "Ford"]), \
+         patch("admin_api.rules.create_rule") as mock_create:
+        with _patched_client() as client:
+            resp = client.post(
+                "/admin/rules",
+                data={"field": "make", "rule_type": "exact", "raw_value": "CHEV", "canonical_value": "Chevy"},
+            )
+    assert resp.status_code == 422
+    mock_create.assert_not_called()
+
+
+def test_create_rule_accepts_valid_make():
+    """POST /admin/rules succeeds when canonical_value is a known make."""
+    with patch.object(_admin_main, "_pi_engine", MagicMock()), \
+         patch("admin_api.rules.get_pi_makes", return_value=["Chevrolet", "Ford"]), \
+         patch("admin_api.rules.create_rule", return_value=_make_rule_row(canonical_value="Chevrolet")):
+        with _patched_client() as client:
+            resp = client.post(
+                "/admin/rules",
+                data={"field": "make", "rule_type": "exact", "raw_value": "CHEV", "canonical_value": "Chevrolet"},
+            )
+    assert resp.status_code == 200
+
+
+def test_create_rule_skips_validation_without_pi_engine():
+    """POST /admin/rules skips canonical validation if PI engine is unavailable."""
+    with patch("admin_api.rules.create_rule", return_value=_make_rule_row(canonical_value="NotARealMake")):
+        with _patched_client() as client:
+            resp = client.post(
+                "/admin/rules",
+                data={"field": "make", "rule_type": "exact", "raw_value": "XYZ", "canonical_value": "NotARealMake"},
+            )
+    assert resp.status_code == 200

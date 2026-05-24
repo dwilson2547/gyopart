@@ -3,11 +3,14 @@ from __future__ import annotations
 import datetime
 import os
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, ValidationError
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
+
+from admin_api.discrepancies import get_pi_makes, get_pi_models_all, get_pi_models_filtered
 
 from junkyard_common.models import MappingDiscrepancy, MappingRule, Vehicle
 from admin_api.models import CreateRuleRequest, ManualOverrideRequest
@@ -131,6 +134,11 @@ def _get_engine() -> Engine:
     return _engine
 
 
+def _get_pi_engine() -> Engine | None:
+    from admin_api.main import _pi_engine
+    return _pi_engine
+
+
 # ── Rule routes ────────────────────────────────────────────────────────────
 
 class _ApproveRequest(BaseModel):
@@ -144,6 +152,7 @@ def get_rules(include_inactive: bool = False, engine: Engine = Depends(_get_engi
 
 @router.post("")
 def post_rule(
+    request: Request,
     field: str = Form(...),
     rule_type: str = Form(...),
     raw_value: str = Form(...),
@@ -154,6 +163,7 @@ def post_rule(
     make_context: str | None = Form(None),
     priority: int = Form(100),
     engine: Engine = Depends(_get_engine),
+    pi_engine: Engine | None = Depends(_get_pi_engine),
 ):
     try:
         req = CreateRuleRequest(
@@ -163,7 +173,45 @@ def post_rule(
         )
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=exc.errors())
-    return create_rule(engine, req)
+
+    if pi_engine is not None:
+        if req.field == "make":
+            valid = get_pi_makes(pi_engine)
+            if req.canonical_value not in valid:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Unknown make: {req.canonical_value!r}. Must be an exact PI make name.",
+                )
+        elif req.field == "model":
+            valid = (
+                get_pi_models_filtered(req.make_context, pi_engine)
+                if req.make_context
+                else get_pi_models_all(pi_engine)
+            )
+            if req.canonical_value not in valid:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Unknown model: {req.canonical_value!r}.",
+                )
+
+    rule = create_rule(engine, req)
+
+    if request.headers.get("HX-Request"):
+        hx_target = request.headers.get("HX-Target", "")
+        if hx_target == "rules-tbody":
+            from fastapi.templating import Jinja2Templates
+            from pathlib import Path
+            templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+            return templates.TemplateResponse(request, "_rule_row.html", {"rule": rule})
+        # Discrepancy form — return inline success row
+        return HTMLResponse(
+            f'<tr id="rule-form-{hx_target.replace("rule-form-", "")}" style="display:none">'
+            f'<td colspan="9"><span style="color:#28a745;font-size:0.85rem">'
+            f'✓ Rule saved: <code>{rule["raw_value"]}</code> → <code>{rule["canonical_value"]}</code>'
+            f'</span></td></tr>'
+        )
+
+    return rule
 
 
 @router.post("/{rule_id}/approve")
