@@ -1,6 +1,6 @@
 from sqlalchemy import (
     Boolean, Column, DateTime, Float, ForeignKey,
-    Integer, String, Table, Text, UniqueConstraint,
+    Index, Integer, String, Table, Text, UniqueConstraint,
 )
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -27,6 +27,7 @@ car_parts = Table(
     "car_parts", Base.metadata,
     Column("car_id",  Integer, ForeignKey("car.id"),  primary_key=True),
     Column("part_id", Integer, ForeignKey("part.id"), primary_key=True),
+    Index("ix_car_parts_part_id", "part_id"),
 )
 
 car_diagrams = Table(
@@ -150,6 +151,10 @@ class Image(Base):
 
 class Part(Base):
     __tablename__ = "part"
+    __table_args__ = (
+        Index("ix_part_title_trgm",      "title",       postgresql_using="gin", postgresql_ops={"title": "gin_trgm_ops"}),
+        Index("ix_part_number_trgm", "part_number", postgresql_using="gin", postgresql_ops={"part_number": "gin_trgm_ops"}),
+    )
 
     id              = Column(Integer,     primary_key=True, autoincrement=True)
     url             = Column(String(500))
@@ -175,6 +180,9 @@ class Part(Base):
 
 class Car(Base):
     __tablename__ = "car"
+    __table_args__ = (
+        Index("ix_car_ymmt", "year_id", "make_id", "model_id", "trim_id", "engine_id"),
+    )
 
     id              = Column(Integer,      primary_key=True, autoincrement=True)
     year_id         = Column(Integer,      ForeignKey("year.id"),         index=True)

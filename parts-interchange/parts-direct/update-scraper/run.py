@@ -11,25 +11,25 @@ from utils.Exceptions import Browser403Error, InternetDownError, NoProgressExcep
 
 if __name__ == "__main__":
     args = sys.argv
-    if len(args) not in [3, 4, 5, 6]:
+    if len(args) not in [2, 3, 4]:
         print(
-            "Expected arguments: python3 run.py config instance_name [years_to_refresh] "
-            "[max_cache_age_days] [cache_version], exiting"
+            "Usage: python3 run.py config [years_to_refresh] [max_cache_age_days]\n"
+            "  config             — make config name (e.g. lexus, mopar)\n"
+            "  years_to_refresh   — how many recent model years to check (default 7)\n"
+            "  max_cache_age_days — max age of cached pages before re-rendering (default 30)\n"
+            "\n"
+            "Required env vars: WEBCACHE_URL, IMGCACHE_URL, REQUEST_AUTH_URL"
         )
         sys.exit(1)
 
     config_name = args[1]
-    instance_name = args[2]
-    years_to_refresh = int(args[3]) if len(args) >= 4 else 7
-    max_cache_age_days = int(args[4]) if len(args) >= 5 else 30
-    cache_version = int(args[5]) if len(args) >= 6 else 1
+    years_to_refresh = int(args[2]) if len(args) >= 3 else 7
+    max_cache_age_days = int(args[3]) if len(args) >= 4 else 30
 
     updater = RecentPartsDirectUpdater(
         config_name,
-        instance_name,
         years_to_refresh=years_to_refresh,
         max_cache_age_days=max_cache_age_days,
-        cache_version=cache_version,
     )
 
     while True:
@@ -37,13 +37,13 @@ if __name__ == "__main__":
             updater.scrape()
             break
         except NoProgressException as ex:
-            print("Stopped making progress, stopping process")
+            print("Stopped making progress, stopping")
             raise ex
         except Browser403Error:
             print("403 error caught, exiting")
             sys.exit(0)
         except TreeBuilderError:
-            print("Tree builder error caught, exiting now")
+            print("Tree builder error caught, exiting")
             sys.exit(0)
         except InternetDownError:
             print("Internet down, pause for 60 seconds and restart")

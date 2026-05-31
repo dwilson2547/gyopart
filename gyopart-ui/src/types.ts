@@ -46,3 +46,15 @@ export interface SelectedVehicle {
   car: Car
   yearName: string; makeName: string; modelName: string; trimName: string; engineName: string
 }
+
+export interface Category { id: number; name: string }
+export interface Diagram { id: number; category_id: number; sub_category_id: number; image_id: number }
+export interface DiagramPart extends Part { part_index: string }
+export interface DiagramDetail {
+  id: number
+  category_id: number
+  sub_category_id: number
+  image_url: string
+  image_alt: string
+  parts: DiagramPart[]
+}

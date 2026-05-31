@@ -1,6 +1,6 @@
 import axios from 'axios'
 import type {
-  Car, Engine, Make, PagedPartsResponse, Part,
+  Car, Category, Diagram, DiagramDetail, Engine, Make, PagedPartsResponse, Part,
   SearchResponse, Trim, VehicleModel, Year,
 } from './types'
 
@@ -35,4 +35,13 @@ export const api = {
 
   search: (part_id: number, zip: string, radius_miles = 50) =>
     http.get<SearchResponse>('/v1/search', { params: { part_id, zip, radius_miles } }).then(r => r.data),
+
+  categories: (car_id: number) =>
+    http.get<Category[]>('/v1/categories', { params: { car_id } }).then(r => r.data),
+
+  diagrams: (category_id: number, car_id: number) =>
+    http.get<Diagram[]>(`/v1/categories/${category_id}/diagrams`, { params: { car_id } }).then(r => r.data),
+
+  diagram: (diagram_id: number) =>
+    http.get<DiagramDetail>(`/v1/diagrams/${diagram_id}`).then(r => r.data),
 }

@@ -1,4 +1,4 @@
-import { createContext, useContext, useReducer, type Dispatch, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useReducer, type Dispatch, type ReactNode } from 'react'
 import type { Part, SelectedVehicle, YardResult } from '../types'
 
 interface AppState {
@@ -41,11 +41,25 @@ function reducer(state: AppState, action: Action): AppState {
   }
 }
 
+const STORAGE_KEY = 'gyopart_state'
+
+function loadFromStorage(): Partial<AppState> {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return {}
+    return JSON.parse(raw)
+  } catch {
+    return {}
+  }
+}
+
+const persisted = loadFromStorage()
+
 const initial: AppState = {
-  selectedVehicle: null,
-  activePart: null,
-  zip: '',
-  radiusMiles: 50,
+  selectedVehicle: persisted.selectedVehicle ?? null,
+  activePart: persisted.activePart ?? null,
+  zip: persisted.zip ?? '',
+  radiusMiles: persisted.radiusMiles ?? 50,
   results: [],
   searching: false,
 }
@@ -54,6 +68,16 @@ const AppContext = createContext<{ state: AppState; dispatch: Dispatch<Action> }
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initial)
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      selectedVehicle: state.selectedVehicle,
+      activePart: state.activePart,
+      zip: state.zip,
+      radiusMiles: state.radiusMiles,
+    }))
+  }, [state.selectedVehicle, state.activePart, state.zip, state.radiusMiles])
+
   return <AppContext.Provider value={{ state, dispatch }}>{children}</AppContext.Provider>
 }
 

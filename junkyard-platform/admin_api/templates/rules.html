@@ -34,10 +34,12 @@
           oninput="onRulesMakeContextChange(this.value)">
       </div>
       <div><label>Scope</label><br>
-        <select name="scope">
+        <select name="scope" onchange="onRulesScopeChange(this.value)">
           <option value="global">global</option>
           <option value="source">source</option>
         </select></div>
+      <div id="rules-source-wrap" style="display:none"><label>Source</label><br>
+        <input name="source" id="rules-source" placeholder="e.g. pick-n-pull"></div>
       <div><label>Priority</label><br>
         <input name="priority" type="number" value="100" style="width:70px"></div>
     </div>
@@ -47,7 +49,7 @@
 
 <table>
   <thead>
-    <tr><th>Field</th><th>Type</th><th>Raw</th><th>Canonical</th><th>Context</th><th>Scope</th><th>Applied</th><th>Created By</th><th>Actions</th></tr>
+    <tr>    <th>Field</th><th>Type</th><th>Raw</th><th>Canonical</th><th>Context</th><th>Scope</th><th>Source</th><th>Priority</th><th>Applied</th><th>Created By</th><th>Actions</th></tr>
   </thead>
   <tbody id="rules-tbody">
   {% for rule in rules %}
@@ -64,6 +66,19 @@ const PI_MAKES_RULES = {{ pi_makes | tojson }};
 const PI_MAKES_OPTIONS_RULES = PI_MAKES_RULES.map(function(m) {
   return '<option value="' + m.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;') + '">' + m.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</option>';
 }).join('');
+
+function onRulesScopeChange(scope) {
+  var wrap = document.getElementById('rules-source-wrap');
+  var inp = document.getElementById('rules-source');
+  if (scope === 'source') {
+    wrap.style.display = '';
+    inp.required = true;
+  } else {
+    wrap.style.display = 'none';
+    inp.required = false;
+    inp.value = '';
+  }
+}
 
 function onRulesFieldChange(field) {
   var wrap = document.getElementById('rules-canonical-wrap');

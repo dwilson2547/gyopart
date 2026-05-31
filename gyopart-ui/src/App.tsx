@@ -1,11 +1,32 @@
+import { useState } from 'react'
 import { useApp } from './context/AppContext'
 import { TopBar } from './components/TopBar'
 import { VehiclePicker } from './components/VehiclePicker'
 import { PartsList } from './components/PartsList'
 import { JunkyardResults } from './components/JunkyardResults'
+import { DiagramBrowser } from './components/DiagramBrowser'
+import { DiagramView } from './components/DiagramView'
+import type { Part } from './types'
+
+const TAB_CLS = 'flex-1 py-2 text-xs font-medium transition-colors'
+const TAB_ACTIVE = 'text-amber-400 border-b-2 border-amber-400'
+const TAB_INACTIVE = 'text-slate-400 hover:text-slate-200'
 
 export default function App() {
   const { state, dispatch } = useApp()
+  const [leftTab, setLeftTab] = useState<'parts' | 'diagrams'>('parts')
+  const [activeDiagramId, setActiveDiagramId] = useState<number | null>(null)
+
+  function handleDiagramPartSelect(part: Part) {
+    dispatch({ type: 'SET_PART', payload: part })
+    setLeftTab('parts')
+  }
+
+  function handleVehicleClear() {
+    dispatch({ type: 'CLEAR_VEHICLE' })
+    setLeftTab('parts')
+    setActiveDiagramId(null)
+  }
 
   return (
     <div className="flex flex-col h-screen bg-slate-950 text-white">
@@ -28,20 +49,49 @@ export default function App() {
                   </p>
                 </div>
                 <button
-                  onClick={() => dispatch({ type: 'CLEAR_VEHICLE' })}
+                  onClick={handleVehicleClear}
                   className="text-xs text-amber-500 hover:underline ml-2 flex-shrink-0"
                 >
                   Change
                 </button>
               </div>
-              <PartsList carId={state.selectedVehicle.car.id} />
+
+              {/* Tab bar */}
+              <div className="flex border-b border-slate-700 flex-shrink-0">
+                <button
+                  onClick={() => setLeftTab('parts')}
+                  className={`${TAB_CLS} ${leftTab === 'parts' ? TAB_ACTIVE : TAB_INACTIVE}`}
+                >
+                  Parts
+                </button>
+                <button
+                  onClick={() => setLeftTab('diagrams')}
+                  className={`${TAB_CLS} ${leftTab === 'diagrams' ? TAB_ACTIVE : TAB_INACTIVE}`}
+                >
+                  Diagrams
+                </button>
+              </div>
+
+              {leftTab === 'parts' ? (
+                <PartsList carId={state.selectedVehicle.car.id} />
+              ) : (
+                <DiagramBrowser
+                  carId={state.selectedVehicle.car.id}
+                  activeDiagramId={activeDiagramId}
+                  onDiagramSelect={setActiveDiagramId}
+                />
+              )}
             </>
           )}
         </aside>
 
         {/* Right panel */}
         <main className="flex-1 overflow-hidden bg-slate-950 flex flex-col">
-          <JunkyardResults />
+          {leftTab === 'diagrams' && activeDiagramId ? (
+            <DiagramView diagramId={activeDiagramId} onPartSelect={handleDiagramPartSelect} />
+          ) : (
+            <JunkyardResults />
+          )}
         </main>
       </div>
     </div>

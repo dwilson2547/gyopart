@@ -5,10 +5,10 @@ import os
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from markupsafe import escape
-from pydantic import BaseModel, ValidationError
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
@@ -165,10 +165,6 @@ def _get_engine() -> Engine:
 
 # ── Rule routes ────────────────────────────────────────────────────────────
 
-class _ApproveRequest(BaseModel):
-    approved_by: str = "admin"
-
-
 @router.get("")
 def get_rules(include_inactive: bool = False, engine: Engine = Depends(_get_engine)):
     return {"rules": list_rules(engine, include_inactive)}
@@ -322,13 +318,25 @@ def patch_rule(
 
 @router.post("/{rule_id}/approve")
 def post_approve_rule(
+    request: Request,
     rule_id: int,
-    body: _ApproveRequest,
     background_tasks: BackgroundTasks,
+    approved_by: str = Form(default="admin"),
     engine: Engine = Depends(_get_engine),
 ):
-    result = approve_rule(engine, rule_id, body.approved_by)
+    result = approve_rule(engine, rule_id, approved_by)
     background_tasks.add_task(run_reprocess)
+    if request.headers.get("HX-Request"):
+        hx_target = request.headers.get("HX-Target", "")
+        if hx_target.startswith("suggestion-"):
+            return HTMLResponse(
+                f'<tr id="{escape(hx_target)}">'
+                f'<td colspan="7" style="text-align:center;color:#28a745;padding:0.5rem">'
+                f'✓ Approved: <code>{escape(result["raw_value"])}</code>'
+                f' → <code>{escape(result["canonical_value"])}</code>'
+                f'</td></tr>'
+            )
+        return _templates.TemplateResponse(request, "_rule_row.html", {"rule": result})
     return result
 
 
@@ -336,7 +344,15 @@ def post_approve_rule(
 def post_deactivate_rule(request: Request, rule_id: int, engine: Engine = Depends(_get_engine)):
     result = deactivate_rule(engine, rule_id)
     if request.headers.get("HX-Request"):
-        return Response(content="", status_code=200)
+        hx_target = request.headers.get("HX-Target", "")
+        if hx_target.startswith("suggestion-"):
+            return HTMLResponse(
+                f'<tr id="{escape(hx_target)}">'
+                f'<td colspan="7" style="text-align:center;color:#dc3545;padding:0.5rem">'
+                f'✕ Rejected: <code>{escape(result["raw_value"])}</code>'
+                f'</td></tr>'
+            )
+        return HTMLResponse(content="", status_code=200)
     return result
 
 
