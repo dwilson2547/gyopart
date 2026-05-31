@@ -60,6 +60,7 @@ class DiagramOut(_OrmBase):
     category_id: int | None
     sub_category_id: int | None
     image_id: int | None
+    sub_category_name: str | None = None
 
 
 class DiagramPartOut(_OrmBase):
@@ -95,6 +96,8 @@ class VehicleResult(BaseModel):
     trim: str | None
     row: str | None
     car_id: int | None
+    color: str | None = None
+    mileage: int | None = None
 
 
 class YardResult(BaseModel):
@@ -106,6 +109,8 @@ class YardResult(BaseModel):
     zip_code: str | None
     phone: str | None
     distance_miles: float
+    lat: float | None = None
+    lng: float | None = None
     matching_vehicles: list[VehicleResult]
 
 

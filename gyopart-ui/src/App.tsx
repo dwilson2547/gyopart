@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { useApp } from './context/AppContext'
 import { TopBar } from './components/TopBar'
 import { VehiclePicker } from './components/VehiclePicker'
@@ -14,18 +13,16 @@ const TAB_INACTIVE = 'text-slate-400 hover:text-slate-200'
 
 export default function App() {
   const { state, dispatch } = useApp()
-  const [leftTab, setLeftTab] = useState<'parts' | 'diagrams'>('parts')
-  const [activeDiagramId, setActiveDiagramId] = useState<number | null>(null)
+  const leftTab = state.leftTab
+  const activeDiagramId = state.activeDiagramId
 
   function handleDiagramPartSelect(part: Part) {
     dispatch({ type: 'SET_PART', payload: part })
-    setLeftTab('parts')
+    dispatch({ type: 'SET_LEFT_TAB', payload: 'parts' })
   }
 
   function handleVehicleClear() {
     dispatch({ type: 'CLEAR_VEHICLE' })
-    setLeftTab('parts')
-    setActiveDiagramId(null)
   }
 
   return (
@@ -59,13 +56,13 @@ export default function App() {
               {/* Tab bar */}
               <div className="flex border-b border-slate-700 flex-shrink-0">
                 <button
-                  onClick={() => setLeftTab('parts')}
+                  onClick={() => dispatch({ type: 'SET_LEFT_TAB', payload: 'parts' })}
                   className={`${TAB_CLS} ${leftTab === 'parts' ? TAB_ACTIVE : TAB_INACTIVE}`}
                 >
                   Parts
                 </button>
                 <button
-                  onClick={() => setLeftTab('diagrams')}
+                  onClick={() => dispatch({ type: 'SET_LEFT_TAB', payload: 'diagrams' })}
                   className={`${TAB_CLS} ${leftTab === 'diagrams' ? TAB_ACTIVE : TAB_INACTIVE}`}
                 >
                   Diagrams
@@ -78,7 +75,7 @@ export default function App() {
                 <DiagramBrowser
                   carId={state.selectedVehicle.car.id}
                   activeDiagramId={activeDiagramId}
-                  onDiagramSelect={setActiveDiagramId}
+                  onDiagramSelect={(id) => dispatch({ type: 'SET_ACTIVE_DIAGRAM', payload: id })}
                 />
               )}
             </>

@@ -1,7 +1,11 @@
-import { MapPin, Phone } from 'lucide-react'
+import { MapPin, Navigation, Phone } from 'lucide-react'
 import type { YardResult } from '../types'
 
 export function YardCard({ yard }: { yard: YardResult }) {
+  const mapsUrl = yard.lat && yard.lng
+    ? `https://www.google.com/maps/dir/?api=1&destination=${yard.lat},${yard.lng}`
+    : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${yard.name} ${yard.address ?? ''} ${yard.city ?? ''} ${yard.state ?? ''}`.trim())}`
+
   return (
     <div className="bg-slate-800 rounded-lg p-4 mb-3 border border-slate-700">
       <div className="flex justify-between items-start mb-3">
@@ -19,6 +23,15 @@ export function YardCard({ yard }: { yard: YardResult }) {
               {yard.phone}
             </p>
           )}
+          <a
+            href={mapsUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-amber-500 hover:text-amber-400 text-xs mt-1"
+          >
+            <Navigation size={10} />
+            Directions
+          </a>
         </div>
         <div className="text-right ml-4 flex-shrink-0">
           <span className="text-amber-400 font-bold text-lg">{yard.distance_miles.toFixed(1)}</span>
@@ -36,6 +49,8 @@ export function YardCard({ yard }: { yard: YardResult }) {
             <th className="text-left py-1 font-medium">Make</th>
             <th className="text-left py-1 font-medium">Model</th>
             <th className="text-left py-1 font-medium">Trim</th>
+            <th className="text-left py-1 font-medium">Color</th>
+            <th className="text-left py-1 font-medium">Miles</th>
             <th className="text-left py-1 font-medium">Row</th>
           </tr>
         </thead>
@@ -46,6 +61,8 @@ export function YardCard({ yard }: { yard: YardResult }) {
               <td className="py-1">{v.make ?? '—'}</td>
               <td className="py-1">{v.model ?? '—'}</td>
               <td className="py-1">{v.trim ?? '—'}</td>
+              <td className="py-1">{v.color ?? '—'}</td>
+              <td className="py-1">{v.mileage != null ? v.mileage.toLocaleString() : '—'}</td>
               <td className="py-1 font-mono">{v.row ?? '—'}</td>
             </tr>
           ))}

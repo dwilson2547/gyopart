@@ -67,6 +67,9 @@ export function PartsList({ carId }: { carId: number }) {
             >
               <span className="block font-medium">{p.title ?? 'Unnamed Part'}</span>
               {p.part_number && <span className="text-slate-500 text-xs">#{p.part_number}</span>}
+              {p.description && (
+                <span className="block text-slate-400 text-xs mt-0.5">{p.description}</span>
+              )}
               {p.other_names && (
                 <span className="block text-slate-500 text-xs truncate">{p.other_names}</span>
               )}

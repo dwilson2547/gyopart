@@ -18,6 +18,8 @@ FROM (
         l.state             AS state,
         l.zip_code          AS zip_code,
         l.phone             AS phone,
+        l.lat               AS lat,
+        l.lng               AS lng,
         3958.8 * 2 * asin(
             sqrt(
                 power(sin(radians(l.lat - :lat) / 2), 2) +
@@ -31,7 +33,9 @@ FROM (
         v.model             AS model,
         v.trim              AS trim,
         v.row               AS row,
-        v.car_id            AS car_id
+        v.car_id            AS car_id,
+        v.color             AS color,
+        v.mileage           AS mileage
     FROM locations l
     JOIN vehicles v ON v.location_id = l.id
     WHERE l.is_active = true
@@ -76,6 +80,8 @@ def search_inventory(
                 "zip_code": row["zip_code"],
                 "phone": row["phone"],
                 "distance_miles": row["distance_miles"],
+                "lat": row["lat"],
+                "lng": row["lng"],
             }
         vehicles_by_loc[loc_id].append(VehicleResult(
             vehicle_id=row["vehicle_id"],
@@ -85,6 +91,8 @@ def search_inventory(
             trim=row["trim"],
             row=row["row"],
             car_id=row["car_id"],
+            color=row["color"],
+            mileage=row["mileage"],
         ))
 
     return [

@@ -81,7 +81,7 @@ export function DiagramBrowser({ carId, activeDiagramId, onDiagramSelect }: Prop
                   : 'hover:bg-slate-700 text-slate-300'
               }`}
             >
-              Diagram {i + 1}
+              {d.sub_category_name ?? `Diagram ${i + 1}`}
             </button>
           ))}
         </div>

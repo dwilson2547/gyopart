@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { X, ZoomIn } from 'lucide-react'
 import { api } from '../api'
 import { useApp } from '../context/AppContext'
 import type { DiagramDetail, Part } from '../types'
@@ -12,6 +13,8 @@ export function DiagramView({ diagramId, onPartSelect }: Props) {
   const { state } = useApp()
   const [detail, setDetail] = useState<DiagramDetail | null>(null)
   const [loading, setLoading] = useState(false)
+  const [zoomed, setZoomed] = useState(false)
+  const dialogRef = useRef<HTMLDialogElement>(null)
 
   useEffect(() => {
     setDetail(null)
@@ -21,6 +24,16 @@ export function DiagramView({ diagramId, onPartSelect }: Props) {
       .catch(() => setDetail(null))
       .finally(() => setLoading(false))
   }, [diagramId])
+
+  useEffect(() => {
+    const dialog = dialogRef.current
+    if (!dialog) return
+    if (zoomed) {
+      dialog.showModal()
+    } else {
+      dialog.close()
+    }
+  }, [zoomed])
 
   if (loading) {
     return (
@@ -42,11 +55,21 @@ export function DiagramView({ diagramId, onPartSelect }: Props) {
     <div className="flex flex-col h-full overflow-hidden">
       {/* Diagram image */}
       <div className="flex-shrink-0 p-4 border-b border-slate-700 bg-slate-900/50 overflow-auto max-h-96">
-        <img
-          src={detail.image_url}
-          alt={detail.image_alt}
-          className="max-w-full h-auto mx-auto block"
-        />
+        <div className="relative group inline-block w-full">
+          <img
+            src={detail.image_url}
+            alt={detail.image_alt}
+            className="max-w-full h-auto mx-auto block cursor-zoom-in"
+            onClick={() => setZoomed(true)}
+          />
+          <button
+            onClick={() => setZoomed(true)}
+            className="absolute top-2 right-2 bg-slate-800/80 text-slate-300 hover:text-white p-1.5 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+            title="View full size"
+          >
+            <ZoomIn size={14} />
+          </button>
+        </div>
         {detail.image_alt && (
           <p className="text-xs text-slate-500 text-center mt-2">{detail.image_alt}</p>
         )}
@@ -77,6 +100,9 @@ export function DiagramView({ diagramId, onPartSelect }: Props) {
                   {p.part_number && (
                     <span className="text-slate-500 text-xs">#{p.part_number}</span>
                   )}
+                  {p.description && (
+                    <span className="block text-slate-500 text-xs mt-0.5">{p.description}</span>
+                  )}
                 </span>
               </button>
             )
@@ -86,6 +112,30 @@ export function DiagramView({ diagramId, onPartSelect }: Props) {
           )}
         </div>
       </div>
+
+      {/* Fullscreen dialog */}
+      <dialog
+        ref={dialogRef}
+        className="bg-slate-950 p-0 max-w-[95vw] max-h-[95vh] rounded-lg shadow-2xl backdrop:bg-black/80"
+        onClick={(e) => { if (e.target === dialogRef.current) setZoomed(false) }}
+        onKeyDown={(e) => { if (e.key === 'Escape') setZoomed(false) }}
+      >
+        <div className="relative">
+          <button
+            onClick={() => setZoomed(false)}
+            className="absolute top-3 right-3 z-10 bg-slate-800/90 text-slate-300 hover:text-white p-1.5 rounded"
+          >
+            <X size={16} />
+          </button>
+          {detail && (
+            <img
+              src={detail.image_url}
+              alt={detail.image_alt}
+              className="block max-w-[95vw] max-h-[95vh] w-auto h-auto"
+            />
+          )}
+        </div>
+      </dialog>
     </div>
   )
 }
