@@ -1,0 +1,7 @@
+---
+title: Phase 6 — gyopart-api: Key Patterns & Gotchas
+date: 2026-05-31
+tags: gyopart-api, fastapi, phase-6
+---
+
+gyopart-api lives at gyopart/gyopart-api/. Port 8200. Sync FastAPI, SQLAlchemy 2.x, psycopg2-binary, pydantic-settings. Connects to parts_interchange DB for vehicle/parts data; calls inventory API via httpx for junkyard results — does NOT query junkyard DB directly. Env vars: PARTS_DATABASE_URL, INVENTORY_API_URL, INVENTORY_API_TIMEOUT, CORS_ORIGINS. DB creds for dev: postgresql://scrapestack:6pf6pZ6tI_-T01PBRZHbHg@localhost:5433/parts_interchange. Routes: /v1/vehicles/{years,makes,models,trims,engines,cars} (cascading picker), /v1/parts (paginated + filtered, car_id required), /v1/search (part_id + zip required). 19 unit tests with mocked DB dependency override pattern: app.dependency_overrides[get_db] = lambda: mock_db. SQLAlchemy gotcha: build count subquery from q BEFORE calling .order_by() on q, then apply order_by only to items query — order_by in a subquery causes OperationalError on SQLite. Add nulls_last() + Part.id tiebreaker for deterministic pagination on nullable columns. Search route catches (httpx.HTTPError, KeyError, ValueError) — return value is inside try block so JSON parse errors also 502. get_db generator has explicit rollback: try/yield/except Exception/session.rollback()/raise. Nullable FK columns on ORM models must match schema field optionality — Car FK columns all nullable=False, Model.make_id nullable=False.
