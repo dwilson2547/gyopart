@@ -41,6 +41,8 @@ if TYPE_CHECKING:
     from playwright.sync_api import BrowserContext, Page
 
 MAX_CONSECUTIVE_FAILURES = 5
+PROXY_ERRORS = ("ERR_PROXY_CONNECTION_FAILED", "ERR_TUNNEL_CONNECTION_FAILED", "ERR_PROXY_AUTH",
+                "ERR_NO_SUPPORTED_PROXIES", "ERR_MANDATORY_PROXY_CONFIGURATION_FAILED")
 INITIAL_VEHICLE_ESTIMATE_S = 30 * 60  # until this run has timed a vehicle itself
 
 
@@ -130,6 +132,7 @@ class UpdaterV2:
         self._navigate(self.base_url)
 
     def _navigate(self, url: str):
+        from playwright.sync_api import Error as PlaywrightError
         from playwright.sync_api import TimeoutError as PlaywrightTimeout
         domain = urlparse(url).netloc
         with self.request_auth.acquire(domain) as permit:
@@ -142,6 +145,12 @@ class UpdaterV2:
                 # A challenge that never settles looks like this; so does a slow tunnel. Transient.
                 permit.set_status(0)
                 raise SiteUnavailableError(f"navigation timed out: {url}") from ex
+            except PlaywrightError as ex:
+                permit.set_status(0)
+                if any(code in str(ex) for code in PROXY_ERRORS):
+                    # The proxy itself is unreachable: stop the run, don't fail vehicle after vehicle.
+                    raise vpn.VpnUnavailable(f"browser can't reach the VPN proxy: {str(ex)[:120]}") from ex
+                raise
             permit.set_status(resp.status if resp else 0)
         if resp is not None and resp.status >= 500:
             raise SiteUnavailableError(f"HTTP {resp.status} for {url}")
@@ -312,7 +321,7 @@ class UpdaterV2:
                 try:
                     self._open_session()
                     self.parser.check_page(self._page.content())  # homepage: challenge/block/maintenance?
-                except SiteUnavailableError as ex:
+                except (SiteUnavailableError, vpn.VpnUnavailable) as ex:
                     raise RunStopped(75, f"site unavailable at session start: {ex}") from ex
                 except (Browser403Error, Browser429Error) as ex:
                     raise RunStopped(65, f"blocked at session start: {ex}") from ex
@@ -349,7 +358,7 @@ class UpdaterV2:
                         self.stats.no_catalog += 1
                         consecutive_failures = 0
                         print("  no catalogue")
-                    except (SiteUnavailableError, InternetDownError) as ex:
+                    except (SiteUnavailableError, InternetDownError, vpn.VpnUnavailable) as ex:
                         conn.rollback()
                         with conn.cursor() as cur:
                             q.release(cur, t.id)
