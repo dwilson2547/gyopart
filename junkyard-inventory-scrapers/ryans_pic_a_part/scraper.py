@@ -2,6 +2,7 @@
 # Site:     Ryan's Pick-a-Part — Detroit, MI
 # Strategy: Playwright response interception (autorecycler.io elasticsearch/msearch)
 # Dedup key: api_id (_id from ES) stored as source_key
+# Feed: recent arrivals only (no full-inventory view) — upserts are additive, nothing is deactivated.
 # Source identifier: "ryans_pic_a_part"
 # Extras JSONB: inventory_id, name, exterior_color, added_date_ms, api_modified_ms
 # Output DB: shared junkyard_inventory Postgres (JUNKYARD_DATABASE_URL)
@@ -156,12 +157,9 @@ def upsert_vehicles(
         else:
             new_count += 1
 
-    removed_count = (
-        db.query(Vehicle)
-        .filter(Vehicle.source == SOURCE, Vehicle.is_active.is_(True),
-                ~Vehicle.source_key.in_(current_api_ids))
-        .update({"is_active": False}, synchronize_session="fetch")
-    )
+    # Additive only: the site exposes recent arrivals, not the full yard, so a vehicle missing
+    # from this feed is not evidence it left. Expiry (e.g. unseen for N weeks) is still TODO.
+    removed_count = 0
 
     db.commit()
     return new_count, updated_count, removed_count
