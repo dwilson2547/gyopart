@@ -1,0 +1,72 @@
+# gyopart prod (Argo app `gyopart`: main, values.yaml + this file). Only what differs from values.yaml.
+
+# Scraper fleet run by scrape-job-manager (templates/scrapers.yaml): the parts-direct updater.
+scraping:
+  enabled: true
+  # Images are pinned by digest (scripts/pin-scraper-images.sh helm/gyopart/values-prod.yaml after each push).
+  imagePullPolicy: IfNotPresent
+  webcacheUrl: http://webcache.scrape-stack.svc.cluster.local:8000
+  imgcacheUrl: http://imgcache.scrape-stack.svc.cluster.local:8010
+  requestAuthServer: request-auth-server.scrape-stack.svc.cluster.local:9000
+
+  pools:
+    # Parts catalogue updater (parts-interchange/parts-direct/update-scraper/docs/design-v2.md). Daily,
+    # but a run with nothing to do exits before touching the site: in practice each site is visited for
+    # monthly discovery (new vehicles) and while it has a backlog.
+    parts-direct:
+      every: 1d
+      activeHours:
+        tz: America/New_York
+        hours: "06:00-23:00"
+
+  defaults:
+    resources:
+      requests: {cpu: 100m, memory: 256Mi}
+      limits: {memory: 512Mi}
+    policy:
+      concurrency: 1
+      spacing: {min: 10m, jitter: 15m}
+      retry: {attempts: 3, backoff: {initial: 5m, factor: 3, max: 2h}}
+      suspendAfter: 3
+
+  scrapers:
+    # One image for every manufacturer site, one job per site. Runs are capped at 3h (SCRAPE_DEADLINE
+    # lands ~10 min before) so 4 at a time rotate through every site with work in the 17h window.
+    # Browser: scrape-stack's browserless (headed); all site traffic goes through the VPN proxy.
+    parts-direct:
+      image: dwilson2547/gyopart-scraper-parts-direct@sha256:7a789dae7a83d0a2129122f2daf3f05aad53ff52c7e01466992a9f4ba6c9ba29
+      database: parts-interchange
+      timeout: 3h
+      health: {minItems: 0, maxDropPct: 100}
+      policy:
+        concurrency: 4
+        spacing: {min: 2m, jitter: 3m}
+        retry: {attempts: 3, backoff: {initial: 15m, factor: 2, max: 1h}}
+      env:
+        - {name: VPN_PROXY_URL, value: "http://nordvpn-proxy-entrypoint.vpn.svc.cluster.local:8118"}
+        - {name: NO_PROXY, value: ".svc.cluster.local,.cluster.local,localhost,127.0.0.1"}
+        - {name: BROWSERLESS_URL, value: "ws://browserless.scrape-stack.svc.cluster.local:3000"}
+      resources:
+        requests: {cpu: 250m, memory: 512Mi}
+        limits: {memory: 1Gi}
+      jobs:
+        # Mopar (the full catalogue lives on the 'fiat' site): backlog of never-filled vehicles, refresh on.
+        parts-direct-mopar: {pool: parts-direct, params: {config: fiat, discovery_interval_days: 30}, suspend: true}
+        # Every other site changes rarely (user, 2026-10-11): new vehicles only, looked for monthly.
+        # Not yet: audi, acura, porsche (moved to oempartsonline.com; picker 403), vw (redirects to a
+        # dealer site), mazda (Cloudflare never clears from the VPN), suzuki (expired certificate).
+        parts-direct-bmw: {pool: parts-direct, params: {config: bmw, refresh: false, discovery_interval_days: 30}, suspend: true}
+        parts-direct-ford: {pool: parts-direct, params: {config: ford, refresh: false, discovery_interval_days: 30}, suspend: true}
+        parts-direct-gm: {pool: parts-direct, params: {config: gm, refresh: false, discovery_interval_days: 30}, suspend: true}
+        parts-direct-honda: {pool: parts-direct, params: {config: honda, refresh: false, discovery_interval_days: 30}, suspend: true}
+        parts-direct-hyundai: {pool: parts-direct, params: {config: hyundai, refresh: false, discovery_interval_days: 30}, suspend: true}
+        parts-direct-infiniti: {pool: parts-direct, params: {config: infiniti, refresh: false, discovery_interval_days: 30}, suspend: true}
+        parts-direct-jaguar: {pool: parts-direct, params: {config: jaguar, refresh: false, discovery_interval_days: 30}, suspend: true}
+        parts-direct-kia: {pool: parts-direct, params: {config: kia, refresh: false, discovery_interval_days: 30}, suspend: true}
+        parts-direct-mercedes: {pool: parts-direct, params: {config: mercedes, refresh: false, discovery_interval_days: 30}, suspend: true}
+        parts-direct-mini: {pool: parts-direct, params: {config: mini, refresh: false, discovery_interval_days: 30}, suspend: true}
+        parts-direct-mitsubishi: {pool: parts-direct, params: {config: mitsubishi, refresh: false, discovery_interval_days: 30}, suspend: true}
+        parts-direct-nissan: {pool: parts-direct, params: {config: nissan, refresh: false, discovery_interval_days: 30}, suspend: true}
+        parts-direct-subaru: {pool: parts-direct, params: {config: subaru, refresh: false, discovery_interval_days: 30}, suspend: true}
+        parts-direct-toyota: {pool: parts-direct, params: {config: toyota, refresh: false, discovery_interval_days: 30}, suspend: true}
+        parts-direct-volvo: {pool: parts-direct, params: {config: volvo, refresh: false, discovery_interval_days: 30}, suspend: true}

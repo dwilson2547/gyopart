@@ -46,6 +46,23 @@ def parse_deadline(args) -> datetime | None:
     return min(deadlines) if deadlines else None
 
 
+def normalise_args(argv: list[str]) -> list[str]:
+    """scrape-job-manager passes each ScrapeJob param as --<key>=<value>, keys as written in the YAML
+    (snake_case) and booleans as true/false; map that onto this CLI's flags."""
+    out = []
+    for arg in argv:
+        if arg.startswith("--") and "=" in arg:
+            key, value = arg[2:].split("=", 1)
+            key = key.replace("_", "-")
+            if key == "refresh":
+                if value.lower() in ("false", "0", "no"):
+                    out.append("--no-refresh")
+                continue
+            arg = f"--{key}={value}"
+        out.append(arg)
+    return out
+
+
 def main() -> int:
     params = json.loads(os.environ.get("SCRAPE_PARAMS") or "{}")
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -58,7 +75,7 @@ def main() -> int:
     ap.add_argument("--discovery-interval-days", type=int, default=int(params.get("discovery_interval_days", 90)))
     ap.add_argument("--discovery", choices=("auto", "force", "skip"), default=params.get("discovery", "auto"),
                     help="list the site's vehicles first: when due (90 days), always, or never")
-    args = ap.parse_args()
+    args = ap.parse_args(normalise_args(sys.argv[1:]))
     if not args.config:
         ap.error("--config (or SCRAPE_PARAMS config) is required")
 

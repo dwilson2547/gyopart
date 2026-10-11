@@ -10,7 +10,10 @@ Monorepo at `workspace/gyopart/`. Services:
 - `junkyard-platform/` — Contains `inventory_api/` (port 8100), `admin_api/` (port 8300), `junkyard_common/`, `pipeline/`.
 - `junkyard-inventory-scrapers/` — Scrapers. Alembic migrations root is here.
 - `parts-interchange/` — Parts catalog data, loader, docs. Schema authority: `dwilson-parts-interchange-common` on PyPI.
-- `helm/gyopart/` — Helm chart. `values.yaml` = prod (`gyopart.local`), `values-dev.yaml` = dev (`gyopart-dev.local`, namespace `gyopart-dev`).
+- `helm/gyopart/` — Helm chart. `values.yaml` = shared defaults + prod (`gyopart.local`), `values-prod.yaml` = prod-only
+  (the scraper fleet), `values-dev.yaml` = dev (`gyopart-dev.local`, namespace `gyopart-dev`). Helm merges
+  `values.yaml` into every environment, so anything environment-specific (scraper jobs!) goes in that
+  environment's file, never in `values.yaml`.
 
 ## Docker Images — ALWAYS use docker compose
 
@@ -31,8 +34,8 @@ Four images on Docker Hub:
 - `dwilson2547/admin-api:latest`
 
 **Scraper images** (`scraper-*` services) are the exception to "restart after push": they are pinned
-by digest in `helm/gyopart/values-dev.yaml`. After pushing, run `scripts/pin-scraper-images.sh`
-and commit the values file; scrape-job-manager picks up the new digest on its next run.
+by digest in `helm/gyopart/values-dev.yaml` and `values-prod.yaml`. After pushing, run
+`scripts/pin-scraper-images.sh <values file>` for each and commit; scrape-job-manager picks up the new digest on its next run.
 
 After pushing, restart the deployment to pull the new image:
 ```bash
