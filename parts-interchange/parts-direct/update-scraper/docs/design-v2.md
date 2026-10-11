@@ -67,7 +67,7 @@ a NULL `part_number`.
 ### 3.1 Keys and schema changes
 
 Upserts need real unique keys. Added to `parts_interchange_common` (new version) and applied to prod
-by migration (§3.8):
+by migration (§3.9):
 
 | Table | Unique key | Notes |
 |---|---|---|
@@ -107,12 +107,14 @@ no empty vehicles in the picker. A real page with no categories → `no_catalog`
 
 One run = one browser session working the queue until a time budget is spent:
 
+0. **Check the VPN** (§3.8) — refuse to start if traffic would leave on the home IP.
 1. Launch the browser and open **one** stealth context; load the homepage (passes Cloudflare). Recreate
    the context only on a challenge page, a 403, or a browser crash.
-2. **Discovery**, at most once per `discovery_interval` (⬜ default 7 days, per manufacturer): run the
+2. **Discovery**, at most once per `discovery_interval` (✅ 90 days per manufacturer, user 2026-10-11 —
+   the vehicle list rarely changes): run the
    tree builder for `years_to_refresh` recent years and insert unknown vehicles as `pending`.
 3. **Claim targets** in order: `pending`, then `failed` with backoff, then `done` older than
-   `refresh_after` (⬜ default 90 days), oldest first.
+   `refresh_after` (✅ 180 days, user 2026-10-11), oldest first.
 4. **Scrape one vehicle** with the existing per-car crawl (categories → diagrams → parts, through
    webcache/imgcache), collecting everything in memory.
 5. **Write it in one transaction** (§3.5), then mark the target. Wait `spacing + jitter` (⬜ 20–60 s)
@@ -169,12 +171,37 @@ handled when it happens.
   docker compose (`scraper-parts-direct` ⬜), pinned by digest like the junkyard scrapers.
 - One `ScrapeJob` per manufacturer, `params: {config: <name>}`; `SCRAPE_*` env per the operator's
   contract; result payload `{"items": vehicles_scraped, "new": …, "updated": …}`.
+- **Several manufacturers at once** (✅ user ran 3–5 parts-direct scrapers concurrently in the past,
+  each slow): every manufacturer is its own site, so the parts-direct `Scraper` gets
+  `policy.concurrency: 4` (⬜) — up to four manufacturer jobs in parallel, one session per site.
+  Per-site pacing stays with request-auth's per-domain permits. The operator's global
+  `maxConcurrentRuns` (3 today, shared with the junkyard scrapers) would be raised to 6 (⬜) so day-long
+  parts-direct runs don't starve the junkyard runs.
 - `health.minItems: 0` — a run that only refreshed nothing because the site was down exits 75 instead,
   so zero items on exit 0 means "queue empty", which is fine.
-- Browser: the scrape-stack browserless (✅ `browserless` service in `scrapestack-dev`) via CDP, or a
-  local Chromium in the image. ⬜ decide at build time; browserless keeps the image small.
+- Browser: Chromium bundled in the image (⬜), so the VPN proxy can be set per launch (§3.8). The
+  scrape-stack browserless (✅ `browserless` service in `scrapestack-dev`) would need the proxy as a
+  server-wide launch flag instead.
 
-### 3.8 Migrating the schema
+### 3.8 Network: all site traffic through the VPN
+
+✅ user requirement, 2026-10-11. The cluster's VPN is an HTTP proxy, Service
+`nordvpn-proxy-entrypoint.vpn.svc.cluster.local:8118` (✅ `infra/cluster-config/vpn/deployment.yml`,
+one replica — every concurrent job shares one exit IP).
+
+- **Browser:** Playwright `launch(proxy={"server": "http://nordvpn-proxy-entrypoint.vpn.svc.cluster.local:8118"})`.
+  With browserless over CDP the proxy is a browser launch flag instead, so a bundled Chromium is the
+  simpler fit (resolves the §3.7 browser question in its favour).
+- **`requests` calls** (✅ image downloads in `save_image`, the tree builder's picker AJAX): through
+  `HTTP_PROXY`/`HTTPS_PROXY` env.
+- **In-cluster services must bypass it:** webcache, imgcache and request-auth (gRPC honours
+  `http_proxy` too) via `NO_PROXY=.svc,.svc.cluster.local,.cluster.local,localhost,127.0.0.1`.
+- **Fail closed:** ⚠ unverified whether the proxy refuses traffic when the tunnel drops — its liveness
+  probe (NordVPN `vpn/check/full` → `Protected`) is commented out in the deployment. So each run
+  starts by fetching NordVPN's check endpoint through the proxy and exits 75 unless it reports
+  `Protected`; the probe repeats every N vehicles (⬜ 50) and stops the run if it fails.
+
+### 3.9 Migrating the schema
 
 `parts_interchange` has no migration history; prod holds real data, so changes go through Alembic
 (✅ user preference for prod data). Add an Alembic environment next to `parts_interchange_common`,
@@ -183,7 +210,7 @@ stamp the current schema as the baseline, and write one revision for the §3.1 c
 
 ---
 
-## 4. Throughput — the main open question
+## 4. Throughput
 
 ⚠ Estimate from the 2024 Mopar scrape: 739 vehicles took about 25 days (2024-08-22 → 2024-09-16), i.e.
 roughly 50 minutes per vehicle including every part page. Later vehicles reuse part pages already
@@ -198,7 +225,10 @@ At 50 minutes per vehicle, 3,492 vehicles ≈ 2,900 hours of scraping. Against t
 2. Allow concurrency 2 for this scraper (two sessions) — doubles load on the site.
 3. Accept the long tail and refresh the most-searched makes first.
 
-⬜ Recommendation: option 1, and measure real per-vehicle time in the first week before deciding on 2.
+⬜ Recommendation: option 1 for hours, plus several manufacturers in parallel (§3.7). That doesn't speed
+up one site's backlog (Mopar is one site, so one session), but it keeps the other manufacturers' 180-day
+refresh moving at the same time. Measure real per-vehicle time in the first week; per-site speed is
+then tuned through request-auth's permit rate for that domain rather than by adding sessions.
 
 ---
 
@@ -215,7 +245,6 @@ At 50 minutes per vehicle, 3,492 vehicles ≈ 2,900 hours of scraping. Against t
 ## 6. Open questions
 
 - Pool hours and cadence for parts-direct (§4).
-- `refresh_after` and `discovery_interval` defaults.
-- Browserless vs. bundled Chromium (§3.7).
+- Raising `maxConcurrentRuns` to 6 and parts-direct concurrency to 4 (§3.7).
 - Whether `CachedParser` changes need to be shared with the single-threaded scraper (currently the
   updater imports it from `singlethreaded-scraper/src`), or the updater should own a copy.
