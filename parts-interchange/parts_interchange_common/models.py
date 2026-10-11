@@ -76,6 +76,7 @@ class Make(Base):
 
 class Model(Base):
     __tablename__ = "model"
+    __table_args__ = (UniqueConstraint("make_id", "select_value", name="uq_model_make_select"),)
 
     id           = Column(Integer,     primary_key=True, autoincrement=True)
     name         = Column(String(120), nullable=False)
@@ -122,6 +123,7 @@ class Category(Base):
 
 class Subcategory(Base):
     __tablename__ = "subcategory"
+    __table_args__ = (UniqueConstraint("category_id", "name", name="uq_subcategory_category_name"),)
 
     id          = Column(Integer,     primary_key=True, autoincrement=True)
     name        = Column(String(120), nullable=False)
@@ -133,6 +135,7 @@ class Subcategory(Base):
 
 class Image(Base):
     __tablename__ = "image"
+    __table_args__ = (UniqueConstraint("manufacturer_id", "name", name="uq_image_manufacturer_name"),)
 
     id               = Column(Integer,     primary_key=True, autoincrement=True)
     name             = Column(String(100), index=True)
@@ -154,6 +157,8 @@ class Part(Base):
     __table_args__ = (
         Index("ix_part_title_trgm",      "title",       postgresql_using="gin", postgresql_ops={"title": "gin_trgm_ops"}),
         Index("ix_part_number_trgm", "part_number", postgresql_using="gin", postgresql_ops={"part_number": "gin_trgm_ops"}),
+        # The upsert key for scrapers: OEM part numbers are per manufacturer, not per site.
+        UniqueConstraint("manufacturer_id", "part_number", name="uq_part_manufacturer_number"),
     )
 
     id              = Column(Integer,     primary_key=True, autoincrement=True)
@@ -182,6 +187,12 @@ class Car(Base):
     __tablename__ = "car"
     __table_args__ = (
         Index("ix_car_ymmt", "year_id", "make_id", "model_id", "trim_id", "engine_id"),
+        # The upsert key: the vehicle, not the site's URL or ids, so a manufacturer can change sites
+        # without duplicating cars. trim/engine are nullable, so NULLs must compare equal here.
+        UniqueConstraint(
+            "manufacturer_id", "year_id", "make_id", "model_id", "trim_id", "engine_id",
+            name="uq_car_vehicle", postgresql_nulls_not_distinct=True,
+        ),
     )
 
     id              = Column(Integer,      primary_key=True, autoincrement=True)
@@ -243,3 +254,38 @@ class ScrapeRun(Base):
     updated_parts  = Column(Integer,      default=0)
     success        = Column(Boolean,      nullable=False, default=False)
     error_message  = Column(String(1000))
+
+
+class ScrapeTarget(Base):
+    """One vehicle the update scraper knows about: its work queue entry and scrape state.
+
+    Separate from Car so a vehicle can be queued before it has data; a Car row is only created once a
+    scrape finds a catalogue (the vehicle picker lists cars, and must never offer an empty one).
+    Identified by the site's select values as the vehicle picker returned them.
+    """
+    __tablename__ = "scrape_target"
+    __table_args__ = (
+        UniqueConstraint(
+            "manufacturer_id", "year", "make", "model", "trim", "engine",
+            name="uq_scrape_target_vehicle", postgresql_nulls_not_distinct=True,
+        ),
+        Index("ix_scrape_target_queue", "manufacturer_id", "status", "last_scraped_at"),
+    )
+
+    STATUSES = ("pending", "done", "no_catalog", "failed")
+
+    id              = Column(Integer,      primary_key=True, autoincrement=True)
+    manufacturer_id = Column(Integer,      ForeignKey("manufacturer.id"), nullable=False)
+    year            = Column(String(120),  nullable=False)
+    make            = Column(String(120),  nullable=False)
+    model           = Column(String(120),  nullable=False)
+    trim            = Column(String(120))
+    engine          = Column(String(120))
+    page_url        = Column(String(1000))
+    status          = Column(String(20),   nullable=False, default="pending")
+    car_id          = Column(Integer,      ForeignKey("car.id"), index=True)
+    last_scraped_at = Column(DateTime)
+    next_attempt_at = Column(DateTime)
+    attempts        = Column(Integer,      nullable=False, default=0)
+    last_error      = Column(String(1000))
+    created_at      = Column(DateTime,     nullable=False)
