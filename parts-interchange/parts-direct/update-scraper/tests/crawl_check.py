@@ -40,6 +40,8 @@ def main():
     up = UpdaterV2("fiat", os.environ["PARTS_INTERCHANGE_DATABASE_URL"])
     up.get_page = get_page
     up.save_image = lambda url, name: True
+    from scraper_v2 import ImageQueue
+    up.images = ImageQueue(up.save_image, 2)
     if a.refetch_parts:
         up._known_parts = lambda mfr, nums: {}
 
@@ -51,6 +53,9 @@ def main():
     before = snapshot(cur, a.target_car)
     try:
         v = up.crawl(t)
+        up.images.close(cancel=False)  # wait for the (stubbed) downloads
+        for name, meta in v.images.items():
+            meta["saved"] = up.images.status(name)
         print(f"crawl: {served['n']} pages, {len(v.diagrams)} category pages, {len(v.part_numbers)} part numbers, "
               f"{len(v.parts)} part pages parsed, {len(v.images)} images")
         st = write_vehicle(conn, "fiat", t, v)

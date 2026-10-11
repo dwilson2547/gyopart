@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import random
+import sys
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -41,7 +42,7 @@ if TYPE_CHECKING:
     from playwright.sync_api import BrowserContext, Page
 
 MAX_CONSECUTIVE_FAILURES = 5
-IMAGE_WORKERS = 8
+IMAGE_WORKERS = 8  # background image downloads per run
 PROXY_ERRORS = ("ERR_PROXY_CONNECTION_FAILED", "ERR_TUNNEL_CONNECTION_FAILED", "ERR_PROXY_AUTH",
                 "ERR_NO_SUPPORTED_PROXIES", "ERR_MANDATORY_PROXY_CONFIGURATION_FAILED")
 INITIAL_VEHICLE_ESTIMATE_S = 30 * 60  # until this run has timed a vehicle itself
@@ -52,6 +53,69 @@ def canonical_part_url(url: str) -> str:
     part has a different URL on every diagram. The page is the same without it — the 2024 scrape
     fetched and cached part pages bare — so fetch, cache and compare on the bare URL."""
     return url.split("?", 1)[0]
+
+
+class ImageQueue:
+    """Run-wide background image downloads (design-v2 §3.8b).
+
+    Pages submit image URLs as they are parsed and the browser moves straight on; 8 workers download
+    alongside the crawl. De-duplicated per run, so an image shared by many cars downloads once. A
+    vehicle is written with whatever has finished (saved=true) and the rest as saved=false;
+    flush_updates() later flips the ones that completed after their vehicle was written."""
+
+    def __init__(self, download, workers: int):
+        from concurrent.futures import ThreadPoolExecutor
+        self._download = download
+        self._pool = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="img")
+        self._futures: dict[str, object] = {}
+        self._written_unsaved: set[str] = set()   # written as saved=false, outcome pending
+        self.saved = self.failed = 0
+
+    def submit(self, name: str, url: str) -> None:
+        if name not in self._futures:
+            self._futures[name] = self._pool.submit(self._download, url, name)
+
+    def status(self, name: str) -> bool:
+        """saved-so-far for a vehicle write; remembers the ones still pending."""
+        f = self._futures.get(name)
+        if f is not None and f.done() and not f.cancelled() and f.exception() is None and f.result():
+            return True
+        if f is not None and not f.done():
+            self._written_unsaved.add(name)
+        return False
+
+    def pending(self) -> int:
+        return sum(1 for f in self._futures.values() if not f.done())
+
+    def flush_updates(self, conn, mfr_id: int) -> int:
+        done_ok = [n for n in self._written_unsaved
+                   if self._futures[n].done() and not self._futures[n].cancelled()
+                   and self._futures[n].exception() is None and self._futures[n].result()]
+        finished = [n for n in self._written_unsaved if self._futures[n].done()]
+        if done_ok:
+            with conn.cursor() as cur:
+                cur.execute("UPDATE image SET saved = true WHERE manufacturer_id = %s AND name = ANY(%s)",
+                            (mfr_id, done_ok))
+            conn.commit()
+        self._written_unsaved.difference_update(finished)
+        return len(done_ok)
+
+    def drain(self, conn, mfr_id: int, deadline: Optional[datetime]) -> None:
+        """Wait for outstanding downloads until the deadline, then record what finished."""
+        while self.pending():
+            if deadline and datetime.now(timezone.utc).replace(tzinfo=None) >= deadline:
+                break
+            time.sleep(2)
+        self.flush_updates(conn, mfr_id)
+
+    def close(self, cancel: bool) -> None:
+        self._pool.shutdown(wait=not cancel, cancel_futures=cancel)
+        for f in self._futures.values():
+            if f.done() and not f.cancelled() and f.exception() is None:
+                if f.result():
+                    self.saved += 1
+                else:
+                    self.failed += 1
 
 
 class RunStopped(Exception):
@@ -242,30 +306,14 @@ class UpdaterV2:
             )
             return {pn: canonical_part_url(u) for pn, u in cur.fetchall()}
 
-    def _download_images(self, images: dict[str, dict]) -> None:
-        """Fetch a vehicle's images concurrently once its pages are done. They come from CDNs
-        (revolutionparts / S3 / CloudFront), not the Cloudflare-protected site, so parallel downloads
-        don't touch its limits; they still go through the VPN. Fetching them inline (up to 24 files
-        per part page, one by one) left the browser idle for minutes after every page."""
-        from concurrent.futures import ThreadPoolExecutor
-        todo = [(name, meta["url"]) for name, meta in images.items()]
-        if not todo:
-            return
-        t0 = time.monotonic()
-        with ThreadPoolExecutor(max_workers=IMAGE_WORKERS) as pool:
-            results = pool.map(lambda item: (item[0], self.save_image(item[1], item[0])), todo)
-            for name, ok in results:
-                images[name]["saved"] = ok
-        saved = sum(1 for m in images.values() if m["saved"])
-        print(f"  images: {saved}/{len(todo)} saved in {time.monotonic() - t0:.0f}s", flush=True)
-
     def crawl(self, t: Target) -> ScrapedVehicle:
         images: dict[str, dict] = {}
 
         def img(url: str, name: str, alt):
             if name and name not in images:
                 full = url if url.startswith("https") else "https:" + url
-                images[name] = {"url": full, "alt": alt, "saved": False}  # downloaded after the pages
+                images[name] = {"url": full, "alt": alt, "saved": False}
+                self.images.submit(name, full)  # downloads in the background while the crawl goes on
 
         categories = self.parser.parse_cached_page(self.get_page(t.page_url), PageType.CATEGORIES)
         if not categories:
@@ -304,7 +352,6 @@ class UpdaterV2:
                     obj = entry.get(key)
                     if obj and obj.get("url"):
                         img(obj["url"], obj["url"].split("/")[-1], None)
-        self._download_images(images)
         return ScrapedVehicle(diagrams=diagrams, part_numbers=list(part_urls), parts=parts, images=images)
 
     # ── the run ────────────────────────────────────────────────────────────────────────────────
@@ -336,6 +383,8 @@ class UpdaterV2:
 
         from playwright.sync_api import sync_playwright
         consecutive_failures = 0
+        self.images = ImageQueue(self.save_image, IMAGE_WORKERS)
+        stopped = False
         with sync_playwright() as p:
             proxy = vpn.proxy_url()
             # Headed full Chromium: Cloudflare blocks headless (both the headless shell and new-headless)
@@ -371,15 +420,19 @@ class UpdaterV2:
                     t0 = time.monotonic()
                     try:
                         scraped = self.crawl(t)
+                        for name, meta in scraped.images.items():
+                            meta["saved"] = self.images.status(name)
                         ws = write_vehicle(conn, self.config_name, t, scraped)
                         conn.commit()
+                        late = self.images.flush_updates(conn, mfr_id)
                         self.stats.vehicles_done += 1
                         self.stats.cars_created += ws.car_created
                         self.stats.parts_new += ws.parts_new
                         self.stats.parts_updated += ws.parts_updated
                         consecutive_failures = 0
                         print(f"  done: car {ws.car_id} {'(new)' if ws.car_created else ''} parts={ws.car_parts} "
-                              f"diagrams={ws.diagrams} new_parts={ws.parts_new}")
+                              f"diagrams={ws.diagrams} new_parts={ws.parts_new} | images queued={self.images.pending()} "
+                              f"late-saved={late}", flush=True)
                     except NoCatalog:
                         conn.rollback()
                         with conn.cursor() as cur:
@@ -413,10 +466,23 @@ class UpdaterV2:
                     self._vehicle_seconds.append(time.monotonic() - t0)
                     pause = random.uniform(*self.spacing_s)
                     time.sleep(pause)
+                # Let queued images finish (within the deadline) and record them.
+                print(f"draining {self.images.pending()} queued images", flush=True)
+                self.images.drain(conn, mfr_id, self.deadline)
             except RunStopped as stop:
                 self.stats.stop_reason = stop.reason  # before the finally records the run
+                stopped = True
                 raise
             finally:
+                # On a stop (VPN/site down) pending downloads would fail anyway: cancel them; their
+                # rows stay saved=false for the image sweep.
+                self.images.close(cancel=stopped or sys.exc_info()[0] is not None)
+                try:
+                    self.images.flush_updates(conn, mfr_id)
+                except Exception as ex:  # noqa: BLE001
+                    print(f"could not record late image saves: {ex}")
+                    conn.rollback()
+                print(f"images this run: {self.images.saved} saved, {self.images.failed} failed", flush=True)
                 try:
                     self._record_run(conn)
                 finally:
