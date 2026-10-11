@@ -50,6 +50,9 @@ scraping:
     ryans-pic-a-part:
       image: dwilson2547/gyopart-scraper-ryans-pic-a-part:latest
       timeout: 1h
+      # Feed is recent arrivals only, so weekly counts swing naturally: keep the zero check,
+      # skip drop detection (100% = never).
+      health: {maxDropPct: 100}
       resources:
         requests: {cpu: 500m, memory: 1Gi}
         limits: {memory: 2Gi}

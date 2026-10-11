@@ -44,6 +44,10 @@ spec:
     {{- toYaml ($scraper.resources | default $s.defaults.resources) | nindent 4 }}
   policy:
     {{- toYaml (mergeOverwrite (deepCopy $s.defaults.policy) ($scraper.policy | default dict)) | nindent 4 }}
+  {{- with $scraper.health }}
+  health:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 {{- range $jobName, $job := $scraper.jobs }}
 ---
 apiVersion: scrape.danwils.com/v1alpha1
