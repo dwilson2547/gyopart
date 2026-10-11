@@ -26,13 +26,11 @@
         hx-post="/admin/rules/{{ s.rule_id }}/approve"
         hx-vals='{"approved_by":"admin"}'
         hx-target="#suggestion-{{ s.rule_id }}"
-        hx-swap="outerHTML"
-        hx-headers='{"X-Admin-Key":"{{ admin_key }}"}'>Approve</button>
+        hx-swap="outerHTML">Approve</button>
       <button class="btn btn-danger"
         hx-post="/admin/rules/{{ s.rule_id }}/deactivate"
         hx-target="#suggestion-{{ s.rule_id }}"
-        hx-swap="outerHTML"
-        hx-headers='{"X-Admin-Key":"{{ admin_key }}"}'>Reject</button>
+        hx-swap="outerHTML">Reject</button>
     </td>
   </tr>
   {% endfor %}

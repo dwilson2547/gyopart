@@ -8,6 +8,7 @@ export function ZipInput({ partId }: { partId: number }) {
   const [zip, setZip] = useState(state.zip)
   const [radius, setRadius] = useState(state.radiusMiles)
   const mounted = useRef(true)
+  const prevPartId = useRef(partId)
   useEffect(() => () => { mounted.current = false }, [])
 
   async function handleSearch() {
@@ -24,6 +25,16 @@ export function ZipInput({ partId }: { partId: number }) {
       if (mounted.current) dispatch({ type: 'SET_SEARCHING', payload: false })
     }
   }
+
+  // Auto-search when part changes and ZIP is ready
+  useEffect(() => {
+    if (partId !== prevPartId.current) {
+      prevPartId.current = partId
+      if (zip.length === 5) {
+        handleSearch()
+      }
+    }
+  }, [partId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-700 flex-shrink-0">
@@ -53,7 +64,7 @@ export function ZipInput({ partId }: { partId: number }) {
         {state.searching ? 'Searching...' : 'Search'}
       </button>
       {state.activePart && (
-        <span className="text-slate-400 text-xs ml-1 truncate max-w-36">
+        <span className="text-slate-400 text-xs ml-1 truncate max-w-48">
           {state.activePart.title ?? 'Part'}
         </span>
       )}

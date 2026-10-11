@@ -1,0 +1,74 @@
+{{- /*
+Scraper fleet run by scrape-job-manager (web-scrapers/scrape-job-manager; CRDs scrape.danwils.com).
+One Scraper per yard company image, one or more ScrapeJobs per Scraper, all in ScrapePools that set
+cadence + active hours. Values: .Values.scraping.
+*/ -}}
+{{- if .Values.scraping.enabled }}
+{{- $ns := .Values.namespace.name }}
+{{- $s := .Values.scraping }}
+{{- range $name, $pool := $s.pools }}
+---
+apiVersion: scrape.danwils.com/v1alpha1
+kind: ScrapePool
+metadata:
+  name: {{ $name }}
+  namespace: {{ $ns }}
+spec:
+  {{- toYaml $pool | nindent 2 }}
+{{- end }}
+{{- range $name, $scraper := $s.scrapers }}
+---
+apiVersion: scrape.danwils.com/v1alpha1
+kind: Scraper
+metadata:
+  name: {{ $name }}
+  namespace: {{ $ns }}
+spec:
+  image: {{ $scraper.image }}
+  imagePullPolicy: {{ $s.imagePullPolicy }}
+  timeout: {{ $scraper.timeout | default "1h" }}
+  env:
+    # Order matters: $(VAR) only expands variables defined earlier in the list.
+    - name: JUNKYARD_USER
+      valueFrom: {secretKeyRef: {name: {{ $.Values.postgres.junkyardSecret }}, key: JUNKYARD_USER}}
+    - name: JUNKYARD_PASSWORD
+      valueFrom: {secretKeyRef: {name: {{ $.Values.postgres.junkyardSecret }}, key: JUNKYARD_PASSWORD}}
+    - name: JUNKYARD_DATABASE_URL
+      value: "postgresql://$(JUNKYARD_USER):$(JUNKYARD_PASSWORD)@{{ $.Values.postgres.host }}:5432/junkyard_inventory"
+    - {name: WEBCACHE_URL, value: {{ $s.webcacheUrl | quote }}}
+    - {name: REQUEST_AUTH_SERVER_URL, value: {{ $s.requestAuthServer | quote }}}
+    {{- with $scraper.env }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  resources:
+    {{- toYaml ($scraper.resources | default $s.defaults.resources) | nindent 4 }}
+  policy:
+    {{- toYaml (mergeOverwrite (deepCopy $s.defaults.policy) ($scraper.policy | default dict)) | nindent 4 }}
+  {{- with $scraper.health }}
+  health:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- range $jobName, $job := $scraper.jobs }}
+---
+apiVersion: scrape.danwils.com/v1alpha1
+kind: ScrapeJob
+metadata:
+  name: {{ $jobName }}
+  namespace: {{ $ns }}
+spec:
+  scraperRef: {{ $name }}
+  poolRef: {{ $job.pool }}
+  {{- with $job.params }}
+  params:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $job.env }}
+  env:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- if $job.suspend }}
+  suspend: true
+  {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

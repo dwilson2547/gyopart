@@ -2,15 +2,22 @@ from __future__ import annotations
 
 import datetime
 import os
+from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException
-from pydantic import BaseModel, ValidationError
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
+from markupsafe import escape
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
+from admin_api.discrepancies import _get_pi_engine, get_pi_makes, get_pi_models_all, get_pi_models_filtered
 from junkyard_common.models import MappingDiscrepancy, MappingRule, Vehicle
 from admin_api.models import CreateRuleRequest, ManualOverrideRequest
+
+_templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 router = APIRouter(prefix="/admin/rules", tags=["rules"])
 vehicles_router = APIRouter(prefix="/admin/vehicles", tags=["vehicles"])
@@ -86,6 +93,31 @@ def approve_rule(engine: Engine, rule_id: int, approved_by: str) -> dict:
         return _rule_to_dict(rule)
 
 
+def get_rule_by_id(engine: Engine, rule_id: int) -> dict | None:
+    with Session(engine) as session:
+        rule = session.get(MappingRule, rule_id)
+        if rule is None:
+            return None
+        return _rule_to_dict(rule)
+
+
+def update_rule(engine: Engine, rule_id: int, req: CreateRuleRequest) -> dict:
+    with Session(engine) as session:
+        rule = session.get(MappingRule, rule_id)
+        if rule is None:
+            raise HTTPException(status_code=404, detail="rule not found")
+        rule.field = req.field
+        rule.rule_type = req.rule_type
+        rule.raw_value = req.raw_value
+        rule.canonical_value = req.canonical_value
+        rule.make_context = req.make_context
+        rule.scope = req.scope
+        rule.priority = req.priority
+        session.commit()
+        session.refresh(rule)
+        return _rule_to_dict(rule)
+
+
 def deactivate_rule(engine: Engine, rule_id: int) -> dict:
     with Session(engine) as session:
         rule = session.get(MappingRule, rule_id)
@@ -133,10 +165,6 @@ def _get_engine() -> Engine:
 
 # ── Rule routes ────────────────────────────────────────────────────────────
 
-class _ApproveRequest(BaseModel):
-    approved_by: str = "admin"
-
-
 @router.get("")
 def get_rules(include_inactive: bool = False, engine: Engine = Depends(_get_engine)):
     return {"rules": list_rules(engine, include_inactive)}
@@ -144,6 +172,7 @@ def get_rules(include_inactive: bool = False, engine: Engine = Depends(_get_engi
 
 @router.post("")
 def post_rule(
+    request: Request,
     field: str = Form(...),
     rule_type: str = Form(...),
     raw_value: str = Form(...),
@@ -154,6 +183,7 @@ def post_rule(
     make_context: str | None = Form(None),
     priority: int = Form(100),
     engine: Engine = Depends(_get_engine),
+    pi_engine: Engine | None = Depends(_get_pi_engine),
 ):
     try:
         req = CreateRuleRequest(
@@ -163,24 +193,167 @@ def post_rule(
         )
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=exc.errors())
-    return create_rule(engine, req)
+
+    if pi_engine is not None:
+        if req.field == "make":
+            valid = get_pi_makes(pi_engine)
+            if req.canonical_value not in valid:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Unknown make: {req.canonical_value!r}. Must be an exact PI make name.",
+                )
+        elif req.field == "model":
+            valid = (
+                get_pi_models_filtered(req.make_context, pi_engine)
+                if req.make_context
+                else get_pi_models_all(pi_engine)
+            )
+            if req.canonical_value not in valid:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Unknown model: {req.canonical_value!r}.",
+                )
+
+    rule = create_rule(engine, req)
+
+    if request.headers.get("HX-Request"):
+        hx_target = request.headers.get("HX-Target", "")
+        if hx_target == "rules-tbody":
+            return _templates.TemplateResponse(request, "_rule_row.html", {"rule": rule})
+        # Discrepancy form — return inline success row
+        return HTMLResponse(
+            f'<tr id="rule-form-{escape(hx_target.replace("rule-form-", ""))}" style="display:none">'
+            f'<td colspan="9"><span style="color:#28a745;font-size:0.85rem">'
+            f'✓ Rule saved: <code>{escape(rule["raw_value"])}</code>'
+            f' → <code>{escape(rule["canonical_value"])}</code>'
+            f'</span></td></tr>'
+        )
+
+    return rule
+
+
+@router.get("/{rule_id}/edit")
+def get_rule_edit(
+    request: Request,
+    rule_id: int,
+    engine: Engine = Depends(_get_engine),
+    pi_engine: Engine | None = Depends(_get_pi_engine),
+):
+    rule = get_rule_by_id(engine, rule_id)
+    if rule is None:
+        raise HTTPException(status_code=404, detail="rule not found")
+    pi_makes = get_pi_makes(pi_engine) if pi_engine else []
+    return _templates.TemplateResponse(
+        request, "_rule_edit_row.html", {"rule": rule, "pi_makes": pi_makes}
+    )
+
+
+@router.get("/{rule_id}")
+def get_rule(
+    request: Request,
+    rule_id: int,
+    engine: Engine = Depends(_get_engine),
+    pi_engine: Engine | None = Depends(_get_pi_engine),
+):
+    rule = get_rule_by_id(engine, rule_id)
+    if rule is None:
+        raise HTTPException(status_code=404, detail="rule not found")
+    pi_makes = get_pi_makes(pi_engine) if pi_engine else []
+    return _templates.TemplateResponse(
+        request, "_rule_row.html", {"rule": rule, "pi_makes": pi_makes}
+    )
+
+
+@router.patch("/{rule_id}")
+def patch_rule(
+    request: Request,
+    rule_id: int,
+    field: str = Form(...),
+    rule_type: str = Form(...),
+    raw_value: str = Form(...),
+    canonical_value: str = Form(...),
+    scope: str = Form("global"),
+    make_context: str | None = Form(None),
+    priority: int = Form(100),
+    engine: Engine = Depends(_get_engine),
+    pi_engine: Engine | None = Depends(_get_pi_engine),
+):
+    try:
+        req = CreateRuleRequest(
+            field=field, rule_type=rule_type, raw_value=raw_value,
+            canonical_value=canonical_value, scope=scope,
+            make_context=make_context, priority=priority,
+        )
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.errors())
+
+    if pi_engine is not None:
+        if req.field == "make":
+            valid = get_pi_makes(pi_engine)
+            if req.canonical_value not in valid:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Unknown make: {req.canonical_value!r}. Must be an exact PI make name.",
+                )
+        elif req.field == "model":
+            valid = (
+                get_pi_models_filtered(req.make_context, pi_engine)
+                if req.make_context
+                else get_pi_models_all(pi_engine)
+            )
+            if req.canonical_value not in valid:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Unknown model: {req.canonical_value!r}.",
+                )
+
+    rule = update_rule(engine, rule_id, req)
+    pi_makes = get_pi_makes(pi_engine) if pi_engine else []
+    if request.headers.get("HX-Request"):
+        return _templates.TemplateResponse(
+            request, "_rule_row.html", {"rule": rule, "pi_makes": pi_makes}
+        )
+    return rule
 
 
 @router.post("/{rule_id}/approve")
 def post_approve_rule(
+    request: Request,
     rule_id: int,
-    body: _ApproveRequest,
     background_tasks: BackgroundTasks,
+    approved_by: str = Form(default="admin"),
     engine: Engine = Depends(_get_engine),
 ):
-    result = approve_rule(engine, rule_id, body.approved_by)
+    result = approve_rule(engine, rule_id, approved_by)
     background_tasks.add_task(run_reprocess)
+    if request.headers.get("HX-Request"):
+        hx_target = request.headers.get("HX-Target", "")
+        if hx_target.startswith("suggestion-"):
+            return HTMLResponse(
+                f'<tr id="{escape(hx_target)}">'
+                f'<td colspan="7" style="text-align:center;color:#28a745;padding:0.5rem">'
+                f'✓ Approved: <code>{escape(result["raw_value"])}</code>'
+                f' → <code>{escape(result["canonical_value"])}</code>'
+                f'</td></tr>'
+            )
+        return _templates.TemplateResponse(request, "_rule_row.html", {"rule": result})
     return result
 
 
 @router.post("/{rule_id}/deactivate")
-def post_deactivate_rule(rule_id: int, engine: Engine = Depends(_get_engine)):
-    return deactivate_rule(engine, rule_id)
+def post_deactivate_rule(request: Request, rule_id: int, engine: Engine = Depends(_get_engine)):
+    result = deactivate_rule(engine, rule_id)
+    if request.headers.get("HX-Request"):
+        hx_target = request.headers.get("HX-Target", "")
+        if hx_target.startswith("suggestion-"):
+            return HTMLResponse(
+                f'<tr id="{escape(hx_target)}">'
+                f'<td colspan="7" style="text-align:center;color:#dc3545;padding:0.5rem">'
+                f'✕ Rejected: <code>{escape(result["raw_value"])}</code>'
+                f'</td></tr>'
+            )
+        return HTMLResponse(content="", status_code=200)
+    return result
 
 
 # ── Vehicle override routes ────────────────────────────────────────────────

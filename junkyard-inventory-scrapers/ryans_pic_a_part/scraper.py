@@ -2,6 +2,7 @@
 # Site:     Ryan's Pick-a-Part — Detroit, MI
 # Strategy: Playwright response interception (autorecycler.io elasticsearch/msearch)
 # Dedup key: api_id (_id from ES) stored as source_key
+# Feed: recent arrivals only (no full-inventory view) — upserts are additive, nothing is deactivated.
 # Source identifier: "ryans_pic_a_part"
 # Extras JSONB: inventory_id, name, exterior_color, added_date_ms, api_modified_ms
 # Output DB: shared junkyard_inventory Postgres (JUNKYARD_DATABASE_URL)
@@ -12,6 +13,7 @@ import logging
 import os
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 
 from playwright.async_api import async_playwright, Response
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -21,6 +23,10 @@ from junkyard_common.models import Location, ScrapeRun, Vehicle
 from junkyard_common.db import get_engine
 from cache_client import WebCacheClient
 from request_auth_client import RequestAuthClient
+
+# scrape_contract.py lives one level up in the repo and next to scraper.py in the image.
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+from scrape_contract import Broken, run  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -151,12 +157,9 @@ def upsert_vehicles(
         else:
             new_count += 1
 
-    removed_count = (
-        db.query(Vehicle)
-        .filter(Vehicle.source == SOURCE, Vehicle.is_active.is_(True),
-                ~Vehicle.source_key.in_(current_api_ids))
-        .update({"is_active": False}, synchronize_session="fetch")
-    )
+    # Additive only: the site exposes recent arrivals, not the full yard, so a vehicle missing
+    # from this feed is not evidence it left. Expiry (e.g. unseen for N weeks) is still TODO.
+    removed_count = 0
 
     db.commit()
     return new_count, updated_count, removed_count
@@ -231,7 +234,7 @@ async def scrape_inventory(web_cache, request_auth) -> list[tuple[str, dict]]:
     return result
 
 
-def main() -> None:
+def main() -> dict:
     request_auth = RequestAuthClient(REQUEST_AUTH_SERVER_URL)
     engine = get_engine()
     now = _utcnow()
@@ -249,7 +252,7 @@ def main() -> None:
             pairs = asyncio.run(scrape_inventory(web_cache, request_auth))
 
         if not pairs:
-            raise RuntimeError("No vehicles collected — possible site change or block.")
+            raise Broken("No vehicles collected — possible site change or block.")
 
         with Session(engine) as db:
             new_c, updated_c, removed_c = upsert_vehicles(db, location_id, pairs, now)
@@ -266,6 +269,7 @@ def main() -> None:
             run.removed_vehicles = removed_c
             run.success = True
             db.commit()
+        return {"items": len(pairs), "new": new_c, "updated": updated_c, "removed": removed_c}
 
     except Exception as exc:
         logger.exception("Scraper failed: %s", exc)
@@ -275,11 +279,11 @@ def main() -> None:
             run.error_message = str(exc)[:1000]
             run.success = False
             db.commit()
-        sys.exit(1)
+        raise
 
     finally:
         request_auth.close()
 
 
 if __name__ == "__main__":
-    main()
+    run(main)

@@ -2,15 +2,17 @@ from __future__ import annotations
 
 import os
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request
+from fastapi.responses import HTMLResponse, Response
 from sqlalchemy import func, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
-from junkyard_common.models import MappingDiscrepancy, Vehicle
+from junkyard_common.models import MappingDiscrepancy, Vehicle, VinCache
+from pipeline.pi_schema import pi_make_table, pi_model_table
 
 router = APIRouter(prefix="/admin/discrepancies", tags=["discrepancies"])
+admin_router = APIRouter(prefix="/admin", tags=["admin"])
 
 VALID_STATUSES = {"unresolved", "pending_rule", "no_match_in_dataset", "ignored"}
 
@@ -23,6 +25,8 @@ def get_grouped_discrepancies(engine: Engine, status: str) -> list[dict]:
                 MappingDiscrepancy.raw_make,
                 MappingDiscrepancy.raw_model,
                 func.count().label("count"),
+                func.min(Vehicle.year).label("min_year"),
+                func.max(Vehicle.year).label("max_year"),
                 func.array_agg(MappingDiscrepancy.vehicle_id).label("vehicle_ids"),
                 func.max(MappingDiscrepancy.fuzzy_make_match).label("best_make_match"),
                 func.max(MappingDiscrepancy.fuzzy_make_score).label("best_make_score"),
@@ -35,12 +39,70 @@ def get_grouped_discrepancies(engine: Engine, status: str) -> list[dict]:
             .group_by(Vehicle.source, MappingDiscrepancy.raw_make, MappingDiscrepancy.raw_model)
             .order_by(func.count().desc())
         ).mappings().all()
-    result = []
-    for r in rows:
-        d = dict(r)
-        d["vehicle_ids"] = list(d.get("vehicle_ids") or [])
-        result.append(d)
+
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["vehicle_ids"] = list(d.get("vehicle_ids") or [])
+            result.append(d)
+
+        # Enrich each group with NHTSA decode — query all vehicle_ids across all
+        # groups so that groups whose first vehicle has no VinCache entry can still
+        # be enriched from another vehicle in the same group.
+        all_vehicle_ids = list({vid for g in result for vid in g["vehicle_ids"]})
+        if all_vehicle_ids:
+            vin_rows = session.execute(
+                select(Vehicle.id, VinCache.make, VinCache.model, VinCache.model_year)
+                .join(VinCache, Vehicle.vin == VinCache.vin)
+                .where(Vehicle.id.in_(all_vehicle_ids))
+            ).all()
+            nhtsa_by_vehicle_id = {row.id: (row.make, row.model, row.model_year) for row in vin_rows}
+        else:
+            nhtsa_by_vehicle_id = {}
+
+        for g in result:
+            nhtsa = None
+            for vid in g["vehicle_ids"]:
+                if vid in nhtsa_by_vehicle_id:
+                    nhtsa = nhtsa_by_vehicle_id[vid]
+                    break
+            g["nhtsa_make"] = nhtsa[0] if nhtsa else None
+            g["nhtsa_model"] = nhtsa[1] if nhtsa else None
+            g["nhtsa_year"] = nhtsa[2] if nhtsa else None
+
     return result
+
+
+def get_pi_makes(pi_engine: Engine) -> list[str]:
+    with pi_engine.connect() as conn:
+        rows = conn.execute(select(pi_make_table.c.name).order_by(pi_make_table.c.name)).all()
+    return [r[0] for r in rows]
+
+
+def get_pi_models_all(pi_engine: Engine) -> list[str]:
+    with pi_engine.connect() as conn:
+        rows = conn.execute(
+            select(pi_model_table.c.name).distinct().order_by(pi_model_table.c.name)
+        ).all()
+    return [r[0] for r in rows]
+
+
+def get_pi_models_filtered(make: str | None, pi_engine: Engine | None) -> list[str]:
+    if pi_engine is None:
+        return []
+    with pi_engine.connect() as conn:
+        if make:
+            rows = conn.execute(
+                select(pi_model_table.c.name)
+                .join(pi_make_table, pi_model_table.c.make_id == pi_make_table.c.id)
+                .where(func.lower(pi_make_table.c.name) == func.lower(make))
+                .order_by(pi_model_table.c.name)
+            ).all()
+        else:
+            rows = conn.execute(
+                select(pi_model_table.c.name).distinct().order_by(pi_model_table.c.name)
+            ).all()
+    return [r[0] for r in rows]
 
 
 def ignore_group(engine: Engine, source: str, raw_make: str | None, raw_model: str | None) -> int:
@@ -68,10 +130,9 @@ def _get_engine() -> Engine:
     return _engine
 
 
-class _IgnoreRequest(BaseModel):
-    source: str
-    raw_make: str | None = None
-    raw_model: str | None = None
+def _get_pi_engine() -> Engine | None:
+    from admin_api.main import _pi_engine
+    return _pi_engine
 
 
 @router.get("")
@@ -86,6 +147,30 @@ def list_discrepancies(status: str, engine: Engine = Depends(_get_engine)):
 
 
 @router.post("/ignore")
-def ignore_discrepancy_group(body: _IgnoreRequest, engine: Engine = Depends(_get_engine)):
-    updated = ignore_group(engine, body.source, body.raw_make, body.raw_model)
+def ignore_discrepancy_group(
+    request: Request,
+    source: str = Form(...),
+    raw_make: str | None = Form(None),
+    raw_model: str | None = Form(None),
+    engine: Engine = Depends(_get_engine),
+):
+    updated = ignore_group(engine, source, raw_make or None, raw_model or None)
+    if request.headers.get("HX-Request"):
+        return Response(content="", status_code=200)
     return {"updated": updated}
+
+
+@admin_router.post("/reprocess")
+def post_reprocess(background_tasks: BackgroundTasks, request: Request):
+    def _run():
+        from pipeline.reprocess_job import run_reprocess as _r
+        _r(dry_run=False)
+    background_tasks.add_task(_run)
+    if request.headers.get("HX-Request"):
+        return HTMLResponse("Reprocessing started — refresh in a moment")
+    return {"triggered": True, "message": "Reprocessing started"}
+
+
+@admin_router.get("/pi-models")
+def get_models_endpoint(make: str | None = None, pi_engine: Engine | None = Depends(_get_pi_engine)):
+    return {"models": get_pi_models_filtered(make, pi_engine)}

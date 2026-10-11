@@ -9,6 +9,7 @@ import json
 import logging
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 
 import requests
 from sqlalchemy.orm import Session
@@ -18,6 +19,10 @@ from junkyard_common.db import get_engine
 from cache_client import WebCacheClient
 from request_auth_client import RequestAuthClient
 from config import Config
+
+# scrape_contract.py lives one level up in the repo and next to scraper.py in the image.
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+from scrape_contract import Broken, run  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -37,6 +42,18 @@ def _parse_dt(value: str | None) -> datetime | None:
         return datetime.fromisoformat(value[:19])
     except (ValueError, TypeError):
         return None
+
+
+def _clean_vin(raw: str | None) -> str | None:
+    """Drop the API's placeholders for VIN-less cars (25-char 'RND…'); keep everything else.
+
+    Not a length-17 check: pre-1981 vehicles have legitimately shorter VINs (11–13 chars seen).
+    Anything over 17 can't be a VIN and wouldn't fit vehicles.vin either.
+    """
+    vin = (raw or "").strip()
+    if not vin or vin.startswith("RND") or len(vin) > 17:
+        return None
+    return vin
 
 
 def _get_json(
@@ -162,7 +179,7 @@ def _sync_location_inventory(http, web_cache, request_auth, db, api_loc, now):
                 year=v.get("year"),
                 make=v.get("make"),
                 model=v.get("model"),
-                vin=v.get("vin") or None,
+                vin=_clean_vin(v.get("vin")),
                 row=v.get("row"),
                 arrival_date=arrival_date,
                 color=v.get("color") or None,
@@ -176,6 +193,8 @@ def _sync_location_inventory(http, web_cache, request_auth, db, api_loc, now):
         else:
             existing.last_seen_at = now
             existing.is_active = True
+            if existing.vin is None and (vin := _clean_vin(v.get("vin"))):
+                existing.vin = vin
             if v.get("row"):
                 existing.row = v["row"]
             if image_url and existing.preview_image_url != image_url:
@@ -194,7 +213,7 @@ def _sync_location_inventory(http, web_cache, request_auth, db, api_loc, now):
     return len(vehicles), new_count, updated_count, removed_count
 
 
-def main() -> None:
+def main() -> dict:
     engine = get_engine()
     now = _utcnow()
 
@@ -210,6 +229,8 @@ def main() -> None:
                 http = requests.Session()
 
                 api_locations = _sync_locations(http, web_cache, request_auth, db, now)
+                if not api_locations:
+                    raise Broken("locations API returned 0 locations — possible API change")
 
                 total_feed = total_new = total_updated = total_removed = 0
                 for api_loc in api_locations:
@@ -221,6 +242,9 @@ def main() -> None:
                     total_updated += updated
                     total_removed += removed
 
+            if total_feed == 0:
+                raise Broken(f"0 vehicles across {len(api_locations)} locations — possible API change")
+
             run.completed_at = _utcnow()
             run.total_in_feed = total_feed
             run.new_vehicles = total_new
@@ -230,15 +254,19 @@ def main() -> None:
             db.commit()
             logger.info("Scrape complete — %d locations | %d in feed | +%d new | ~%d updated | -%d removed",
                         len(api_locations), total_feed, total_new, total_updated, total_removed)
+            return {"items": total_feed, "new": total_new, "updated": total_updated,
+                    "removed": total_removed, "locations": len(api_locations)}
 
         except Exception as exc:
             logger.exception("Scrape failed: %s", exc)
+            db.rollback()  # a failed flush leaves the session unusable; without this the
+            # commit below raises PendingRollbackError and masks the real error
             run.completed_at = _utcnow()
             run.error_message = str(exc)[:1000]
             run.success = False
             db.commit()
-            sys.exit(1)
+            raise
 
 
 if __name__ == "__main__":
-    main()
+    run(main)

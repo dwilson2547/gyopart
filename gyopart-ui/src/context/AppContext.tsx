@@ -1,4 +1,4 @@
-import { createContext, useContext, useReducer, type Dispatch, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useReducer, type Dispatch, type ReactNode } from 'react'
 import type { Part, SelectedVehicle, YardResult } from '../types'
 
 interface AppState {
@@ -8,6 +8,8 @@ interface AppState {
   radiusMiles: number
   results: YardResult[]
   searching: boolean
+  leftTab: 'parts' | 'diagrams'
+  activeDiagramId: number | null
 }
 
 type Action =
@@ -19,17 +21,19 @@ type Action =
   | { type: 'SET_RADIUS'; payload: number }
   | { type: 'SET_RESULTS'; payload: YardResult[] }
   | { type: 'SET_SEARCHING'; payload: boolean }
+  | { type: 'SET_LEFT_TAB'; payload: 'parts' | 'diagrams' }
+  | { type: 'SET_ACTIVE_DIAGRAM'; payload: number | null }
 
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case 'SET_VEHICLE':
-      return { ...state, selectedVehicle: action.payload, activePart: null, results: [] }
+      return { ...state, selectedVehicle: action.payload, activePart: null, results: [], leftTab: 'parts', activeDiagramId: null }
     case 'CLEAR_VEHICLE':
-      return { ...state, selectedVehicle: null, activePart: null, results: [] }
+      return { ...state, selectedVehicle: null, activePart: null, results: [], leftTab: 'parts', activeDiagramId: null }
     case 'SET_PART':
-      return { ...state, activePart: action.payload, results: [] }
+      return { ...state, activePart: action.payload }
     case 'CLEAR_PART':
-      return { ...state, activePart: null, results: [] }
+      return { ...state, activePart: null }
     case 'SET_ZIP':
       return { ...state, zip: action.payload }
     case 'SET_RADIUS':
@@ -38,22 +42,54 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, results: action.payload }
     case 'SET_SEARCHING':
       return { ...state, searching: action.payload }
+    case 'SET_LEFT_TAB':
+      return { ...state, leftTab: action.payload }
+    case 'SET_ACTIVE_DIAGRAM':
+      return { ...state, activeDiagramId: action.payload }
   }
 }
 
+const STORAGE_KEY = 'gyopart_state'
+
+function loadFromStorage(): Partial<AppState> {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return {}
+    return JSON.parse(raw)
+  } catch {
+    return {}
+  }
+}
+
+const persisted = loadFromStorage()
+
 const initial: AppState = {
-  selectedVehicle: null,
-  activePart: null,
-  zip: '',
-  radiusMiles: 50,
+  selectedVehicle: persisted.selectedVehicle ?? null,
+  activePart: persisted.activePart ?? null,
+  zip: persisted.zip ?? '',
+  radiusMiles: persisted.radiusMiles ?? 50,
   results: [],
   searching: false,
+  leftTab: persisted.leftTab ?? 'parts',
+  activeDiagramId: persisted.activeDiagramId ?? null,
 }
 
 const AppContext = createContext<{ state: AppState; dispatch: Dispatch<Action> } | null>(null)
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initial)
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      selectedVehicle: state.selectedVehicle,
+      activePart: state.activePart,
+      zip: state.zip,
+      radiusMiles: state.radiusMiles,
+      leftTab: state.leftTab,
+      activeDiagramId: state.activeDiagramId,
+    }))
+  }, [state.selectedVehicle, state.activePart, state.zip, state.radiusMiles, state.leftTab, state.activeDiagramId])
+
   return <AppContext.Provider value={{ state, dispatch }}>{children}</AppContext.Provider>
 }
 

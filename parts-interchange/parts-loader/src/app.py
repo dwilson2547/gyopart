@@ -1,5 +1,5 @@
 from models import Base, PartImages, DiagramParts, Category, SubCategory, Diagram, Image, Manufacturer, Part, Year, Make, Model, Trim, Engine, Car, Feedback, car_categories, car_diagrams, car_parts
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import Session
 import json
 import os
@@ -85,6 +85,9 @@ def create_session():
 
     engine = create_engine(get_db_url(db_user, db_pass, db_url))
 
+    with engine.connect() as conn:
+        conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
+        conn.commit()
     Base.metadata.create_all(engine)
 
     session = Session(engine)

@@ -1,0 +1,7 @@
+dwilson-junkyard-common
+sqlalchemy>=2.0
+psycopg2-binary>=2.9
+requests>=2.31
+rapidfuzz>=3.0
+uszipcode>=0.2.4,<1.0
+six

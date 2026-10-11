@@ -4,9 +4,57 @@ namespace:
 
 domain: gyopart-dev.local
 
-imagePullPolicy: IfNotPresent
+imagePullPolicy: Always
 
 postgres:
   host: postgres-dev.postgres.svc.cluster.local
   junkyardSecret: junkyard-credentials
   partsSecret: parts-interchange-credentials
+
+# Scraper fleet run by scrape-job-manager (templates/scrapers.yaml). Pilot: three yard companies.
+scraping:
+  enabled: true
+  imagePullPolicy: Always
+  webcacheUrl: http://webcache.scrapestack-dev.svc.cluster.local:8000
+  requestAuthServer: request-auth-server.scrapestack-dev.svc.cluster.local:9000
+
+  pools:
+    junkyard-inventory:
+      every: 1w
+      activeHours:
+        tz: America/New_York
+        days: [Mon, Tue, Wed, Thu, Fri]
+        hours: "09:00-19:00"
+
+  defaults:
+    resources:
+      requests: {cpu: 100m, memory: 256Mi}
+      limits: {memory: 512Mi}
+    policy:
+      concurrency: 1
+      spacing: {min: 10m, jitter: 15m}
+      retry: {attempts: 3, backoff: {initial: 5m, factor: 3, max: 2h}}
+      suspendAfter: 3
+
+  scrapers:
+    parts-galore:
+      image: dwilson2547/gyopart-scraper-parts-galore:latest
+      timeout: 30m
+      jobs:
+        parts-galore: {pool: junkyard-inventory}
+    pic-n-pull:
+      image: dwilson2547/gyopart-scraper-pic-n-pull:latest
+      timeout: 2h
+      jobs:
+        pic-n-pull: {pool: junkyard-inventory}   # one job: the scraper loops every location
+    ryans-pic-a-part:
+      image: dwilson2547/gyopart-scraper-ryans-pic-a-part:latest
+      timeout: 1h
+      # Feed is recent arrivals only, so weekly counts swing naturally: keep the zero check,
+      # skip drop detection (100% = never).
+      health: {maxDropPct: 100}
+      resources:
+        requests: {cpu: 500m, memory: 1Gi}
+        limits: {memory: 2Gi}
+      jobs:
+        ryans-pic-a-part: {pool: junkyard-inventory}

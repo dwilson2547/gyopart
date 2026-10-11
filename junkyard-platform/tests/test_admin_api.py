@@ -161,11 +161,36 @@ def test_ignore_discrepancy_group():
         with _patched_client() as client:
             resp = client.post(
                 "/admin/discrepancies/ignore",
-                json={"source": "pic_n_pull", "raw_make": "CHEV", "raw_model": "SILVERADO 1500"},
+                data={"source": "pic_n_pull", "raw_make": "CHEV", "raw_model": "SILVERADO 1500"},
             )
     assert resp.status_code == 200
     assert resp.json()["updated"] == 12
     mock_ignore.assert_called_once()
+
+
+def test_ignore_discrepancy_group_htmx_returns_empty():
+    with patch("admin_api.discrepancies.ignore_group", return_value=5):
+        with _patched_client() as client:
+            resp = client.post(
+                "/admin/discrepancies/ignore",
+                data={"source": "pic_n_pull", "raw_make": "CHEV"},
+                headers={"HX-Request": "true"},
+            )
+    assert resp.status_code == 200
+    assert resp.content == b""
+
+
+def test_ignore_discrepancy_group_null_fields():
+    """Ignore with missing raw_make/raw_model passes None to ignore_group."""
+    from unittest.mock import ANY
+    with patch("admin_api.discrepancies.ignore_group", return_value=3) as mock_ignore:
+        with _patched_client() as client:
+            resp = client.post(
+                "/admin/discrepancies/ignore",
+                data={"source": "pic_n_pull"},
+            )
+    assert resp.status_code == 200
+    mock_ignore.assert_called_once_with(ANY, "pic_n_pull", None, None)
 
 
 import datetime as _dt
@@ -234,6 +259,17 @@ def test_deactivate_rule():
             resp = client.post("/admin/rules/1/deactivate")
     assert resp.status_code == 200
     assert resp.json()["is_active"] is False
+
+
+def test_deactivate_rule_htmx_returns_empty():
+    with patch("admin_api.rules.deactivate_rule", return_value=_make_rule_row(is_active=False)):
+        with _patched_client() as client:
+            resp = client.post(
+                "/admin/rules/1/deactivate",
+                headers={"HX-Request": "true"},
+            )
+    assert resp.status_code == 200
+    assert resp.content == b""
 
 
 def test_manual_override_updates_vehicle():
@@ -346,3 +382,300 @@ def test_integration_rules_returns_200():
         )
     assert resp.status_code == 200
     assert "rules" in resp.json()
+
+
+def test_pi_models_no_filter_returns_all():
+    """GET /admin/pi-models with no make param returns all models."""
+    with patch("admin_api.discrepancies.get_pi_models_filtered", return_value=["F-150", "Mustang"]) as mock:
+        with _patched_client() as client:
+            resp = client.get("/admin/pi-models")
+    assert resp.status_code == 200
+    assert resp.json() == {"models": ["F-150", "Mustang"]}
+    mock.assert_called_once_with(None, _admin_main._pi_engine)
+
+
+def test_pi_models_with_make_filter():
+    """GET /admin/pi-models?make=Ford returns filtered models."""
+    with patch("admin_api.discrepancies.get_pi_models_filtered", return_value=["F-150"]) as mock:
+        with _patched_client() as client:
+            resp = client.get("/admin/pi-models?make=Ford")
+    assert resp.status_code == 200
+    assert resp.json() == {"models": ["F-150"]}
+    mock.assert_called_once_with("Ford", _admin_main._pi_engine)
+
+
+def test_discrepancy_group_has_nhtsa_fields():
+    """DiscrepancyGroup accepts nhtsa_make/model/year with None defaults."""
+    from admin_api.models import DiscrepancyGroup
+    g = DiscrepancyGroup(
+        source="x", raw_make="DODGE", raw_model="RAM PICKUP",
+        count=5, vehicle_ids=[1],
+        best_make_match=None, best_make_score=None,
+        best_model_match=None, best_model_score=None,
+        candidate_car_id=None,
+    )
+    assert g.nhtsa_make is None
+    assert g.nhtsa_model is None
+    assert g.nhtsa_year is None
+
+
+def test_discrepancy_group_nhtsa_fields_set():
+    from admin_api.models import DiscrepancyGroup
+    g = DiscrepancyGroup(
+        source="x", raw_make="DODGE", raw_model="RAM PICKUP",
+        count=5, vehicle_ids=[1],
+        best_make_match=None, best_make_score=None,
+        best_model_match=None, best_model_score=None,
+        candidate_car_id=None,
+        nhtsa_make="DODGE", nhtsa_model="RAM 1500", nhtsa_year="2005",
+    )
+    assert g.nhtsa_make == "DODGE"
+    assert g.nhtsa_model == "RAM 1500"
+    assert g.nhtsa_year == "2005"
+
+
+def test_get_grouped_discrepancies_enriches_nhtsa():
+    """get_grouped_discrepancies attaches nhtsa_make/model/year from VinCache."""
+    from admin_api.discrepancies import get_grouped_discrepancies
+
+    base_group = {
+        "source": "pic_n_pull", "raw_make": "DODGE", "raw_model": "RAM PICKUP",
+        "count": 5, "min_year": 2001, "max_year": 2008,
+        "vehicle_ids": [42],
+        "best_make_match": None, "best_make_score": None,
+        "best_model_match": None, "best_model_score": None,
+        "candidate_car_id": None,
+    }
+
+    vin_row = MagicMock()
+    vin_row.id = 42
+    vin_row.make = "DODGE"
+    vin_row.model = "RAM 1500"
+    vin_row.model_year = "2003"
+
+    mock_session = MagicMock()
+    mock_session.__enter__ = MagicMock(return_value=mock_session)
+    mock_session.__exit__ = MagicMock(return_value=False)
+    mock_session.execute.side_effect = [
+        MagicMock(mappings=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[base_group])))),
+        MagicMock(all=MagicMock(return_value=[vin_row])),
+    ]
+
+    with patch("admin_api.discrepancies.Session", return_value=mock_session):
+        result = get_grouped_discrepancies(MagicMock(), "unresolved")
+
+    assert result[0]["nhtsa_make"] == "DODGE"
+    assert result[0]["nhtsa_model"] == "RAM 1500"
+    assert result[0]["nhtsa_year"] == "2003"
+
+
+def test_get_grouped_discrepancies_nhtsa_missing_vin():
+    """Groups with no VinCache match get nhtsa fields set to None."""
+    from admin_api.discrepancies import get_grouped_discrepancies
+
+    base_group = {
+        "source": "x", "raw_make": "DODGE", "raw_model": "RAM",
+        "count": 1, "min_year": 2000, "max_year": 2000,
+        "vehicle_ids": [99],
+        "best_make_match": None, "best_make_score": None,
+        "best_model_match": None, "best_model_score": None,
+        "candidate_car_id": None,
+    }
+    mock_session = MagicMock()
+    mock_session.__enter__ = MagicMock(return_value=mock_session)
+    mock_session.__exit__ = MagicMock(return_value=False)
+    mock_session.execute.side_effect = [
+        MagicMock(mappings=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[base_group])))),
+        MagicMock(all=MagicMock(return_value=[])),  # no VinCache hit
+    ]
+
+    with patch("admin_api.discrepancies.Session", return_value=mock_session):
+        result = get_grouped_discrepancies(MagicMock(), "unresolved")
+
+    assert result[0]["nhtsa_make"] is None
+    assert result[0]["nhtsa_model"] is None
+    assert result[0]["nhtsa_year"] is None
+
+
+def test_create_rule_htmx_discrepancy_context_returns_html():
+    """Post from discrepancy form returns HTML success fragment, not JSON."""
+    with patch("admin_api.rules.create_rule", return_value=_make_rule_row()):
+        with _patched_client() as client:
+            resp = client.post(
+                "/admin/rules",
+                data={"field": "make", "rule_type": "exact", "raw_value": "DODGE", "canonical_value": "Dodge"},
+                headers={"HX-Request": "true", "HX-Target": "rule-form-1"},
+            )
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/html")
+    assert b"Rule saved" in resp.content
+
+
+def test_create_rule_json_response_without_htmx_header():
+    """Non-HTMX POST still returns JSON (API compatibility)."""
+    with patch("admin_api.rules.create_rule", return_value=_make_rule_row()):
+        with _patched_client() as client:
+            resp = client.post(
+                "/admin/rules",
+                data={"field": "make", "rule_type": "exact", "raw_value": "DODGE", "canonical_value": "Dodge"},
+            )
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("application/json")
+
+
+def test_create_rule_rejects_unknown_make():
+    """POST /admin/rules returns 422 when canonical_value is not a known make."""
+    with patch.object(_admin_main, "_pi_engine", MagicMock()), \
+         patch("admin_api.rules.get_pi_makes", return_value=["Chevrolet", "Ford"]), \
+         patch("admin_api.rules.create_rule") as mock_create:
+        with _patched_client() as client:
+            resp = client.post(
+                "/admin/rules",
+                data={"field": "make", "rule_type": "exact", "raw_value": "CHEV", "canonical_value": "Chevy"},
+            )
+    assert resp.status_code == 422
+    mock_create.assert_not_called()
+
+
+def test_create_rule_accepts_valid_make():
+    """POST /admin/rules succeeds when canonical_value is a known make."""
+    with patch.object(_admin_main, "_pi_engine", MagicMock()), \
+         patch("admin_api.rules.get_pi_makes", return_value=["Chevrolet", "Ford"]), \
+         patch("admin_api.rules.create_rule", return_value=_make_rule_row(canonical_value="Chevrolet")):
+        with _patched_client() as client:
+            resp = client.post(
+                "/admin/rules",
+                data={"field": "make", "rule_type": "exact", "raw_value": "CHEV", "canonical_value": "Chevrolet"},
+            )
+    assert resp.status_code == 200
+
+
+def test_create_rule_skips_validation_without_pi_engine():
+    """POST /admin/rules skips canonical validation if PI engine is unavailable."""
+    with patch("admin_api.rules.create_rule", return_value=_make_rule_row(canonical_value="NotARealMake")):
+        with _patched_client() as client:
+            resp = client.post(
+                "/admin/rules",
+                data={"field": "make", "rule_type": "exact", "raw_value": "XYZ", "canonical_value": "NotARealMake"},
+            )
+    assert resp.status_code == 200
+
+
+def test_create_rule_htmx_rules_page_returns_tr():
+    """Post from rules page returns a <tr> fragment for table insertion."""
+    with patch("admin_api.rules.create_rule", return_value=_make_rule_row()):
+        with _patched_client() as client:
+            resp = client.post(
+                "/admin/rules",
+                data={"field": "make", "rule_type": "exact", "raw_value": "DODGE", "canonical_value": "Dodge"},
+                headers={"HX-Request": "true", "HX-Target": "rules-tbody"},
+            )
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/html")
+    assert b"<tr" in resp.content
+
+
+def test_get_rule_returns_row_html():
+    with patch("admin_api.rules.get_rule_by_id", return_value=_make_rule_row()):
+        with _patched_client() as client:
+            resp = client.get("/admin/rules/1")
+    assert resp.status_code == 200
+    assert b"CHEV" in resp.content
+    assert b"<tr" in resp.content
+
+
+def test_get_rule_not_found_returns_404():
+    with patch("admin_api.rules.get_rule_by_id", return_value=None):
+        with _patched_client() as client:
+            resp = client.get("/admin/rules/999")
+    assert resp.status_code == 404
+
+
+def test_get_rule_edit_returns_edit_form():
+    with patch("admin_api.rules.get_rule_by_id", return_value=_make_rule_row()):
+        with _patched_client() as client:
+            resp = client.get("/admin/rules/1/edit")
+    assert resp.status_code == 200
+    assert b'hx-patch="/admin/rules/1"' in resp.content
+    assert b"CHEV" in resp.content
+
+
+def test_get_rule_edit_not_found_returns_404():
+    with patch("admin_api.rules.get_rule_by_id", return_value=None):
+        with _patched_client() as client:
+            resp = client.get("/admin/rules/999/edit")
+    assert resp.status_code == 404
+
+
+def test_patch_rule_returns_json_without_htmx():
+    updated = _make_rule_row(raw_value="CHEVROLET")
+    with patch("admin_api.rules.update_rule", return_value=updated) as mock_update:
+        with _patched_client() as client:
+            resp = client.patch("/admin/rules/1", data={
+                "field": "make",
+                "rule_type": "exact",
+                "raw_value": "CHEVROLET",
+                "canonical_value": "Chevrolet",
+            })
+    assert resp.status_code == 200
+    assert resp.json()["raw_value"] == "CHEVROLET"
+    mock_update.assert_called_once()
+
+
+def test_patch_rule_htmx_returns_row_html():
+    updated = _make_rule_row(raw_value="CHEVROLET")
+    with patch("admin_api.rules.update_rule", return_value=updated):
+        with _patched_client() as client:
+            resp = client.patch(
+                "/admin/rules/1",
+                data={"field": "make", "rule_type": "exact", "raw_value": "CHEVROLET", "canonical_value": "Chevrolet"},
+                headers={"HX-Request": "true"},
+            )
+    assert resp.status_code == 200
+    assert b"<tr" in resp.content
+    assert b"CHEVROLET" in resp.content
+
+
+def test_patch_rule_invalid_field_returns_422():
+    with _patched_client() as client:
+        resp = client.patch("/admin/rules/1", data={
+            "field": "engine",
+            "rule_type": "exact",
+            "raw_value": "V8",
+            "canonical_value": "V8",
+        })
+    assert resp.status_code == 422
+
+
+def test_patch_rule_rejects_unknown_make():
+    with patch.object(_admin_main, "_pi_engine", MagicMock()), \
+         patch("admin_api.rules.get_pi_makes", return_value=["Chevrolet", "Ford"]), \
+         patch("admin_api.rules.update_rule") as mock_update:
+        with _patched_client() as client:
+            resp = client.patch("/admin/rules/1", data={
+                "field": "make",
+                "rule_type": "exact",
+                "raw_value": "CHEV",
+                "canonical_value": "Chevy",
+            })
+    assert resp.status_code == 422
+    mock_update.assert_not_called()
+
+
+def test_reprocess_returns_triggered():
+    with patch("pipeline.reprocess_job.run_reprocess"):
+        with _patched_client() as client:
+            resp = client.post("/admin/reprocess")
+    assert resp.status_code == 200
+    assert resp.json()["triggered"] is True
+
+
+def test_reprocess_htmx_returns_html_message():
+    with patch("pipeline.reprocess_job.run_reprocess"):
+        with _patched_client() as client:
+            resp = client.post(
+                "/admin/reprocess",
+                headers={"HX-Request": "true"},
+            )
+    assert resp.status_code == 200
+    assert b"Reprocessing" in resp.content

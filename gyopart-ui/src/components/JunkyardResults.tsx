@@ -15,7 +15,7 @@ export function JunkyardResults() {
 
   return (
     <div className="flex flex-col h-full">
-      <ZipInput key={state.activePart.id} partId={state.activePart.id} />
+      <ZipInput partId={state.activePart.id} />
       <div className="flex-1 overflow-y-auto p-4">
         {state.searching && (
           <p className="text-slate-400 text-sm">Searching...</p>

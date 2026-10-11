@@ -28,6 +28,8 @@ export interface VehicleResult {
   trim: string | null
   row: string | null
   car_id: number | null
+  color: string | null
+  mileage: number | null
 }
 export interface YardResult {
   location_id: number
@@ -38,6 +40,8 @@ export interface YardResult {
   zip_code: string | null
   phone: string | null
   distance_miles: number
+  lat: number | null
+  lng: number | null
   matching_vehicles: VehicleResult[]
 }
 export interface SearchResponse { results: YardResult[] }
@@ -45,4 +49,16 @@ export interface SearchResponse { results: YardResult[] }
 export interface SelectedVehicle {
   car: Car
   yearName: string; makeName: string; modelName: string; trimName: string; engineName: string
+}
+
+export interface Category { id: number; name: string }
+export interface Diagram { id: number; category_id: number; sub_category_id: number; image_id: number; sub_category_name: string | null }
+export interface DiagramPart extends Part { part_index: string }
+export interface DiagramDetail {
+  id: number
+  category_id: number
+  sub_category_id: number
+  image_url: string
+  image_alt: string
+  parts: DiagramPart[]
 }

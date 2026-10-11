@@ -30,3 +30,8 @@ llmSuggester:
   enabled: false
   schedule: "0 2 * * *"
   anthropicSecret: anthropic-credentials
+
+# Scraper fleet run by scrape-job-manager (templates/scrapers.yaml). Off in prod until the bulk
+# data load is done; see values-dev.yaml for the shape.
+scraping:
+  enabled: false

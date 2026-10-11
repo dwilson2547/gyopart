@@ -1,7 +1,8 @@
 """
 Orchestrates the vehicle-to-car mapping pipeline.
 
-Pipeline per vehicle (in order):
+Pipeline steps (in order):
+  0. Geocode any Location rows missing lat/lng (using uszipcode)
   1. VIN decode via NHTSA (cached)
   2. Apply MappingRules to transform make/model/trim
   3. Fuzzy YMMT match against parts_interchange (threshold 0.85)
@@ -13,6 +14,7 @@ CLI:
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 from datetime import datetime, timezone
 
@@ -20,10 +22,35 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from junkyard_common.db import get_engine, get_session
-from junkyard_common.models import MappingDiscrepancy, MappingRule, Vehicle
+from junkyard_common.models import Location, MappingDiscrepancy, MappingRule, Vehicle
 from pipeline.rule_engine import apply_rules
 from pipeline.vin_decoder import decode_vin, resolve_vin_to_car_id, warm_vin_cache_bulk
 from pipeline.ymmt_matcher import YmmtMatch, match_car
+
+logger = logging.getLogger(__name__)
+
+
+def geocode_locations(engine, dry_run: bool = False) -> None:
+    from uszipcode import SearchEngine
+    sz = SearchEngine()
+    with Session(engine) as session:
+        locations = session.execute(
+            select(Location).where(Location.lat == None, Location.zip_code != None)  # noqa: E711
+        ).scalars().all()
+        if not locations:
+            return
+        updated = 0
+        for loc in locations:
+            result = sz.by_zipcode(loc.zip_code)
+            if result and result.lat and result.lng:
+                loc.lat = result.lat
+                loc.lng = result.lng
+                updated += 1
+            else:
+                logger.warning("No geocode result for %s zip=%s", loc.name, loc.zip_code)
+        if not dry_run:
+            session.commit()
+        logger.info("Geocoded %d/%d locations", updated, len(locations))
 
 
 def resolve_vehicle(
@@ -102,6 +129,8 @@ def run_pipeline(
 ) -> None:
     ji_engine = get_engine()
     pi_engine = create_engine(os.environ["PARTS_DATABASE_URL"])
+
+    geocode_locations(ji_engine, dry_run=dry_run)
 
     with get_session(ji_engine) as session:
         q = (
