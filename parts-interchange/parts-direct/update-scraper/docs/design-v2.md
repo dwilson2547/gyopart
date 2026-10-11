@@ -208,10 +208,14 @@ one replica — every concurrent job shares one exit IP).
   `HTTP_PROXY`/`HTTPS_PROXY` env.
 - **In-cluster services must bypass it:** webcache, imgcache and request-auth (gRPC honours
   `http_proxy` too) via `NO_PROXY=.svc,.svc.cluster.local,.cluster.local,localhost,127.0.0.1`.
-- **Fail closed:** ⚠ unverified whether the proxy refuses traffic when the tunnel drops — its liveness
-  probe (NordVPN `vpn/check/full` → `Protected`) is commented out in the deployment. So each run
-  starts by fetching NordVPN's check endpoint through the proxy and exits 75 unless it reports
-  `Protected`; the probe repeats every N vehicles (⬜ 50) and stops the run if it fails.
+- **Fail closed:** ✅ observed 2026-10-11 with the tunnel down — the proxy returns 500 for everything
+  (its DNS servers are NordVPN's, reachable only through the tunnel). That is one failure mode, so each
+  run also checks positively: the exit IP through the proxy must be a real IP and differ from the
+  direct (home) IP; repeated every 50 vehicles, and the run exits 75 if it fails. (NordVPN's
+  `vpn/check/full` endpoint now only answers `{"status": "deprecated"}`, ✅ 2026-10-11.)
+- **Stuck tunnel:** ✅ 2026-10-11 the proxy sat on a dead server for an unknown time: OpenVPN soft-restarts
+  against the same server forever, and the load-check cron ignores a server whose stats are empty.
+  Deleting the pod picks a fresh recommended server. Durable fix tracked separately.
 
 ### 3.9 Migrating the schema
 
