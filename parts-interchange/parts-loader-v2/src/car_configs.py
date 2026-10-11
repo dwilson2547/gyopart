@@ -31,4 +31,8 @@ class CarConfigs:
         'kia':        {'base_url': 'https://www.kiapartsonline.com',             'data_dir': f'{ROOT_PATH}/kia'},
         'suzuki':     {'base_url': 'https://www.suzukicarparts.com',             'data_dir': f'{ROOT_PATH}/suzuki',     'skip': True},
         'volvo':      {'base_url': 'https://www.volvocarsoempartsdirect.com',    'data_dir': f'{ROOT_PATH}/volvo',      'skip': True},
+        # The full Mopar catalogue (Chrysler, Dodge, Jeep, Ram, Fiat; 1984-2024), not just Fiat. Named
+        # 'fiat' to match the scraper's config name, which is also the image bucket prefix
+        # (fiat/images/...). Separate from 'mopar' above, a different site with no scraped data.
+        'fiat':       {'base_url': 'https://www.moparpartsproonline.com',        'data_dir': f'{ROOT_PATH}/fiat',       'skip': True},
     }
