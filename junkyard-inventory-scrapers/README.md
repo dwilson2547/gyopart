@@ -12,7 +12,9 @@ the fleet in three steps:
    re-raise instead of `sys.exit(1)`.
 2. **Image** — `<scraper>/Dockerfile` built from this directory (so it can copy
    `scrape_contract.py`), plus a `scraper-<name>` service in the repo-root `docker-compose.yml`:
-   `docker compose build scraper-<name> && docker compose push scraper-<name>`.
+   `docker compose build scraper-<name> && docker compose push scraper-<name>`, then
+   `scripts/pin-scraper-images.sh` to pin the new digest in `helm/gyopart/values-dev.yaml`
+   (a changed digest is how the operator knows to retest a suspended job).
    Pin `sqlalchemy>=2.0,<2.1`: 2.1 switches `postgresql://` to psycopg 3, and junkyard-common ships
    psycopg2.
 3. **Schedule** — add it under `scraping.scrapers` in `helm/gyopart/values-dev.yaml` (one Scraper

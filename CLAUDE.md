@@ -30,6 +30,10 @@ Four images on Docker Hub:
 - `dwilson2547/inventory-api:latest`
 - `dwilson2547/admin-api:latest`
 
+**Scraper images** (`scraper-*` services) are the exception to "restart after push": they are pinned
+by digest in `helm/gyopart/values-dev.yaml`. After pushing, run `scripts/pin-scraper-images.sh`
+and commit the values file; scrape-job-manager picks up the new digest on its next run.
+
 After pushing, restart the deployment to pull the new image:
 ```bash
 kubectl rollout restart deployment/<name> -n gyopart-dev
