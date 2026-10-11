@@ -119,8 +119,17 @@ One run = one browser session working the queue until a time budget is spent:
    webcache/imgcache), collecting everything in memory.
 5. **Write it in one transaction** (§3.5), then mark the target. Wait `spacing + jitter` (⬜ 20–60 s)
    before the next vehicle.
-6. Stop when the budget is spent, the queue is empty, or a stop condition fires (§3.4). Write a
+6. Stop when `SCRAPE_DEADLINE` is near, the queue is empty, or a stop condition fires (§3.4). Write a
    `scrape_run` row and the scrape-job-manager result payload.
+
+**Stopping on time.** The operator only gates when runs *start*; a running pod is killed only at the
+Scraper's `timeout` (the Job's `activeDeadlineSeconds`), and a kill counts as a failed run (Timeout →
+one retry → toward suspension). So the updater stops itself: before claiming each vehicle it checks
+`SCRAPE_DEADLINE` (⬜ injected by scrape-job-manager — the earlier of start + timeout − margin and the end
+of the pool's current active-hours window) against a running estimate of time per vehicle, and if the
+next vehicle wouldn't fit it commits, writes its result and exits 0. The `timeout` is then only a
+backstop for a hung browser. A kill mid-vehicle loses that vehicle's work but nothing else (its
+transaction rolls back).
 
 ### 3.4 Page validation and failure classes
 
@@ -134,7 +143,7 @@ written to webcache, and a webcache hit that fails validation is deleted (alread
 | 403 / 429 | stop the run | 65 (blocked: no quick retry; counts toward suspension) |
 | one vehicle's page fails to parse | target `failed` + `last_error`; continue | — |
 | 5 consecutive vehicle failures | stop the run | 65 |
-| budget spent / queue empty | normal stop | 0 |
+| `SCRAPE_DEADLINE` reached / queue empty | normal stop | 0 |
 
 This is the rule the 2024 scrape lacked: an outage page cost seconds and a real vehicle hours, so the
 scraper "finished" 3,277 vehicles in under five hours during one maintenance window.
@@ -169,7 +178,10 @@ handled when it happens.
 
 - One shared manufacturer image (✅ user: one image for all manufacturer sites), built with the repo's
   docker compose (`scraper-parts-direct` ⬜), pinned by digest like the junkyard scrapers.
-- One `ScrapeJob` per manufacturer, `params: {config: <name>}`; `SCRAPE_*` env per the operator's
+- One `ScrapeJob` per **manufacturer** (~22), never per vehicle: vehicles live in `scrape_target`, and a
+  run works through as many as fit before its deadline; the next run resumes from the queue. A
+  caught-up manufacturer finds nothing older than 180 days and exits in seconds with zero items.
+  `params: {config: <name>}`; `SCRAPE_*` env per the operator's
   contract; result payload `{"items": vehicles_scraped, "new": …, "updated": …}`.
 - **Several manufacturers at once** (✅ user ran 3–5 parts-direct scrapers concurrently in the past,
   each slow): every manufacturer is its own site, so the parts-direct `Scraper` gets
@@ -238,7 +250,7 @@ then tuned through request-auth's permit rate for that domain rather than by add
    version; apply to dev; seed the queue.
 2. **Updater v2 core:** session reuse, page validation, queue claiming, transactional writer; run
    against dev for a handful of Mopar vehicles and compare with what the site shows.
-3. **Under the operator:** image, `scraper-parts-direct` compose service, `parts-direct` pool and a
+3. **Under the operator:** `SCRAPE_DEADLINE` injection in scrape-job-manager; image, `scraper-parts-direct` compose service, `parts-direct` pool and a
    gyopart-dev ScrapeJob for Mopar; watch a week.
 4. **Prod:** migrate prod, ScrapeJobs per manufacturer.
 
