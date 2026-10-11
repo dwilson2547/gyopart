@@ -44,6 +44,12 @@ def _parse_dt(value: str | None) -> datetime | None:
         return None
 
 
+def _clean_vin(raw: str | None) -> str | None:
+    """Real VINs are 17 chars. The API fills VIN-less cars with 25-char 'RND…' placeholders."""
+    vin = (raw or "").strip()
+    return vin if len(vin) == 17 else None
+
+
 def _get_json(
     http: requests.Session,
     web_cache: WebCacheClient,
@@ -167,7 +173,7 @@ def _sync_location_inventory(http, web_cache, request_auth, db, api_loc, now):
                 year=v.get("year"),
                 make=v.get("make"),
                 model=v.get("model"),
-                vin=v.get("vin") or None,
+                vin=_clean_vin(v.get("vin")),
                 row=v.get("row"),
                 arrival_date=arrival_date,
                 color=v.get("color") or None,
@@ -245,6 +251,8 @@ def main() -> dict:
 
         except Exception as exc:
             logger.exception("Scrape failed: %s", exc)
+            db.rollback()  # a failed flush leaves the session unusable; without this the
+            # commit below raises PendingRollbackError and masks the real error
             run.completed_at = _utcnow()
             run.error_message = str(exc)[:1000]
             run.success = False

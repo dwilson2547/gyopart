@@ -53,7 +53,23 @@ def _http_status(exc: BaseException) -> int | None:
 
 
 def classify(exc: BaseException) -> int:
-    """Map an exception to the exit code the operator acts on."""
+    """Map an exception to the exit code the operator acts on.
+
+    Unrecognised exceptions defer to the one they were raised while handling, so an error inside
+    an except-block (e.g. SQLAlchemy's PendingRollbackError) cannot mask the real cause.
+    """
+    code = _classify_one(exc)
+    seen = {id(exc)}
+    while code == EXIT_UNKNOWN:
+        exc = exc.__cause__ or exc.__context__
+        if exc is None or id(exc) in seen:
+            break
+        seen.add(id(exc))
+        code = _classify_one(exc)
+    return code
+
+
+def _classify_one(exc: BaseException) -> int:
     if isinstance(exc, Broken):
         return EXIT_DATAERR
     if isinstance(exc, Transient):
