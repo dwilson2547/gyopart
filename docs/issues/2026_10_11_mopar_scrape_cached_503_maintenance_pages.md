@@ -1,6 +1,6 @@
 # Mopar scrape cached 503 maintenance pages and marked 3,492 vehicles done
 
-**Date:** 2026-10-11 · **Status:** open — affected vehicles need re-scraping
+**Date:** 2026-10-11 · **Status:** partially resolved — 739 vehicles loaded; 3,492 await the update scraper
 
 ## Symptom
 
@@ -26,11 +26,15 @@ Cached landing pages of the 5,789 vehicles with no parts (measured 2026-10-11):
 The webcache cannot fill the gap: for the 503 vehicles only the landing page was ever fetched, so
 re-parsing the cache recovers nothing.
 
-## Impact
+## Impact and what was loaded (2026-10-11)
 
-- gyopart-dev holds the Mopar load as generated (manufacturer id 22, makes 34–38, cars from id
-  43040, parts from 2664754, images from 5909731, diagrams from 8522737); prod does not.
-- Modern Chrysler/Dodge/Jeep/Ram/Fiat appear in the picker with no parts.
+- Prod and dev both hold the Mopar catalogue for the **739 vehicles that have parts** (manufacturer
+  id 22 `Fiat`, makes 34–38, parts from id 2664754, images from 5909731, diagrams from 8522737). The
+  5,789 vehicles with no parts were left out of prod and deleted from dev, so the picker never offers
+  a vehicle with nothing behind it; dev and prod row counts match on all 19 tables.
+- Their make/model/trim/engine rows were kept, for the update scraper to reuse.
+- Plan (user, 2026-10-11): the update scraper fills in the 3,492 maintenance-page vehicles by creating
+  DB records as it scrapes — the move away from bulk loads.
 
 ## Fix needed
 
