@@ -259,10 +259,15 @@ class UpdaterV2:
                 part_urls.setdefault(pn, canonical_part_url(url))
 
         known = self._known_parts(t.manufacturer_id, list(part_urls))
+        todo = [pn for pn, url in part_urls.items() if known.get(pn) != url]
+        print(f"  {len(part_urls)} parts: {len(part_urls) - len(todo)} already stored, {len(todo)} pages to fetch", flush=True)
         parts: dict[str, dict] = {}
-        for pn, url in part_urls.items():
-            if known.get(pn) == url:
-                continue  # already stored with this URL; keep the row as is
+        t_parts = time.monotonic()
+        for i, pn in enumerate(todo, 1):
+            url = part_urls[pn]
+            if i % 25 == 0:
+                rate = (time.monotonic() - t_parts) / i
+                print(f"  part pages {i}/{len(todo)} ({rate:.1f}s each, ~{rate * (len(todo) - i) / 60:.0f} min left)", flush=True)
             try:
                 data = self.parser.parse_cached_page(self.get_page(url), PageType.PART)
             except PageRetrievalError:
