@@ -12,4 +12,5 @@ COPY update-scraper/*.py ./update-scraper/
 
 WORKDIR /app/update-scraper
 USER 10001
-CMD ["python", "run_v2.py"]
+# ENTRYPOINT, not CMD: scrape-job-manager passes ScrapeJob params as args (--config=fiat).
+ENTRYPOINT ["python", "run_v2.py"]
