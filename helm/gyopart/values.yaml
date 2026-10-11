@@ -82,22 +82,22 @@ scraping:
         limits: {memory: 1Gi}
       jobs:
         # Mopar (the full catalogue lives on the 'fiat' site): backlog of never-filled vehicles, refresh on.
-        parts-direct-mopar: {pool: parts-direct, params: {config: fiat, discovery_interval_days: 30}}
+        parts-direct-mopar: {pool: parts-direct, params: {config: fiat, discovery_interval_days: 30}, suspend: true}
         # Every other site changes rarely (user, 2026-10-11): new vehicles only, looked for monthly.
         # Not yet: audi, acura, porsche (moved to oempartsonline.com; picker 403), vw (redirects to a
         # dealer site), mazda (Cloudflare never clears from the VPN), suzuki (expired certificate).
-        parts-direct-bmw: {pool: parts-direct, params: {config: bmw, refresh: false, discovery_interval_days: 30}}
-        parts-direct-ford: {pool: parts-direct, params: {config: ford, refresh: false, discovery_interval_days: 30}}
-        parts-direct-gm: {pool: parts-direct, params: {config: gm, refresh: false, discovery_interval_days: 30}}
-        parts-direct-honda: {pool: parts-direct, params: {config: honda, refresh: false, discovery_interval_days: 30}}
-        parts-direct-hyundai: {pool: parts-direct, params: {config: hyundai, refresh: false, discovery_interval_days: 30}}
-        parts-direct-infiniti: {pool: parts-direct, params: {config: infiniti, refresh: false, discovery_interval_days: 30}}
-        parts-direct-jaguar: {pool: parts-direct, params: {config: jaguar, refresh: false, discovery_interval_days: 30}}
-        parts-direct-kia: {pool: parts-direct, params: {config: kia, refresh: false, discovery_interval_days: 30}}
-        parts-direct-mercedes: {pool: parts-direct, params: {config: mercedes, refresh: false, discovery_interval_days: 30}}
-        parts-direct-mini: {pool: parts-direct, params: {config: mini, refresh: false, discovery_interval_days: 30}}
-        parts-direct-mitsubishi: {pool: parts-direct, params: {config: mitsubishi, refresh: false, discovery_interval_days: 30}}
-        parts-direct-nissan: {pool: parts-direct, params: {config: nissan, refresh: false, discovery_interval_days: 30}}
-        parts-direct-subaru: {pool: parts-direct, params: {config: subaru, refresh: false, discovery_interval_days: 30}}
-        parts-direct-toyota: {pool: parts-direct, params: {config: toyota, refresh: false, discovery_interval_days: 30}}
-        parts-direct-volvo: {pool: parts-direct, params: {config: volvo, refresh: false, discovery_interval_days: 30}}
+        parts-direct-bmw: {pool: parts-direct, params: {config: bmw, refresh: false, discovery_interval_days: 30}, suspend: true}
+        parts-direct-ford: {pool: parts-direct, params: {config: ford, refresh: false, discovery_interval_days: 30}, suspend: true}
+        parts-direct-gm: {pool: parts-direct, params: {config: gm, refresh: false, discovery_interval_days: 30}, suspend: true}
+        parts-direct-honda: {pool: parts-direct, params: {config: honda, refresh: false, discovery_interval_days: 30}, suspend: true}
+        parts-direct-hyundai: {pool: parts-direct, params: {config: hyundai, refresh: false, discovery_interval_days: 30}, suspend: true}
+        parts-direct-infiniti: {pool: parts-direct, params: {config: infiniti, refresh: false, discovery_interval_days: 30}, suspend: true}
+        parts-direct-jaguar: {pool: parts-direct, params: {config: jaguar, refresh: false, discovery_interval_days: 30}, suspend: true}
+        parts-direct-kia: {pool: parts-direct, params: {config: kia, refresh: false, discovery_interval_days: 30}, suspend: true}
+        parts-direct-mercedes: {pool: parts-direct, params: {config: mercedes, refresh: false, discovery_interval_days: 30}, suspend: true}
+        parts-direct-mini: {pool: parts-direct, params: {config: mini, refresh: false, discovery_interval_days: 30}, suspend: true}
+        parts-direct-mitsubishi: {pool: parts-direct, params: {config: mitsubishi, refresh: false, discovery_interval_days: 30}, suspend: true}
+        parts-direct-nissan: {pool: parts-direct, params: {config: nissan, refresh: false, discovery_interval_days: 30}, suspend: true}
+        parts-direct-subaru: {pool: parts-direct, params: {config: subaru, refresh: false, discovery_interval_days: 30}, suspend: true}
+        parts-direct-toyota: {pool: parts-direct, params: {config: toyota, refresh: false, discovery_interval_days: 30}, suspend: true}
+        parts-direct-volvo: {pool: parts-direct, params: {config: volvo, refresh: false, discovery_interval_days: 30}, suspend: true}
