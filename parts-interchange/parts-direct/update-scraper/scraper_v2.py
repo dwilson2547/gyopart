@@ -152,11 +152,20 @@ class UpdaterV2:
     def get_page(self, url: str) -> str:
         """Rendered HTML for url, from webcache when fresh and valid; maintenance/challenge pages raise
         SiteUnavailableError and are never cached."""
-        cached = self.web_cache.get(url, max_age=self.max_cache_age_s)
+        # The cache is an optimisation: a webcache error is a miss / a skipped store, never a failed
+        # vehicle (a dropped connection lost a 100-category crawl in the first live run, 2026-10-11).
+        try:
+            cached = self.web_cache.get(url, max_age=self.max_cache_age_s)
+        except Exception as ex:  # noqa: BLE001
+            print(f"webcache get failed ({type(ex).__name__}), fetching live: {url}")
+            cached = None
         if cached:
             if self.parser.check_cached_page(cached["content"]):
                 return cached["content"]
-            self.web_cache.delete(cached["content_hash"])
+            try:
+                self.web_cache.delete(cached["content_hash"])
+            except Exception as ex:  # noqa: BLE001
+                print(f"webcache delete failed ({type(ex).__name__})")
 
         for attempt in (1, 2):
             resp = self._navigate(url)
@@ -173,7 +182,10 @@ class UpdaterV2:
                 self._open_session()
         if not ok:
             raise PageRetrievalError(f"page not found: {url}")
-        self.web_cache.store(url, content, client_name=f"parts-direct-{self.config_name}")
+        try:
+            self.web_cache.store(url, content, client_name=f"parts-direct-{self.config_name}")
+        except Exception as ex:  # noqa: BLE001
+            print(f"webcache store failed ({type(ex).__name__}), continuing: {url}")
         return content
 
     def save_image(self, url: str, name: str) -> bool:
