@@ -206,9 +206,15 @@ class UpdaterV2:
             proxies = {"http": proxy, "https": proxy} if proxy else None
             # Privoxy intermittently answers CONNECT with "500 Internal Privoxy Error" (seen 2026-10-11,
             # a few in hundreds); a short retry clears nearly all of them.
+            domain = urlparse(url).netloc
             for attempt in range(3):
                 try:
-                    resp = requests.get(url, timeout=30, proxies=proxies)
+                    # Through request-auth like every page fetch, so image traffic is paced, backed off
+                    # and visible in its admin panel. The CDN domains get a larger pool there (see
+                    # docs/design-v2.md §3.8b); with the default pool of 1 this would serialise again.
+                    with self.request_auth.acquire(domain) as permit:
+                        resp = requests.get(url, timeout=30, proxies=proxies)
+                        permit.set_status(resp.status_code)
                     resp.raise_for_status()
                     break
                 except requests.exceptions.ProxyError:

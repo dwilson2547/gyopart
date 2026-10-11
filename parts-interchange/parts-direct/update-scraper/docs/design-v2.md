@@ -231,6 +231,17 @@ one replica — every concurrent job shares one exit IP).
 - A Cloudflare block page stops the run as blocked (65); a challenge that never settles as transient
   (75).
 
+### 3.8b Images
+
+- A part page lists up to 8 product images in 3 sizes (✅ a 2026 page). Downloaded inline and one at a time
+  they left the browser idle for minutes per part, so a vehicle's images are collected during the crawl
+  and fetched 8 at a time after its pages.
+- Image downloads take request-auth permits like page fetches, so they are paced, backed off and visible
+  in its panel. The image CDNs need a larger pool than the default 1, configured in request-auth
+  (✅ dev, 2026-10-11; ⬜ prod): `cdn-product-images.revolutionparts.io`,
+  `cdn-illustrations.revolutionparts.io`, `s3.amazonaws.com`, `dz310nzuyimx0.cloudfront.net` — pool 8,
+  base delay 200 ms.
+
 ### 3.9 Migrating the schema
 
 `parts_interchange` has no migration history; prod holds real data, so changes go through Alembic
