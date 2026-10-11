@@ -12,3 +12,5 @@ __pycache__
 
 dev.env
 deployments.tar.gz
+# Real site pages used as parser test fixtures (the *.html rule above would drop them).
+!update-scraper/tests/fixtures/*.html

@@ -211,6 +211,7 @@ def write_vehicle(conn, config_name: str, t: Target, v: ScrapedVehicle) -> Write
                         as_text(d.get("also_known_as")), strip_html(d.get("description")),
                         as_text(d.get("positions")), as_text(d.get("notes")), d.get("msrp"),
                         as_text(d.get("applications")), d.get("is_hazmat"),
+                        as_text(d.get("superseded_part_numbers")),
                     ))
                 else:
                     minimal.append(((d or {}).get("url"), pn, mfr))
@@ -219,12 +220,13 @@ def write_vehicle(conn, config_name: str, t: Target, v: ScrapedVehicle) -> Write
                     cur,
                     """
                     INSERT INTO part (url, part_number, manufacturer_id, title, other_names, description,
-                                      positions, notes, msrp, applications, hazmat) VALUES %s
+                                      positions, notes, msrp, applications, hazmat, replaces) VALUES %s
                     ON CONFLICT ON CONSTRAINT uq_part_manufacturer_number DO UPDATE SET
                       url = EXCLUDED.url, title = EXCLUDED.title, other_names = EXCLUDED.other_names,
                       description = EXCLUDED.description, positions = EXCLUDED.positions,
                       notes = EXCLUDED.notes, msrp = EXCLUDED.msrp,
-                      applications = EXCLUDED.applications, hazmat = EXCLUDED.hazmat
+                      applications = EXCLUDED.applications, hazmat = EXCLUDED.hazmat,
+                      replaces = COALESCE(EXCLUDED.replaces, part.replaces)
                     RETURNING part_number, id, (xmax = 0)
                     """,
                     full, fetch=True,

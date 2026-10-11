@@ -256,6 +256,8 @@ class PartPageParser(CachedPageParser):
 
         if product_data:
             parsed_data = json.loads(product_data.text)
+        elif soup.find('script', id=re.compile(r'^react-island-props-product_offer')):
+            parsed_data = self._parse_react_islands(soup)
         else:
             print('Part parsing failed, no script tag found with id product_data')
             return {
@@ -267,3 +269,50 @@ class PartPageParser(CachedPageParser):
                 }
         
         return parsed_data
+
+    @staticmethod
+    def _island(soup, prefix: str) -> dict:
+        tag = soup.find('script', id=re.compile(r'^react-island-props-' + prefix))
+        try:
+            return json.loads(tag.string or tag.text) if tag else {}
+        except ValueError:
+            return {}
+
+    def _parse_react_islands(self, soup) -> dict:
+        """The storefront re-platform (seen 2026-10-11, revolutionparts webstore v0.451) moved product
+        data from <script id="product_data"> into React island props. Map them onto the old
+        product_data keys so everything downstream (the loader's mapping, the updater's writer) is
+        unchanged. Adds superseded_part_numbers, which the old format didn't expose."""
+        offer = self._island(soup, 'product_offer')
+        overview = self._island(soup, 'product_overview')
+        media = self._island(soup, 'product_media')
+        identity = offer.get('identity') or {}
+        pricing = offer.get('pricing') or {}
+        spec = next((sec.get('payload') or {} for sec in overview.get('sections') or []
+                     if sec.get('id') == 'specifications'), {})
+
+        def blank(v):
+            return None if v in (None, '', 'None') else v
+
+        images = []
+        for img in media.get('productImages') or []:
+            entry = {k: ({'url': img[k]} if img.get(k) else None) for k in ('main', 'preview', 'thumb')}
+            entry.update(type=img.get('type'), image_id=img.get('id'), caption=blank(img.get('caption')))
+            images.append(entry)
+
+        hazmat = blank(spec.get('hazmat'))
+        return {
+            'title': identity.get('title') or (offer.get('product') or {}).get('title') or '',
+            'sku': (offer.get('product') or {}).get('sku') or blank(spec.get('sku')),
+            'msrp': blank(pricing.get('rawMsrp')),
+            'price': blank(pricing.get('rawPrice')),
+            'also_known_as': blank(spec.get('oemPartNumbers')),
+            'description': blank(identity.get('description')),
+            'positions': blank(spec.get('positions')),
+            'applications': blank(spec.get('applications')),
+            'notes': blank(spec.get('disclaimer')),
+            'is_hazmat': None if hazmat is None else str(hazmat).lower() in ('true', '1', 'yes'),
+            'superseded_part_numbers': blank(spec.get('supersededPartNumbers')),
+            'images': images,
+            'source_format': 'react_islands',
+        }

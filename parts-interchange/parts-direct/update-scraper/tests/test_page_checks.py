@@ -54,3 +54,14 @@ def test_cloudflare_block_page_is_blocked_not_transient():
     with pytest.raises(Browser403Error):
         p.check_page(html)
     assert p.check_cached_page(html) is False
+
+
+def test_2026_part_page_parses_from_react_islands():
+    d = CachedParser(BASE).parse_cached_page(page("part_page_2026.html"), PageType.PART)
+    assert not d.get("skipped")
+    assert d["title"] == "Vehicle Feature Controls Center Stack - Mopar (68608631AB)"
+    assert float(d["msrp"]) == 416.0 and d["also_known_as"] == "Center Stack"
+    assert d["superseded_part_numbers"] == "68608631AA"
+    assert d["images"] and d["images"][0]["main"]["url"].endswith(".webp")
+    from writer import clean_title
+    assert clean_title(d["title"], "68608631AB") == "Vehicle Feature Controls Center Stack"
