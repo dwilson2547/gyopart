@@ -43,3 +43,11 @@ services:
     build:
       context: ./junkyard-inventory-scrapers
       dockerfile: ryans_pic_a_part/Dockerfile
+
+  # Parts-direct update scraper v2 (parts-interchange/parts-direct/update-scraper/docs/design-v2.md):
+  # one shared image for every manufacturer site; run by scrape-job-manager, browser via browserless.
+  scraper-parts-direct:
+    image: dwilson2547/gyopart-scraper-parts-direct:latest
+    build:
+      context: ./parts-interchange/parts-direct
+      dockerfile: update-scraper/Dockerfile

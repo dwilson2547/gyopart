@@ -397,15 +397,27 @@ class UpdaterV2:
         stopped = False
         with sync_playwright() as p:
             proxy = vpn.proxy_url()
-            # Headed full Chromium: Cloudflare blocks headless (both the headless shell and new-headless)
-            # from the VPN, while a headed browser passes (2026-10-11). In the container this runs under
-            # Xvfb; BROWSER_HEADLESS=1 exists only for experiments.
-            self._browser = p.chromium.launch(
-                channel="chromium",
-                headless=os.environ.get("BROWSER_HEADLESS") == "1",
-                args=["--disable-blink-features=AutomationControlled", "--window-size=1400,1000"],
-                proxy={"server": proxy} if proxy else None,
-            )
+            # Headed Chromium: Cloudflare blocks headless (both the headless shell and new-headless)
+            # from the VPN, while a headed browser passes (2026-10-11). In the cluster that browser is
+            # scrape-stack's browserless (v1 runs headed sessions on its own display; verified through
+            # the VPN 2026-10-11), with the VPN proxy passed per session. Locally, a headed launch.
+            browserless = os.environ.get("BROWSERLESS_URL")
+            if browserless:
+                browser_proxy = os.environ.get("BROWSER_PROXY_URL") or proxy  # as the browserless pod sees it
+                flags = {"headless": "false", "--window-size": "1400,1000",
+                         "--disable-blink-features": "AutomationControlled"}
+                if browser_proxy:
+                    flags["--proxy-server"] = browser_proxy
+                from urllib.parse import urlencode
+                self._browser = p.chromium.connect_over_cdp(
+                    browserless + ("&" if "?" in browserless else "?") + urlencode(flags), timeout=60_000)
+            else:
+                self._browser = p.chromium.launch(
+                    channel="chromium",
+                    headless=os.environ.get("BROWSER_HEADLESS") == "1",
+                    args=["--disable-blink-features=AutomationControlled", "--window-size=1400,1000"],
+                    proxy={"server": proxy} if proxy else None,
+                )
             try:
                 try:
                     self._open_session()
