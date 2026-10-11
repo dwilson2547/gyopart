@@ -72,7 +72,7 @@ scraping:
     # DB queue, so items per run vary with what is due — no zero/drop checks. Browser is scrape-stack's
     # browserless (headed); all site traffic goes through the VPN proxy.
     parts-direct:
-      image: dwilson2547/gyopart-scraper-parts-direct@sha256:618c3193eee51564e335119da1d1ead401216afd9ad29ce474e8f7de7976880a
+      image: dwilson2547/gyopart-scraper-parts-direct@sha256:7a789dae7a83d0a2129122f2daf3f05aad53ff52c7e01466992a9f4ba6c9ba29
       database: parts-interchange
       timeout: 17h
       health: {minItems: 0, maxDropPct: 100}
@@ -87,5 +87,5 @@ scraping:
         requests: {cpu: 250m, memory: 512Mi}
         limits: {memory: 1Gi}
       jobs:
-        # Smoke-test each site on its own before adding its job (requested 2026-10-11).
-        parts-direct-mopar: {pool: parts-direct, params: {config: fiat}}
+        # Suspended: prod runs the updater now (dev was the pilot), and one site shouldn't be scraped twice.
+        parts-direct-mopar: {pool: parts-direct, params: {config: fiat}, suspend: true}

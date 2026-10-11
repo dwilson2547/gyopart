@@ -262,7 +262,7 @@ one replica — every concurrent job shares one exit IP).
   and fetched 8 at a time after its pages.
 - Image downloads take request-auth permits like page fetches, so they are paced, backed off and visible
   in its panel. The image CDNs need a larger pool than the default 1, configured in request-auth
-  (✅ dev, 2026-10-11; ⬜ prod): `cdn-product-images.revolutionparts.io`,
+  (✅ dev and prod, 2026-10-11): `cdn-product-images.revolutionparts.io`,
   `cdn-illustrations.revolutionparts.io`, `s3.amazonaws.com`, `dz310nzuyimx0.cloudfront.net` — pool 8,
   base delay 200 ms.
 
