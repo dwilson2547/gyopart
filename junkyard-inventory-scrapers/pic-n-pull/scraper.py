@@ -45,9 +45,15 @@ def _parse_dt(value: str | None) -> datetime | None:
 
 
 def _clean_vin(raw: str | None) -> str | None:
-    """Real VINs are 17 chars. The API fills VIN-less cars with 25-char 'RND…' placeholders."""
+    """Drop the API's placeholders for VIN-less cars (25-char 'RND…'); keep everything else.
+
+    Not a length-17 check: pre-1981 vehicles have legitimately shorter VINs (11–13 chars seen).
+    Anything over 17 can't be a VIN and wouldn't fit vehicles.vin either.
+    """
     vin = (raw or "").strip()
-    return vin if len(vin) == 17 else None
+    if not vin or vin.startswith("RND") or len(vin) > 17:
+        return None
+    return vin
 
 
 def _get_json(
@@ -187,6 +193,8 @@ def _sync_location_inventory(http, web_cache, request_auth, db, api_loc, now):
         else:
             existing.last_seen_at = now
             existing.is_active = True
+            if existing.vin is None and (vin := _clean_vin(v.get("vin"))):
+                existing.vin = vin
             if v.get("row"):
                 existing.row = v["row"]
             if image_url and existing.preview_image_url != image_url:
