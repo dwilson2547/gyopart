@@ -42,6 +42,7 @@ if TYPE_CHECKING:
     from playwright.sync_api import BrowserContext, Page
 
 MAX_CONSECUTIVE_FAILURES = 5
+MAX_RECONNECTS = 3  # browser losses per run before stopping (exit 75)
 IMAGE_WORKERS = 8  # background image downloads per run
 PROXY_ERRORS = ("ERR_PROXY_CONNECTION_FAILED", "ERR_TUNNEL_CONNECTION_FAILED", "ERR_PROXY_AUTH",
                 "ERR_NO_SUPPORTED_PROXIES", "ERR_MANDATORY_PROXY_CONFIGURATION_FAILED")
@@ -180,10 +181,70 @@ class UpdaterV2:
         self.parser = CachedParser(self.base_url)
         self._browser = None
         self._context: "BrowserContext | None" = None
+        self._reconnects = 0
         self._page: "Page | None" = None
         self._vehicle_seconds: list[float] = []
 
     # ── session ────────────────────────────────────────────────────────────────────────────────
+
+    def _connect_browser(self) -> None:
+        # Headed Chromium: Cloudflare blocks headless (both the headless shell and new-headless)
+        # from the VPN, while a headed browser passes (2026-10-11). In the cluster that browser is
+        # scrape-stack's browserless (v1 runs headed sessions on its own display; verified through
+        # the VPN 2026-10-11), with the VPN proxy passed per session. Locally, a headed launch.
+        proxy = vpn.proxy_url()
+        browserless = os.environ.get("BROWSERLESS_URL")
+        if browserless:
+            browser_proxy = os.environ.get("BROWSER_PROXY_URL") or proxy  # as the browserless pod sees it
+            # browserless closes a session after its CONNECTION_TIMEOUT (1h in scrape-stack); one session
+            # lasts the whole run here, so ask for one that outlives the deadline.
+            left = (self.deadline - datetime.now(timezone.utc).replace(tzinfo=None)).total_seconds() \
+                if self.deadline else 18 * 3600
+            flags = {"headless": "false", "--window-size": "1400,1000",
+                     "--disable-blink-features": "AutomationControlled",
+                     "timeout": int((max(left, 0) + 30 * 60) * 1000)}
+            if browser_proxy:
+                flags["--proxy-server"] = browser_proxy
+            from urllib.parse import urlencode
+            self._browser = self._pw.chromium.connect_over_cdp(
+                browserless + ("&" if "?" in browserless else "?") + urlencode(flags), timeout=60_000)
+        else:
+            self._browser = self._pw.chromium.launch(
+                channel="chromium",
+                headless=os.environ.get("BROWSER_HEADLESS") == "1",
+                args=["--disable-blink-features=AutomationControlled", "--window-size=1400,1000"],
+                proxy={"server": proxy} if proxy else None,
+            )
+        self._context = None
+
+    def _browser_gone(self, ex: Exception) -> bool:
+        return "has been closed" in str(ex) or not self._browser.is_connected()
+
+    def _reconnect(self) -> None:
+        """The browser went away mid-run (browserless restart or session timeout): start over with a new
+        one rather than failing every remaining vehicle against a dead page."""
+        self._reconnects += 1
+        if self._reconnects > MAX_RECONNECTS:
+            raise RunStopped(75, f"browser lost {self._reconnects} times this run")
+        try:
+            self._browser.close()
+        except Exception:  # noqa: BLE001 — already gone
+            pass
+        # A restarting browserless takes a while to come back: keep trying for ~2.5 minutes.
+        for attempt, wait in enumerate((5, 15, 30, 45, 60), 1):
+            time.sleep(wait)
+            try:
+                self._connect_browser()
+                self._open_session()
+                break
+            except RunStopped:
+                raise
+            except Exception as ex:  # noqa: BLE001
+                print(f"  reconnect attempt {attempt} failed: {type(ex).__name__}: {str(ex)[:120]}", flush=True)
+                last = ex
+        else:
+            raise RunStopped(75, f"could not reconnect the browser: {type(last).__name__}: {last}") from last
+        print(f"  browser reconnected ({self._reconnects}/{MAX_RECONNECTS})", flush=True)
 
     def _open_session(self) -> None:
         if self._context:
@@ -397,27 +458,8 @@ class UpdaterV2:
         stopped = False
         with sync_playwright() as p:
             proxy = vpn.proxy_url()
-            # Headed Chromium: Cloudflare blocks headless (both the headless shell and new-headless)
-            # from the VPN, while a headed browser passes (2026-10-11). In the cluster that browser is
-            # scrape-stack's browserless (v1 runs headed sessions on its own display; verified through
-            # the VPN 2026-10-11), with the VPN proxy passed per session. Locally, a headed launch.
-            browserless = os.environ.get("BROWSERLESS_URL")
-            if browserless:
-                browser_proxy = os.environ.get("BROWSER_PROXY_URL") or proxy  # as the browserless pod sees it
-                flags = {"headless": "false", "--window-size": "1400,1000",
-                         "--disable-blink-features": "AutomationControlled"}
-                if browser_proxy:
-                    flags["--proxy-server"] = browser_proxy
-                from urllib.parse import urlencode
-                self._browser = p.chromium.connect_over_cdp(
-                    browserless + ("&" if "?" in browserless else "?") + urlencode(flags), timeout=60_000)
-            else:
-                self._browser = p.chromium.launch(
-                    channel="chromium",
-                    headless=os.environ.get("BROWSER_HEADLESS") == "1",
-                    args=["--disable-blink-features=AutomationControlled", "--window-size=1400,1000"],
-                    proxy={"server": proxy} if proxy else None,
-                )
+            self._pw = p
+            self._connect_browser()
             try:
                 try:
                     self._open_session()
@@ -476,6 +518,14 @@ class UpdaterV2:
                         conn.commit()
                         raise RunStopped(65, f"blocked: {type(ex).__name__}") from ex
                     except Exception as ex:  # noqa: BLE001 — one vehicle's failure is recorded, run goes on
+                        if self._browser_gone(ex):
+                            conn.rollback()
+                            with conn.cursor() as cur:
+                                q.release(cur, t.id)  # not the vehicle's fault: it goes again
+                            conn.commit()
+                            print(f"  browser lost: {type(ex).__name__}", flush=True)
+                            self._reconnect()
+                            continue
                         conn.rollback()
                         with conn.cursor() as cur:
                             q.mark_failed(cur, t.id, f"{type(ex).__name__}: {ex}")
@@ -508,9 +558,12 @@ class UpdaterV2:
                 try:
                     self._record_run(conn)
                 finally:
-                    if self._context:
-                        self._context.close()
-                    self._browser.close()
+                    try:  # the browser may already be gone; that must not skip closing the rest
+                        if self._context:
+                            self._context.close()
+                        self._browser.close()
+                    except Exception:  # noqa: BLE001
+                        pass
                     conn.close()
                     self.request_auth.close()
         return self.stats
