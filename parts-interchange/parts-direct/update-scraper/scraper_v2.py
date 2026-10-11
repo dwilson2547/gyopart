@@ -42,6 +42,7 @@ if TYPE_CHECKING:
     from playwright.sync_api import BrowserContext, Page
 
 MAX_CONSECUTIVE_FAILURES = 5
+CHALLENGE_WAIT_S = 45
 MAX_RECONNECTS = 3  # browser losses per run before stopping (exit 75)
 IMAGE_WORKERS = 8  # background image downloads per run
 PROXY_ERRORS = ("ERR_PROXY_CONNECTION_FAILED", "ERR_TUNNEL_CONNECTION_FAILED", "ERR_PROXY_AUTH",
@@ -119,11 +120,24 @@ class ImageQueue:
                     self.failed += 1
 
 
+def _path(url: str) -> str:
+    return urlparse(url or "").path.rstrip("/")
+
+
 class RunStopped(Exception):
     def __init__(self, exit_code: int, reason: str):
         super().__init__(reason)
         self.exit_code = exit_code
         self.reason = reason
+
+
+class SiteMoved(Exception):
+    """The site redirects to another domain (Audi → audi.oempartsonline.com, found 2026-10-11): its
+    config and targets need updating, so the run stops as broken (65) instead of misreading pages."""
+
+
+class VehicleMoved(Exception):
+    """The vehicle's URL redirects elsewhere on the site (slugs changed): fail it, never 'no catalogue'."""
 
 
 class NoCatalog(Exception):
@@ -186,6 +200,7 @@ class UpdaterV2:
         self._browser = None
         self._context: "BrowserContext | None" = None
         self._reconnects = 0
+        self.last_final_url = ""
         self._page: "Page | None" = None
         self._vehicle_seconds: list[float] = []
 
@@ -271,6 +286,13 @@ class UpdaterV2:
                 # quiet, so networkidle waits out the timeout on perfectly good pages.
                 resp = self._page.goto(url, wait_until="load", timeout=60_000)
                 self._page.wait_for_timeout(1500)
+                # Cloudflare's interstitial can take 15-20 s to clear from the VPN (Ford, 2026-10-11);
+                # give it up to CHALLENGE_WAIT_S before check_page calls it unavailable.
+                waited = 0
+                while waited < CHALLENGE_WAIT_S and self._page.title().startswith("Just a moment"):
+                    self._page.wait_for_timeout(3000)
+                    waited += 3
+                    resp = None  # the response we hold is the challenge's; the page has moved on
             except PlaywrightTimeout as ex:
                 # A challenge that never settles looks like this; so does a slow tunnel. Transient.
                 permit.set_status(0)
@@ -281,7 +303,10 @@ class UpdaterV2:
                     # The proxy itself is unreachable: stop the run, don't fail vehicle after vehicle.
                     raise vpn.VpnUnavailable(f"browser can't reach the VPN proxy: {str(ex)[:120]}") from ex
                 raise
-            permit.set_status(resp.status if resp else 0)
+            permit.set_status(resp.status if resp else 200)
+        final = urlparse(self._page.url).netloc
+        if final and final != domain:
+            raise SiteMoved(f"{domain} redirects to {final}")
         if resp is not None and resp.status >= 500:
             raise SiteUnavailableError(f"HTTP {resp.status} for {url}")
         return resp
@@ -300,6 +325,7 @@ class UpdaterV2:
             cached = None
         if cached:
             if self.parser.check_cached_page(cached["content"]):
+                self.last_final_url = url
                 return cached["content"]
             try:
                 self.web_cache.delete(cached["content_hash"])
@@ -308,6 +334,7 @@ class UpdaterV2:
 
         for attempt in (1, 2):
             resp = self._navigate(url)
+            self.last_final_url = self._page.url
             if resp is not None and resp.status == 404:
                 raise PageRetrievalError(f"404: {url}")
             content = self._page.content()
@@ -390,7 +417,10 @@ class UpdaterV2:
                 images[name] = {"url": full, "alt": alt, "saved": False}
                 self.images.submit(name, full)  # downloads in the background while the crawl goes on
 
-        categories = self.parser.parse_cached_page(self.get_page(t.page_url), PageType.CATEGORIES)
+        page = self.get_page(t.page_url)
+        if _path(self.last_final_url) != _path(t.page_url):
+            raise VehicleMoved(f"redirected to {self.last_final_url}")
+        categories = self.parser.parse_cached_page(page, PageType.CATEGORIES)
         if not categories:
             raise NoCatalog()
 
@@ -515,6 +545,8 @@ class UpdaterV2:
                     raise RunStopped(75, f"site unavailable at session start: {ex}") from ex
                 except (Browser403Error, Browser429Error) as ex:
                     raise RunStopped(65, f"blocked at session start: {ex}") from ex
+                except SiteMoved as ex:
+                    raise RunStopped(65, f"site moved: {ex}") from ex
                 self._discover(conn, mfr_id)
                 while self._time_left_for_another():
                     if (self.stats.vehicles_done + self.stats.no_catalog) % vpn.CHECK_EVERY == 0 and self.stats.vehicles_done:
@@ -565,6 +597,12 @@ class UpdaterV2:
                             q.release(cur, t.id)
                         conn.commit()
                         raise RunStopped(65, f"blocked: {type(ex).__name__}") from ex
+                    except SiteMoved as ex:
+                        conn.rollback()
+                        with conn.cursor() as cur:
+                            q.release(cur, t.id)
+                        conn.commit()
+                        raise RunStopped(65, f"site moved: {ex}") from ex
                     except Exception as ex:  # noqa: BLE001 — one vehicle's failure is recorded, run goes on
                         if self._browser_gone(ex):
                             conn.rollback()

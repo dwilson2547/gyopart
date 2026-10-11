@@ -35,6 +35,7 @@ def main():
         if not f:
             raise PageRetrievalError(f"not in local cache: {url}")
         served["n"] += 1
+        up.last_final_url = url  # what the live get_page records; cached pages never redirect
         return bz2.decompress(open(os.path.join(a.data_dir, "webcache", f), "rb").read()).decode("utf-8", "ignore")
 
     up = UpdaterV2("fiat", os.environ["PARTS_INTERCHANGE_DATABASE_URL"])
