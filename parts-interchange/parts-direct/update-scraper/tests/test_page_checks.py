@@ -45,3 +45,12 @@ def test_cloudflare_challenge_is_unavailable():
     p = CachedParser(BASE)
     with pytest.raises(SiteUnavailableError):
         p.check_page("<html><title>Just a moment...</title><body></body></html>")
+
+
+def test_cloudflare_block_page_is_blocked_not_transient():
+    from utils.Exceptions import Browser403Error
+    p = CachedParser(BASE)
+    html = "<html><title>Attention Required! | Cloudflare</title><body></body></html>"
+    with pytest.raises(Browser403Error):
+        p.check_page(html)
+    assert p.check_cached_page(html) is False

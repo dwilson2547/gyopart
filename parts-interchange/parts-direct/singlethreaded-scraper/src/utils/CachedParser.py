@@ -27,7 +27,10 @@ class CachedParser:
 
     # Pages that mean "the site isn't serving content right now". In Sept 2024 the Mopar site's
     # maintenance page was accepted as a real page, and 3,492 vehicles were recorded as having no parts.
-    UNAVAILABLE_MARKERS = ("Service Under Maintenance", "Just a moment...", "Attention Required!")
+    UNAVAILABLE_MARKERS = ("Service Under Maintenance", "Just a moment...")
+    # Cloudflare's block page (IP reputation / firewall rule), unlike its challenge, is not transient:
+    # retrying soon digs the hole deeper. Seen 2026-10-11 through a NordVPN exit.
+    BLOCKED_MARKERS = ("Attention Required!",)
 
     @staticmethod
     def _search_text(soup) -> str:
@@ -39,6 +42,9 @@ class CachedParser:
         soup = bs(page_text, 'html.parser')
         search_text = self._search_text(soup)
         main_div = soup.find('div', {'class': 'main'})
+        if any(m in search_text for m in self.BLOCKED_MARKERS) and not main_div:
+            print('blocked by Cloudflare, stopping')
+            raise Browser403Error(search_text.strip()[:120])
         if any(m in search_text for m in self.UNAVAILABLE_MARKERS) and not main_div:
             print('site unavailable (maintenance / challenge page), stopping')
             raise SiteUnavailableError(search_text.strip()[:120])
@@ -59,7 +65,7 @@ class CachedParser:
         soup = bs(page_text, 'html.parser')
         search_text = self._search_text(soup)
         main_div = soup.find('div', {'class': 'main'})
-        if any(m in search_text for m in self.UNAVAILABLE_MARKERS) and not main_div:
+        if any(m in search_text for m in self.UNAVAILABLE_MARKERS + self.BLOCKED_MARKERS) and not main_div:
             return False
         if "403" in search_text and "forbidden" in search_text.lower() and not main_div:
             return False

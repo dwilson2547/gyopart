@@ -144,9 +144,15 @@ class UpdaterV2:
         self._navigate(self.base_url)
 
     def _navigate(self, url: str):
+        from playwright.sync_api import TimeoutError as PlaywrightTimeout
         domain = urlparse(url).netloc
         with self.request_auth.acquire(domain) as permit:
-            resp = self._page.goto(url, wait_until="networkidle", timeout=60_000)
+            try:
+                resp = self._page.goto(url, wait_until="networkidle", timeout=60_000)
+            except PlaywrightTimeout as ex:
+                # A challenge that never settles looks like this; so does a slow tunnel. Transient.
+                permit.set_status(0)
+                raise SiteUnavailableError(f"navigation timed out: {url}") from ex
             permit.set_status(resp.status if resp else 0)
         if resp is not None and resp.status >= 500:
             raise SiteUnavailableError(f"HTTP {resp.status} for {url}")
@@ -288,7 +294,13 @@ class UpdaterV2:
                 proxy={"server": proxy} if proxy else None,
             )
             try:
-                self._open_session()
+                try:
+                    self._open_session()
+                    self.parser.check_page(self._page.content())  # homepage: challenge/block/maintenance?
+                except SiteUnavailableError as ex:
+                    raise RunStopped(75, f"site unavailable at session start: {ex}") from ex
+                except (Browser403Error, Browser429Error) as ex:
+                    raise RunStopped(65, f"blocked at session start: {ex}") from ex
                 while self._time_left_for_another():
                     if (self.stats.vehicles_done + self.stats.no_catalog) % vpn.CHECK_EVERY == 0 and self.stats.vehicles_done:
                         try:
