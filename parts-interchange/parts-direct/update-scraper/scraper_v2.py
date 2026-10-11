@@ -163,6 +163,7 @@ class UpdaterV2:
         max_cache_age_days: int = 30,
         spacing_s: tuple[float, float] = (20.0, 60.0),
         max_vehicles: Optional[int] = None,
+        discovery: str = "auto",  # auto (when due) | force | skip
     ):
         cfg = Configs.get(config_name)
         self.config_name = config_name
@@ -173,6 +174,7 @@ class UpdaterV2:
         self.max_cache_age_s = max_cache_age_days * 86400
         self.spacing_s = spacing_s
         self.max_vehicles = max_vehicles
+        self.discovery = discovery
         self.stats = RunStats()
 
         self.web_cache = WebCacheClient(os.environ["WEBCACHE_URL"])
@@ -427,6 +429,31 @@ class UpdaterV2:
 
     # ── the run ────────────────────────────────────────────────────────────────────────────────
 
+    def _discover(self, conn, mfr_id: int) -> None:
+        """New vehicles first (user, 2026-10-11): when due, list the site's vehicles before working the
+        queue, so unknown ones are queued as pending ahead of every stale refresh."""
+        from discovery import Discovery, due
+        if self.discovery == "skip":
+            return
+        with conn.cursor() as cur:
+            is_due = due(cur, self.config_name)
+        conn.commit()
+        if self.discovery == "auto" and not is_due:
+            return
+        print(f"discovery: listing {self.config_name} vehicles ({'forced' if self.discovery == 'force' else 'due'})",
+              flush=True)
+        out_of_time = lambda: bool(self.deadline) and \
+            datetime.now(timezone.utc).replace(tzinfo=None) + _seconds(INITIAL_VEHICLE_ESTIMATE_S) > self.deadline
+        try:
+            Discovery(self, conn, mfr_id, out_of_time).run()
+        except (SiteUnavailableError, InternetDownError, vpn.VpnUnavailable) as ex:
+            conn.rollback()
+            raise RunStopped(75, f"site unavailable during discovery: {ex}") from ex
+        except Exception as ex:  # noqa: BLE001 — the queue can still be worked; next run tries again
+            conn.rollback()
+            print(f"discovery failed, working the queue anyway: {type(ex).__name__}: {str(ex)[:300]}", flush=True)
+        self._navigate(self.base_url)  # back to a normal page for the crawl
+
     def _time_left_for_another(self) -> bool:
         if self.max_vehicles is not None and self.stats.vehicles_done + self.stats.no_catalog + self.stats.failed >= self.max_vehicles:
             self.stats.stop_reason = "max_vehicles"
@@ -468,6 +495,7 @@ class UpdaterV2:
                     raise RunStopped(75, f"site unavailable at session start: {ex}") from ex
                 except (Browser403Error, Browser429Error) as ex:
                     raise RunStopped(65, f"blocked at session start: {ex}") from ex
+                self._discover(conn, mfr_id)
                 while self._time_left_for_another():
                     if (self.stats.vehicles_done + self.stats.no_catalog) % vpn.CHECK_EVERY == 0 and self.stats.vehicles_done:
                         try:

@@ -231,6 +231,21 @@ one replica — every concurrent job shares one exit IP).
 - A Cloudflare block page stops the run as blocked (65); a challenge that never settles as transient
   (75).
 
+### 3.8c Discovery (built 2026-10-11)
+
+- `discovery.py`, run at the start of a run when the manufacturer's last complete pass is over 90 days
+  old (`--discovery auto|force|skip`, or `discovery` in the ScrapeJob params). Newest model year first,
+  current year + 1 down to 7 years back; commits as it goes, and only a complete pass (a `scrape_run`
+  row `<config>:discovery`) resets the clock.
+- Picker warm-up: one top-level navigation to `/ajax/vehicle-picker/makes/all` (its JSON is the page
+  body), then the homepage for the CSRF token; picker calls run inside the page.
+- Creates the year/make/model/trim/engine lookup rows a new vehicle needs (picker display names), under
+  an advisory lock since trims and engines are shared across manufacturers.
+- Mini, 2026-10-11 (✅): 85 vehicles listed, 33 new — 2024–2026 (bulk data ends at 2023) plus 2 a year
+  where the site renamed an engine slug (`electric` → `battery-ev-ev-bev`). A renamed vehicle is scraped
+  as a new car; the old-name car stays until its refresh finds the old URL gone.
+- Brand-new models can be sparse: the 2026 Mini Cooper lists accessories only (16 categories, 5 parts).
+
 ### 3.8b Images
 
 - A part page lists up to 8 product images in 3 sizes (✅ a 2026 page). Downloaded inline and one at a time
