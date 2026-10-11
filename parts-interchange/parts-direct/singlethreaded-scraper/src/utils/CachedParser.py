@@ -4,7 +4,7 @@ import re
 from bs4 import BeautifulSoup as bs
 from bs4.element import Tag
 from utils.Constants import PageType
-from utils.Exceptions import Browser403Error, Browser429Error, InternetDownError
+from utils.Exceptions import Browser403Error, Browser429Error, InternetDownError, SiteUnavailableError
 
 
 class CachedParser:
@@ -25,12 +25,23 @@ class CachedParser:
 
         return parserClass.parse(page_text, additional_vars, cached)
 
-    def check_page(self, page_text: str):
-        soup = bs(page_text, 'html.parser')
+    # Pages that mean "the site isn't serving content right now". In Sept 2024 the Mopar site's
+    # maintenance page was accepted as a real page, and 3,492 vehicles were recorded as having no parts.
+    UNAVAILABLE_MARKERS = ("Service Under Maintenance", "Just a moment...", "Attention Required!")
+
+    @staticmethod
+    def _search_text(soup) -> str:
         title = soup.find('title')
         header = soup.find('h1')
-        search_text = title.text if title else '' + header.text if header else ''
+        return (title.text if title else '') + ' ' + (header.text if header else '')
+
+    def check_page(self, page_text: str):
+        soup = bs(page_text, 'html.parser')
+        search_text = self._search_text(soup)
         main_div = soup.find('div', {'class': 'main'})
+        if any(m in search_text for m in self.UNAVAILABLE_MARKERS) and not main_div:
+            print('site unavailable (maintenance / challenge page), stopping')
+            raise SiteUnavailableError(search_text.strip()[:120])
         if "403" in search_text and "forbidden" in search_text.lower() and not main_div:
             print('403 code received, stopping now')
             raise Browser403Error('403 code received')
@@ -46,10 +57,10 @@ class CachedParser:
 
     def check_cached_page(self, page_text: str):
         soup = bs(page_text, 'html.parser')
-        title = soup.find('title')
-        header = soup.find('h1')
-        search_text = title.text if title else '' + header.text if header else ''
+        search_text = self._search_text(soup)
         main_div = soup.find('div', {'class': 'main'})
+        if any(m in search_text for m in self.UNAVAILABLE_MARKERS) and not main_div:
+            return False
         if "403" in search_text and "forbidden" in search_text.lower() and not main_div:
             return False
         if "429" in search_text and 'requests' in search_text.lower() and not main_div:
