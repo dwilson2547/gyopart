@@ -22,3 +22,24 @@ services:
     build:
       context: ./junkyard-platform
       dockerfile: Dockerfile.admin-api
+
+  # Junkyard inventory scrapers — one image per yard company, run by scrape-job-manager
+  # (Scraper/ScrapeJob resources in helm/gyopart). Build context is the scrapers root so each
+  # image can include scrape_contract.py.
+  scraper-parts-galore:
+    image: dwilson2547/gyopart-scraper-parts-galore:latest
+    build:
+      context: ./junkyard-inventory-scrapers
+      dockerfile: parts-galore/Dockerfile
+
+  scraper-pic-n-pull:
+    image: dwilson2547/gyopart-scraper-pic-n-pull:latest
+    build:
+      context: ./junkyard-inventory-scrapers
+      dockerfile: pic-n-pull/Dockerfile
+
+  scraper-ryans-pic-a-part:
+    image: dwilson2547/gyopart-scraper-ryans-pic-a-part:latest
+    build:
+      context: ./junkyard-inventory-scrapers
+      dockerfile: ryans_pic_a_part/Dockerfile

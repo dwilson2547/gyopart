@@ -9,6 +9,7 @@ import json
 import logging
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 
 import requests
 from sqlalchemy.orm import Session
@@ -18,6 +19,10 @@ from junkyard_common.db import get_engine
 from cache_client import WebCacheClient
 from request_auth_client import RequestAuthClient
 from config import Config
+
+# scrape_contract.py lives one level up in the repo and next to scraper.py in the image.
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+from scrape_contract import Broken, run  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -194,7 +199,7 @@ def _sync_location_inventory(http, web_cache, request_auth, db, api_loc, now):
     return len(vehicles), new_count, updated_count, removed_count
 
 
-def main() -> None:
+def main() -> dict:
     engine = get_engine()
     now = _utcnow()
 
@@ -210,6 +215,8 @@ def main() -> None:
                 http = requests.Session()
 
                 api_locations = _sync_locations(http, web_cache, request_auth, db, now)
+                if not api_locations:
+                    raise Broken("locations API returned 0 locations — possible API change")
 
                 total_feed = total_new = total_updated = total_removed = 0
                 for api_loc in api_locations:
@@ -221,6 +228,9 @@ def main() -> None:
                     total_updated += updated
                     total_removed += removed
 
+            if total_feed == 0:
+                raise Broken(f"0 vehicles across {len(api_locations)} locations — possible API change")
+
             run.completed_at = _utcnow()
             run.total_in_feed = total_feed
             run.new_vehicles = total_new
@@ -230,6 +240,8 @@ def main() -> None:
             db.commit()
             logger.info("Scrape complete — %d locations | %d in feed | +%d new | ~%d updated | -%d removed",
                         len(api_locations), total_feed, total_new, total_updated, total_removed)
+            return {"items": total_feed, "new": total_new, "updated": total_updated,
+                    "removed": total_removed, "locations": len(api_locations)}
 
         except Exception as exc:
             logger.exception("Scrape failed: %s", exc)
@@ -237,8 +249,8 @@ def main() -> None:
             run.error_message = str(exc)[:1000]
             run.success = False
             db.commit()
-            sys.exit(1)
+            raise
 
 
 if __name__ == "__main__":
-    main()
+    run(main)

@@ -12,6 +12,7 @@ import logging
 import os
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 
 from playwright.async_api import async_playwright, Response
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -21,6 +22,10 @@ from junkyard_common.models import Location, ScrapeRun, Vehicle
 from junkyard_common.db import get_engine
 from cache_client import WebCacheClient
 from request_auth_client import RequestAuthClient
+
+# scrape_contract.py lives one level up in the repo and next to scraper.py in the image.
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+from scrape_contract import Broken, run  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -231,7 +236,7 @@ async def scrape_inventory(web_cache, request_auth) -> list[tuple[str, dict]]:
     return result
 
 
-def main() -> None:
+def main() -> dict:
     request_auth = RequestAuthClient(REQUEST_AUTH_SERVER_URL)
     engine = get_engine()
     now = _utcnow()
@@ -249,7 +254,7 @@ def main() -> None:
             pairs = asyncio.run(scrape_inventory(web_cache, request_auth))
 
         if not pairs:
-            raise RuntimeError("No vehicles collected — possible site change or block.")
+            raise Broken("No vehicles collected — possible site change or block.")
 
         with Session(engine) as db:
             new_c, updated_c, removed_c = upsert_vehicles(db, location_id, pairs, now)
@@ -266,6 +271,7 @@ def main() -> None:
             run.removed_vehicles = removed_c
             run.success = True
             db.commit()
+        return {"items": len(pairs), "new": new_c, "updated": updated_c, "removed": removed_c}
 
     except Exception as exc:
         logger.exception("Scraper failed: %s", exc)
@@ -275,11 +281,11 @@ def main() -> None:
             run.error_message = str(exc)[:1000]
             run.success = False
             db.commit()
-        sys.exit(1)
+        raise
 
     finally:
         request_auth.close()
 
 
 if __name__ == "__main__":
-    main()
+    run(main)

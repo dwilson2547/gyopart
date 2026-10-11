@@ -7,7 +7,9 @@
 
 import logging
 import os
+import sys
 from datetime import datetime, timezone
+from pathlib import Path
 from urllib.parse import urlparse
 
 import requests
@@ -19,6 +21,10 @@ from junkyard_common.models import Location, ScrapeRun, Vehicle
 from junkyard_common.db import get_engine
 from cache_client import WebCacheClient
 from request_auth_client import RequestAuthClient
+
+# scrape_contract.py lives one level up in the repo and next to scraper.py in the image.
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+from scrape_contract import Broken, run  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -120,7 +126,7 @@ def fetch_page(session, web_cache, request_auth) -> str:
         permit.set_status(resp.status_code)
         if resp.status_code == 429:
             logger.error("429 received — aborting run")
-            raise SystemExit(1)
+            raise Broken("429 rate limited by parts-galore.com")
         resp.raise_for_status()
 
     web_cache.store(INVENTORY_URL, resp.text, CLIENT_NAME)
@@ -145,6 +151,8 @@ def parse_inventory(html: str) -> list[dict]:
             skipped += 1
 
     logger.info("Parsed %d vehicles (%d skipped)", len(vehicles), skipped)
+    if not vehicles:
+        raise Broken(f"0 vehicles parsed from 'alldata' ({skipped} rows skipped) — possible layout change")
     return vehicles
 
 
@@ -212,7 +220,7 @@ def upsert_vehicles(
     return new_count, updated_count, removed_count
 
 
-def main() -> None:
+def main() -> dict:
     request_auth = RequestAuthClient(REQUEST_AUTH_SERVER_URL)
     engine = get_engine()
     now = _utcnow()
@@ -247,15 +255,7 @@ def main() -> None:
             run.removed_vehicles = removed_c
             run.success = True
             db.commit()
-
-    except SystemExit:
-        with Session(engine) as db:
-            run = db.get(ScrapeRun, run_id)
-            run.completed_at = _utcnow()
-            run.error_message = "429 rate limit — permanent backoff"
-            run.success = False
-            db.commit()
-        raise
+        return {"items": len(vehicles), "new": new_c, "updated": updated_c, "removed": removed_c}
 
     except Exception as exc:
         logger.exception("Scraper failed: %s", exc)
@@ -272,4 +272,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    run(main)
