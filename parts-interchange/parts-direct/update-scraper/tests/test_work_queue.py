@@ -1,4 +1,9 @@
-"""Needs a throwaway Postgres: UPDATER_TEST_DATABASE_URL (schema is created from the 0.3.0 models)."""
+"""Needs a throwaway Postgres with pg_trgm: UPDATER_TEST_DATABASE_URL (schema is created from the 0.3.0 models).
+
+  docker run -d --rm --name updater-test-pg -e POSTGRES_HOST_AUTH_METHOD=trust -p 15499:5432 postgres:16
+  docker exec updater-test-pg psql -U postgres -c "create extension pg_trgm"
+  UPDATER_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:15499/postgres pytest tests/test_work_queue.py
+"""
 import os
 import sys
 from datetime import datetime, timedelta
@@ -81,3 +86,14 @@ def test_discovery_inserts_once_and_refreshes_url(cur):
     assert q.upsert_discovered(cur, 1, "2025", "jeep", "wrangler", "x", "y", "https://b") is False
     cur.execute("SELECT count(*), max(page_url) FROM scrape_target")
     assert cur.fetchone() == (1, "https://b")
+
+
+def test_refresh_off_takes_only_new_and_failed(cur):
+    stale = add(cur, "stale", "done", last=None)  # bulk-loaded: never scraped by the updater
+    add(cur, "old", "no_catalog", last=datetime.utcnow() - timedelta(days=400))
+    pending = add(cur, "pending", "pending")
+    assert q.claim_next(cur, 1, None).id == pending
+    assert q.claim_next(cur, 1, None) is None
+    counts = q.queue_counts(cur, 1, None)
+    assert not q.anything_due(counts)          # → the run exits before opening a browser
+    assert q.claim_next(cur, 1, 180).id == stale  # refresh on: the stale one is due again

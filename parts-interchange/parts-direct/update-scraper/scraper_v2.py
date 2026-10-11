@@ -159,11 +159,12 @@ class UpdaterV2:
         config_name: str,
         database_url: str,
         deadline: Optional[datetime] = None,
-        refresh_after_days: int = 180,
+        refresh_after_days: Optional[int] = 180,  # None = no stale refresh
         max_cache_age_days: int = 30,
         spacing_s: tuple[float, float] = (20.0, 60.0),
         max_vehicles: Optional[int] = None,
         discovery: str = "auto",  # auto (when due) | force | skip
+        discovery_interval_days: int = 90,
     ):
         cfg = Configs.get(config_name)
         self.config_name = config_name
@@ -175,6 +176,7 @@ class UpdaterV2:
         self.spacing_s = spacing_s
         self.max_vehicles = max_vehicles
         self.discovery = discovery
+        self.discovery_interval_days = discovery_interval_days
         self.stats = RunStats()
 
         self.web_cache = WebCacheClient(os.environ["WEBCACHE_URL"])
@@ -429,16 +431,24 @@ class UpdaterV2:
 
     # ── the run ────────────────────────────────────────────────────────────────────────────────
 
+    def _discovery_due(self, conn) -> bool:
+        from discovery import due
+        if self.discovery == "skip":
+            return False
+        if self.discovery == "force":
+            return True
+        with conn.cursor() as cur:
+            is_due = due(cur, self.config_name, self.discovery_interval_days)
+        conn.commit()
+        return is_due
+
     def _discover(self, conn, mfr_id: int) -> None:
         """New vehicles first (user, 2026-10-11): when due, list the site's vehicles before working the
         queue, so unknown ones are queued as pending ahead of every stale refresh."""
-        from discovery import Discovery, due
+        from discovery import Discovery
         if self.discovery == "skip":
             return
-        with conn.cursor() as cur:
-            is_due = due(cur, self.config_name)
-        conn.commit()
-        if self.discovery == "auto" and not is_due:
+        if self.discovery == "auto" and not self._discovery_due(conn):
             return
         print(f"discovery: listing {self.config_name} vehicles ({'forced' if self.discovery == 'force' else 'due'})",
               flush=True)
@@ -476,8 +486,18 @@ class UpdaterV2:
         conn.autocommit = False
         with conn.cursor() as cur:
             mfr_id = q.manufacturer_id(cur, self.config_name)
-            print("queue:", q.queue_counts(cur, mfr_id, self.refresh_after_days))
+            counts = q.queue_counts(cur, mfr_id, self.refresh_after_days)
+            print("queue:", counts, "| refresh", "off" if self.refresh_after_days is None
+                  else f"after {self.refresh_after_days} days")
         conn.commit()
+        # Nothing to scrape and discovery not due: stop before touching the site at all, so a daily
+        # schedule costs nothing on the days there is no work.
+        if not q.anything_due(counts) and not self._discovery_due(conn):
+            print("nothing due: no pending vehicles, discovery not due", flush=True)
+            self.stats.stop_reason = "nothing_due"
+            conn.close()
+            self.request_auth.close()
+            return self.stats
 
         from playwright.sync_api import sync_playwright
         consecutive_failures = 0

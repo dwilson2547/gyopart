@@ -246,6 +246,15 @@ one replica — every concurrent job shares one exit IP).
   as a new car; the old-name car stays until its refresh finds the old URL gone.
 - Brand-new models can be sparse: the 2026 Mini Cooper lists accessories only (16 categories, 5 parts).
 
+### 3.8d Refresh off, and runs that do nothing (2026-10-11)
+
+- The user's call: the sites change their parts rarely, so for now only Mopar re-scrapes stale vehicles;
+  every other site only takes new (discovered) and failed ones — ScrapeJob param `refresh: false`
+  (`--no-refresh`). Discovery for those runs monthly (`discovery_interval_days: 30`).
+- A run with nothing claimable and discovery not due exits before opening a browser ("nothing_due",
+  exit 0), so the daily schedule makes no site traffic on days without work, while a backlog (the
+  2024–2026 vehicles the bulk data lacks) is still worked every day rather than once a month.
+
 ### 3.8b Images
 
 - A part page lists up to 8 product images in 3 sizes (✅ a 2026 page). Downloaded inline and one at a time

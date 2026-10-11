@@ -1,7 +1,7 @@
 """Entry point for update scraper v2, speaking scrape-job-manager's contract.
 
   python run_v2.py --config fiat [--max-vehicles N] [--max-minutes M] [--refresh-after-days 180]
-                   [--discovery auto|force|skip]
+                   [--discovery auto|force|skip] [--discovery-interval-days 90] [--no-refresh]
 
 Exit codes: 0 stopped normally (deadline / queue empty / limit) · 75 transient (site unavailable, VPN
 down) · 65 blocked or repeatedly failing · 1 unexpected. The result payload goes to the pod's
@@ -53,6 +53,9 @@ def main() -> int:
     ap.add_argument("--max-vehicles", type=int, default=params.get("max_vehicles"))
     ap.add_argument("--max-minutes", type=float, default=params.get("max_minutes"))
     ap.add_argument("--refresh-after-days", type=int, default=int(params.get("refresh_after_days", 180)))
+    ap.add_argument("--no-refresh", action="store_true", default=params.get("refresh") is False,
+                    help="only new/failed vehicles; never re-scrape stale ones")
+    ap.add_argument("--discovery-interval-days", type=int, default=int(params.get("discovery_interval_days", 90)))
     ap.add_argument("--discovery", choices=("auto", "force", "skip"), default=params.get("discovery", "auto"),
                     help="list the site's vehicles first: when due (90 days), always, or never")
     args = ap.parse_args()
@@ -65,9 +68,10 @@ def main() -> int:
         args.config,
         os.environ["PARTS_INTERCHANGE_DATABASE_URL"],
         deadline=parse_deadline(args),
-        refresh_after_days=args.refresh_after_days,
+        refresh_after_days=None if args.no_refresh else args.refresh_after_days,
         max_vehicles=args.max_vehicles,
         discovery=args.discovery,
+        discovery_interval_days=args.discovery_interval_days,
     )
     try:
         stats = updater.run()

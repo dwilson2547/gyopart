@@ -3,7 +3,9 @@
 Claim order for one manufacturer:
   1. pending (never scraped, or reset after an outage)
   2. failed whose backoff has passed
-  3. done / no_catalog last scraped more than `refresh_after_days` ago (NULL = unknown = oldest)
+  3. done / no_catalog last scraped more than `refresh_after_days` ago (NULL = unknown = oldest);
+     refresh_after_days=None turns refresh off (user 2026-10-11: off for every site but Mopar for now —
+     the catalogues rarely change, so only new vehicles are worth the traffic)
 A claim leases the row (next_attempt_at = now + LEASE) under FOR UPDATE SKIP LOCKED, so concurrent runs
 for the same manufacturer never take the same vehicle, and no transaction stays open during a crawl.
 """
@@ -26,7 +28,7 @@ def manufacturer_id(cur, config_name: str) -> int:
     return row[0]
 
 
-def claim_next(cur, mfr_id: int, refresh_after_days: int, lease: timedelta = LEASE) -> Optional[Target]:
+def claim_next(cur, mfr_id: int, refresh_after_days: Optional[int], lease: timedelta = LEASE) -> Optional[Target]:
     """Lease the next due vehicle and return it. The caller commits right away; the crawl runs outside
     any transaction, and the lease (next_attempt_at) keeps other runs off it until it expires — so a run
     that dies mid-vehicle just lets the lease lapse."""
@@ -40,7 +42,7 @@ def claim_next(cur, mfr_id: int, refresh_after_days: int, lease: timedelta = LEA
               AND (next_attempt_at IS NULL OR next_attempt_at <= now() AT TIME ZONE 'utc')
               AND (
                     status IN ('pending', 'failed')
-                 OR (status IN ('done', 'no_catalog')
+                 OR (%(refresh)s AND status IN ('done', 'no_catalog')
                      AND (last_scraped_at IS NULL
                           OR last_scraped_at < (now() AT TIME ZONE 'utc') - make_interval(days => %(r)s)))
               )
@@ -51,7 +53,7 @@ def claim_next(cur, mfr_id: int, refresh_after_days: int, lease: timedelta = LEA
         )
         RETURNING id, manufacturer_id, year, make, model, trim, engine, page_url
         """,
-        {"m": mfr_id, "r": refresh_after_days, "lease": lease},
+        {"m": mfr_id, "r": refresh_after_days or 0, "refresh": refresh_after_days is not None, "lease": lease},
     )
     row = cur.fetchone()
     return Target(*row) if row else None
@@ -62,20 +64,26 @@ def release(cur, target_id: int) -> None:
     cur.execute("UPDATE scrape_target SET next_attempt_at = NULL WHERE id = %s", (target_id,))
 
 
-def queue_counts(cur, mfr_id: int, refresh_after_days: int) -> dict:
+def queue_counts(cur, mfr_id: int, refresh_after_days: Optional[int]) -> dict:
     cur.execute(
         """
         SELECT status,
-               count(*) FILTER (WHERE status = 'pending'
-                                OR (status = 'failed' AND (next_attempt_at IS NULL OR next_attempt_at <= now() AT TIME ZONE 'utc'))
-                                OR (status IN ('done','no_catalog') AND (last_scraped_at IS NULL
-                                    OR last_scraped_at < (now() AT TIME ZONE 'utc') - make_interval(days => %s)))) AS due,
+               -- due = claimable now: not leased by another run (next_attempt_at), and per claim_next's rules
+               count(*) FILTER (WHERE page_url IS NOT NULL
+                                AND (next_attempt_at IS NULL OR next_attempt_at <= now() AT TIME ZONE 'utc')
+                                AND (status IN ('pending', 'failed')
+                                     OR (%s AND status IN ('done','no_catalog') AND (last_scraped_at IS NULL
+                                         OR last_scraped_at < (now() AT TIME ZONE 'utc') - make_interval(days => %s))))) AS due,
                count(*)
         FROM scrape_target WHERE manufacturer_id = %s GROUP BY status
         """,
-        (refresh_after_days, mfr_id),
+        (refresh_after_days is not None, refresh_after_days or 0, mfr_id),
     )
     return {status: {"due": due, "total": total} for status, due, total in cur.fetchall()}
+
+
+def anything_due(counts: dict) -> bool:
+    return any(c["due"] for c in counts.values())
 
 
 def mark_no_catalog(cur, target_id: int) -> None:
