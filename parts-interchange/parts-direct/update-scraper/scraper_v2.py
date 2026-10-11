@@ -262,31 +262,41 @@ class UpdaterV2:
             print(f"webcache store failed ({type(ex).__name__}), continuing: {url}")
         return content
 
+    def _with_retries(self, what: str, fn, attempts: int = 3):
+        """Retry transient connection trouble: Privoxy's intermittent CONNECT 500s, and imgcache
+        connections refused or dropped (in the first parallel run, 2,448 of 10,203 images were lost to a
+        local imgcache port-forward restarting under load). Anything else fails straight away."""
+        import httpx
+        transient = (requests.exceptions.ProxyError, requests.exceptions.ConnectionError,
+                     httpx.ConnectError, httpx.RemoteProtocolError, httpx.ReadError, ConnectionError)
+        for attempt in range(1, attempts + 1):
+            try:
+                return fn()
+            except transient as ex:
+                if attempt == attempts:
+                    raise
+                time.sleep(2 * attempt)
+                print(f"retrying {what} after {type(ex).__name__} ({attempt}/{attempts - 1})", flush=True)
+
+    def _fetch_image(self, url: str, proxies) -> bytes:
+        # Through request-auth like every page fetch, so image traffic is paced, backed off and visible
+        # in its admin panel. The CDN domains get a larger pool there (docs/design-v2.md §3.8b); with the
+        # default pool of 1 the parallel downloads would serialise again.
+        with self.request_auth.acquire(urlparse(url).netloc) as permit:
+            resp = requests.get(url, timeout=30, proxies=proxies)
+            permit.set_status(resp.status_code)
+        resp.raise_for_status()
+        return resp.content
+
     def save_image(self, url: str, name: str) -> bool:
         try:
-            if self.img_cache.lookup(url):
+            if self._with_retries("imgcache lookup", lambda: self.img_cache.lookup(url)):
                 return True
             proxy = vpn.proxy_url()
             proxies = {"http": proxy, "https": proxy} if proxy else None
-            # Privoxy intermittently answers CONNECT with "500 Internal Privoxy Error" (seen 2026-10-11,
-            # a few in hundreds); a short retry clears nearly all of them.
-            domain = urlparse(url).netloc
-            for attempt in range(3):
-                try:
-                    # Through request-auth like every page fetch, so image traffic is paced, backed off
-                    # and visible in its admin panel. The CDN domains get a larger pool there (see
-                    # docs/design-v2.md §3.8b); with the default pool of 1 this would serialise again.
-                    with self.request_auth.acquire(domain) as permit:
-                        resp = requests.get(url, timeout=30, proxies=proxies)
-                        permit.set_status(resp.status_code)
-                    resp.raise_for_status()
-                    break
-                except requests.exceptions.ProxyError:
-                    if attempt == 2:
-                        raise
-                    time.sleep(2 * (attempt + 1))
-            self.img_cache.store(url=url, file_bytes=resp.content,
-                                 client_name=f"parts-direct-{self.config_name}", filename=name)
+            content = self._with_retries("image download", lambda: self._fetch_image(url, proxies))
+            self._with_retries("imgcache store", lambda: self.img_cache.store(
+                url=url, file_bytes=content, client_name=f"parts-direct-{self.config_name}", filename=name))
             return True
         except Exception as ex:  # noqa: BLE001 — an image failure never fails the vehicle
             print(f"image failed {url}: {ex}")
