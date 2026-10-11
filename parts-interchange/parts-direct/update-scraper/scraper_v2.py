@@ -25,7 +25,6 @@ from bootstrap import ensure_singlethreaded_src_path
 ensure_singlethreaded_src_path()
 
 from cache_client import ImgCacheClient, WebCacheClient  # noqa: E402
-from playwright_stealth import Stealth  # noqa: E402
 from request_auth_client import RequestAuthClient  # noqa: E402
 from utils.CachedParser import CachedParser  # noqa: E402
 from utils.Configs import Configs  # noqa: E402
@@ -40,13 +39,6 @@ from writer import ScrapedVehicle, Target, write_vehicle  # noqa: E402
 
 if TYPE_CHECKING:
     from playwright.sync_api import BrowserContext, Page
-
-# Same fingerprint the v1 updater used to pass Cloudflare.
-_CHROME_UA = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
-)
-_SEC_CH_UA = '"Google Chrome";v="121", "Not A(Brand";v="99", "Chromium";v="121"'
 
 MAX_CONSECUTIVE_FAILURES = 5
 INITIAL_VEHICLE_ESTIMATE_S = 30 * 60  # until this run has timed a vehicle itself
@@ -119,7 +111,6 @@ class UpdaterV2:
         self.img_cache = ImgCacheClient(os.environ["IMGCACHE_URL"])
         self.request_auth = RequestAuthClient(os.environ["REQUEST_AUTH_URL"])
         self.parser = CachedParser(self.base_url)
-        self._stealth = Stealth(navigator_user_agent_override=_CHROME_UA, sec_ch_ua_override=_SEC_CH_UA)
         self._browser = None
         self._context: "BrowserContext | None" = None
         self._page: "Page | None" = None
@@ -130,15 +121,10 @@ class UpdaterV2:
     def _open_session(self) -> None:
         if self._context:
             self._context.close()
-        self._context = self._browser.new_context(
-            user_agent=_CHROME_UA,
-            viewport={"width": 1920, "height": 1080},
-            locale="en-US",
-            extra_http_headers={
-                "sec-ch-ua": _SEC_CH_UA, "sec-ch-ua-mobile": "?0", "sec-ch-ua-platform": '"Windows"',
-            },
-        )
-        self._stealth.apply_stealth_sync(self._context)
+        # The browser's own, consistent identity. v1 spoofed a Chrome 121 / Windows UA and applied stealth
+        # patches; on a current Chromium that mismatch is what got challenged (2026-10-11), while the
+        # unmodified headed browser passed.
+        self._context = self._browser.new_context(viewport=None, locale="en-US")
         self._page = self._context.new_page()
         # Homepage first: clears Cloudflare once for the whole session.
         self._navigate(self.base_url)
@@ -148,7 +134,10 @@ class UpdaterV2:
         domain = urlparse(url).netloc
         with self.request_auth.acquire(domain) as permit:
             try:
-                resp = self._page.goto(url, wait_until="networkidle", timeout=60_000)
+                # "load", not "networkidle": the site's background traffic means the network may never go
+                # quiet, so networkidle waits out the timeout on perfectly good pages.
+                resp = self._page.goto(url, wait_until="load", timeout=60_000)
+                self._page.wait_for_timeout(1500)
             except PlaywrightTimeout as ex:
                 # A challenge that never settles looks like this; so does a slow tunnel. Transient.
                 permit.set_status(0)
@@ -192,8 +181,18 @@ class UpdaterV2:
             if self.img_cache.lookup(url):
                 return True
             proxy = vpn.proxy_url()
-            resp = requests.get(url, timeout=30, proxies={"http": proxy, "https": proxy} if proxy else None)
-            resp.raise_for_status()
+            proxies = {"http": proxy, "https": proxy} if proxy else None
+            # Privoxy intermittently answers CONNECT with "500 Internal Privoxy Error" (seen 2026-10-11,
+            # a few in hundreds); a short retry clears nearly all of them.
+            for attempt in range(3):
+                try:
+                    resp = requests.get(url, timeout=30, proxies=proxies)
+                    resp.raise_for_status()
+                    break
+                except requests.exceptions.ProxyError:
+                    if attempt == 2:
+                        raise
+                    time.sleep(2 * (attempt + 1))
             self.img_cache.store(url=url, file_bytes=resp.content,
                                  client_name=f"parts-direct-{self.config_name}", filename=name)
             return True
@@ -288,9 +287,13 @@ class UpdaterV2:
         consecutive_failures = 0
         with sync_playwright() as p:
             proxy = vpn.proxy_url()
+            # Headed full Chromium: Cloudflare blocks headless (both the headless shell and new-headless)
+            # from the VPN, while a headed browser passes (2026-10-11). In the container this runs under
+            # Xvfb; BROWSER_HEADLESS=1 exists only for experiments.
             self._browser = p.chromium.launch(
-                headless=True,
-                args=["--disable-blink-features=AutomationControlled"],
+                channel="chromium",
+                headless=os.environ.get("BROWSER_HEADLESS") == "1",
+                args=["--disable-blink-features=AutomationControlled", "--window-size=1400,1000"],
                 proxy={"server": proxy} if proxy else None,
             )
             try:

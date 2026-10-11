@@ -217,6 +217,20 @@ one replica — every concurrent job shares one exit IP).
   against the same server forever, and the load-check cron ignores a server whose stats are empty.
   Deleting the pod picks a fresh recommended server. Durable fix tracked separately.
 
+### 3.8a Cloudflare (✅ observed 2026-10-11 through the VPN)
+
+- **Headless is blocked, headed passes.** Through the same exit IP and Chromium build, headless
+  (headless shell and new-headless) got Cloudflare's block page or a challenge that never settled;
+  headed Chromium loaded the site normally. The updater launches headed full Chromium; in the
+  container it runs under Xvfb.
+- **The vehicle-picker AJAX endpoints are stricter.** With `cf_clearance` already set, an XHR to
+  `/ajax/vehicle-picker/makes/all` still got the challenge body ("Enable JavaScript and cookies to
+  continue", 403). After one top-level navigation to that URL (which returned the JSON directly), the
+  same XHR returned 200. Only discovery uses the picker; vehicle, category and part pages are plain page
+  loads. So discovery warms up with that one navigation before its XHRs (⬜ when discovery is built).
+- A Cloudflare block page stops the run as blocked (65); a challenge that never settles as transient
+  (75).
+
 ### 3.9 Migrating the schema
 
 `parts_interchange` has no migration history; prod holds real data, so changes go through Alembic
