@@ -26,6 +26,26 @@ Cached landing pages of the 5,789 vehicles with no parts (measured 2026-10-11):
 The webcache cannot fill the gap: for the 503 vehicles only the landing page was ever fetched, so
 re-parsing the cache recovers nothing.
 
+## Real maintenance windows, not a block
+
+The site serves the 2015 Wrangler's categories normally today (checked by the user, 2026-10-11).
+Cache-file timestamps of the landing pages show two maintenance bursts, both starting just after
+midnight (NFS server local time):
+
+| Window | 503 pages | Then |
+|---|---|---|
+| 2024-09-09 00:23–00:41 | 215 (2006–2008) | site back; normal scraping for a week |
+| 2024-09-16 00:12–04:53 | 3,277 (2009–2024) | scraper reached the end of the tree and stopped |
+
+A real vehicle took the scraper from about 30 minutes to several hours (deep crawl of categories and
+diagrams); a maintenance page took seconds. Once the site went down, every remaining vehicle was
+"finished" almost instantly. Scraping resumed normally after the first window, which rules out a
+bot block.
+
+So, beyond not caching the page: a maintenance/5xx page must **stop the run** as transient (exit 75
+under scrape-job-manager) instead of moving on, and scheduled runs should stay out of the night window
+(the business-hours pool already does).
+
 ## Impact and what was loaded (2026-10-11)
 
 - Prod and dev both hold the Mopar catalogue for the **739 vehicles that have parts** (manufacturer
