@@ -41,6 +41,7 @@ if TYPE_CHECKING:
     from playwright.sync_api import BrowserContext, Page
 
 MAX_CONSECUTIVE_FAILURES = 5
+IMAGE_WORKERS = 8
 PROXY_ERRORS = ("ERR_PROXY_CONNECTION_FAILED", "ERR_TUNNEL_CONNECTION_FAILED", "ERR_PROXY_AUTH",
                 "ERR_NO_SUPPORTED_PROXIES", "ERR_MANDATORY_PROXY_CONFIGURATION_FAILED")
 INITIAL_VEHICLE_ESTIMATE_S = 30 * 60  # until this run has timed a vehicle itself
@@ -235,13 +236,30 @@ class UpdaterV2:
             )
             return {pn: canonical_part_url(u) for pn, u in cur.fetchall()}
 
+    def _download_images(self, images: dict[str, dict]) -> None:
+        """Fetch a vehicle's images concurrently once its pages are done. They come from CDNs
+        (revolutionparts / S3 / CloudFront), not the Cloudflare-protected site, so parallel downloads
+        don't touch its limits; they still go through the VPN. Fetching them inline (up to 24 files
+        per part page, one by one) left the browser idle for minutes after every page."""
+        from concurrent.futures import ThreadPoolExecutor
+        todo = [(name, meta["url"]) for name, meta in images.items()]
+        if not todo:
+            return
+        t0 = time.monotonic()
+        with ThreadPoolExecutor(max_workers=IMAGE_WORKERS) as pool:
+            results = pool.map(lambda item: (item[0], self.save_image(item[1], item[0])), todo)
+            for name, ok in results:
+                images[name]["saved"] = ok
+        saved = sum(1 for m in images.values() if m["saved"])
+        print(f"  images: {saved}/{len(todo)} saved in {time.monotonic() - t0:.0f}s", flush=True)
+
     def crawl(self, t: Target) -> ScrapedVehicle:
         images: dict[str, dict] = {}
 
         def img(url: str, name: str, alt):
             if name and name not in images:
                 full = url if url.startswith("https") else "https:" + url
-                images[name] = {"url": full, "alt": alt, "saved": self.save_image(full, name)}
+                images[name] = {"url": full, "alt": alt, "saved": False}  # downloaded after the pages
 
         categories = self.parser.parse_cached_page(self.get_page(t.page_url), PageType.CATEGORIES)
         if not categories:
@@ -280,6 +298,7 @@ class UpdaterV2:
                     obj = entry.get(key)
                     if obj and obj.get("url"):
                         img(obj["url"], obj["url"].split("/")[-1], None)
+        self._download_images(images)
         return ScrapedVehicle(diagrams=diagrams, part_numbers=list(part_urls), parts=parts, images=images)
 
     # ── the run ────────────────────────────────────────────────────────────────────────────────
