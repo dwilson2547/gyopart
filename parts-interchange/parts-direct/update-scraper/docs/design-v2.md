@@ -1,7 +1,7 @@
 # Update scraper v2 — design
 
-Status (2026-10-11): **design, nothing built.** Design items are ⬜ planned; facts about the current
-code and data are ✅ with where they were read.
+Status (2026-10-11): **built and live in prod** for 16 manufacturer sites under scrape-job-manager
+(§0). Design items still ⬜ are noted where they remain; facts are ✅ with where they were observed.
 
 **Goal (user, 2026-10-11):** stop maintaining `parts_interchange` through static datasets and bulk
 loads. The update scraper creates and updates database rows as it scrapes, keeps every manufacturer
@@ -11,6 +11,33 @@ current, and fills the gaps the 2024 scrape left (first: 3,492 Mopar vehicles, s
 **Approach:** evolve `update-scraper/`, not a rewrite. Keep the browser/stealth setup, the
 vehicle-picker tree builder, `CachedParser`, and the webcache / imgcache / request-auth clients.
 Replace the JSON state files with database writes and a work queue; add outage handling.
+
+## 0. Rollout state (2026-10-11)
+
+✅ Live in **gyopart prod** (Argo app `gyopart`, `main`, `values.yaml` + `values-prod.yaml`) from
+2026-10-11 23:46Z; first run (Mitsubishi) started discovery as designed.
+
+- Prod `parts_interchange` migrated to `0002_scrape_keys` and its queue seeded (43,778 cars as `done`;
+  Mopar 3,493 `pending`, 2,296 `no_catalog`). Image CDN pools registered in prod request-auth (§3.8b).
+- Pool `parts-direct`: daily, 06:00–23:00 America/New_York. Scraper `parts-direct`: timeout 3h
+  (SCRAPE_DEADLINE ≈ 2h50m in), concurrency 4; operator `maxConcurrentRuns` 6 (prod).
+- Jobs (smoke-tested 2026-10-11: homepage through Cloudflare, a vehicle's categories, a category's parts):
+
+| Site config | Job params | Notes |
+|---|---|---|
+| bmw, ford, gm, honda, hyundai, infiniti, jaguar, kia, mercedes, mini, mitsubishi, nissan, subaru, toyota, volvo | `refresh: false`, `discovery_interval_days: 30` | new vehicles only (§3.8d); mini also checked with a full discovery + 2026 cars written |
+| fiat (Mopar's full catalogue) | `discovery_interval_days: 30`, refresh on | 3,493-vehicle backlog; dev pilot ran here first |
+
+- **Held back** (no job):
+
+| Site | Finding (2026-10-11) |
+|---|---|
+| audi, acura, porsche | moved to `<make>.oempartsonline.com` — a different platform: vehicle URLs redirect to a model page, the picker AJAX answers 403 even after the warm-up |
+| vw | `volkswagenpartsdirect.com` redirects to a dealer site, `hewlettvw.com` |
+| mazda | Cloudflare interstitial never cleared from the VPN (> 45 s, twice) |
+| suzuki | `suzukicarparts.com` serves an expired TLS certificate |
+
+- The dev pilot job (`gyopart-dev/parts-direct-mopar`) is suspended so the site isn't scraped twice.
 
 ---
 
@@ -169,15 +196,25 @@ A crash mid-vehicle rolls back to the previous state of that car; re-running a v
 
 Site-specific code is the tree builder (`recent_tree_builder.py`), the page parser (`CachedParser`) and
 the config (base URL). Moving a manufacturer to a new site means a parser for the new site and new
-`page_url`s in `scrape_target`. Because keys are vehicle- and part-based, the new site's scrapes update
-the existing cars and parts in place instead of duplicating them. Select values differing between sites
-(e.g. trim spelled differently) would create new lookup rows; that mapping is the cost of a site move,
-handled when it happens.
+`page_url`s in `scrape_target`. Because keys are vehicle- and part-based (✅ user: the parts DB is tied
+only to part number and year/make/model/trim/engine — Mopar and Volvo were scraped from more than one
+site before), the new site's scrapes update the existing cars and parts in place. Select values
+differing between sites (e.g. trim spelled differently) would create new lookup rows; that mapping is
+the cost of a site move, handled when it happens.
+
+Guards (built 2026-10-11, after Audi's redirect was misread as "no catalogue"): a navigation that lands
+on another domain stops the run as broken (exit 65, "site moved"), so the job degrades and emails; a
+vehicle URL that redirects elsewhere on the site fails that vehicle instead of marking it `no_catalog`.
+Sites seen moved so far: §0.
 
 ### 3.7 Running under scrape-job-manager
 
 - One shared manufacturer image (✅ user: one image for all manufacturer sites), built with the repo's
-  docker compose (`scraper-parts-direct` ⬜), pinned by digest like the junkyard scrapers.
+  docker compose (✅ `scraper-parts-direct`), pinned by digest in `values-dev.yaml` / `values-prod.yaml`
+  (never `values.yaml`: Helm merges it into every environment, which once created the prod jobs in dev).
+- Params reach the container as `--<key>=<value>` args (snake_case keys, `true`/`false` booleans) and as
+  `SCRAPE_PARAMS`; `run_v2.normalise_args` maps them onto the CLI (`--refresh=false` → `--no-refresh`).
+  The image uses `ENTRYPOINT`, since args replace a `CMD`.
 - One `ScrapeJob` per **manufacturer** (~22), never per vehicle: vehicles live in `scrape_target`, and a
   run works through as many as fit before its deadline; the next run resumes from the queue. A
   caught-up manufacturer finds nothing older than 180 days and exits in seconds with zero items.
@@ -185,15 +222,17 @@ handled when it happens.
   contract; result payload `{"items": vehicles_scraped, "new": …, "updated": …}`.
 - **Several manufacturers at once** (✅ user ran 3–5 parts-direct scrapers concurrently in the past,
   each slow): every manufacturer is its own site, so the parts-direct `Scraper` gets
-  `policy.concurrency: 4` (⬜) — up to four manufacturer jobs in parallel, one session per site.
+  `policy.concurrency: 4` (✅ prod) — up to four manufacturer jobs in parallel, one session per site.
   Per-site pacing stays with request-auth's per-domain permits. The operator's global
-  `maxConcurrentRuns` (3 today, shared with the junkyard scrapers) would be raised to 6 (⬜) so day-long
-  parts-direct runs don't starve the junkyard runs.
+  `maxConcurrentRuns` is 6 in prod (✅). Runs are capped at 3h so four slots rotate through every site
+  with work inside the 17h window.
 - `health.minItems: 0` — a run that only refreshed nothing because the site was down exits 75 instead,
   so zero items on exit 0 means "queue empty", which is fine.
-- Browser: Chromium bundled in the image (⬜), so the VPN proxy can be set per launch (§3.8). The
-  scrape-stack browserless (✅ `browserless` service in `scrapestack-dev`) would need the proxy as a
-  server-wide launch flag instead.
+- Browser (✅ built): scrape-stack's browserless, headed (`?headless=false`), with the VPN proxy as a
+  per-session `--proxy-server` flag and a session `timeout` that outlives the run's deadline (browserless'
+  default `CONNECTION_TIMEOUT` is now 1h, chart value `browserless.connectionTimeoutMs`). The image holds
+  only the Playwright client. A lost browser is reconnected (up to 3 times per run, ~2.5 min of retries
+  each) and the vehicle retried. Locally, without `BROWSERLESS_URL`, the updater launches headed Chromium.
 
 ### 3.8 Network: all site traffic through the VPN
 
@@ -221,15 +260,28 @@ one replica — every concurrent job shares one exit IP).
 
 - **Headless is blocked, headed passes.** Through the same exit IP and Chromium build, headless
   (headless shell and new-headless) got Cloudflare's block page or a challenge that never settled;
-  headed Chromium loaded the site normally. The updater launches headed full Chromium; in the
-  container it runs under Xvfb.
+  headed Chromium loaded the site normally. In the cluster the updater uses browserless headed
+  sessions (✅ verified through the VPN: headless → "Attention Required", headed → the real site).
 - **The vehicle-picker AJAX endpoints are stricter.** With `cf_clearance` already set, an XHR to
   `/ajax/vehicle-picker/makes/all` still got the challenge body ("Enable JavaScript and cookies to
   continue", 403). After one top-level navigation to that URL (which returned the JSON directly), the
   same XHR returned 200. Only discovery uses the picker; vehicle, category and part pages are plain page
-  loads. So discovery warms up with that one navigation before its XHRs (⬜ when discovery is built).
+  loads. So discovery warms up with that one navigation before its XHRs (✅ built, §3.8c).
+- The interstitial can take 15–20 s to clear (Ford); a page still on "Just a moment..." is given up to
+  45 s (`CHALLENGE_WAIT_S`) before it counts as unavailable. Mazda's never cleared (§0).
 - A Cloudflare block page stops the run as blocked (65); a challenge that never settles as transient
   (75).
+
+### 3.8b Images
+
+- A part page lists up to 8 product images in 3 sizes (✅ a 2026 page). Downloaded inline and one at a time
+  they left the browser idle for minutes per part, so a vehicle's images are collected during the crawl
+  and fetched 8 at a time after its pages.
+- Image downloads take request-auth permits like page fetches, so they are paced, backed off and visible
+  in its panel. The image CDNs need a larger pool than the default 1, configured in request-auth
+  (✅ dev and prod, 2026-10-11): `cdn-product-images.revolutionparts.io`,
+  `cdn-illustrations.revolutionparts.io`, `s3.amazonaws.com`, `dz310nzuyimx0.cloudfront.net` — pool 8,
+  base delay 200 ms.
 
 ### 3.8c Discovery (built 2026-10-11)
 
@@ -254,17 +306,6 @@ one replica — every concurrent job shares one exit IP).
 - A run with nothing claimable and discovery not due exits before opening a browser ("nothing_due",
   exit 0), so the daily schedule makes no site traffic on days without work, while a backlog (the
   2024–2026 vehicles the bulk data lacks) is still worked every day rather than once a month.
-
-### 3.8b Images
-
-- A part page lists up to 8 product images in 3 sizes (✅ a 2026 page). Downloaded inline and one at a time
-  they left the browser idle for minutes per part, so a vehicle's images are collected during the crawl
-  and fetched 8 at a time after its pages.
-- Image downloads take request-auth permits like page fetches, so they are paced, backed off and visible
-  in its panel. The image CDNs need a larger pool than the default 1, configured in request-auth
-  (✅ dev and prod, 2026-10-11): `cdn-product-images.revolutionparts.io`,
-  `cdn-illustrations.revolutionparts.io`, `s3.amazonaws.com`, `dz310nzuyimx0.cloudfront.net` — pool 8,
-  base delay 200 ms.
 
 ### 3.9 Migrating the schema
 
@@ -299,17 +340,23 @@ then tuned through request-auth's permit rate for that domain rather than by add
 
 ## 5. Phases
 
-1. **Schema:** Alembic baseline + revision (keys, `scrape_target`); new `parts_interchange_common`
-   version; apply to dev; seed the queue.
-2. **Updater v2 core:** session reuse, page validation, queue claiming, transactional writer; run
-   against dev for a handful of Mopar vehicles and compare with what the site shows.
-3. **Under the operator:** `SCRAPE_DEADLINE` injection in scrape-job-manager; image, `scraper-parts-direct` compose service, `parts-direct` pool and a
-   gyopart-dev ScrapeJob for Mopar; watch a week.
-4. **Prod:** migrate prod, ScrapeJobs per manufacturer.
+1. ✅ **Schema:** Alembic baseline + revision (keys, `scrape_target`); `parts_interchange_common` 0.3.0
+   on PyPI; dev and prod migrated and seeded.
+2. ✅ **Updater v2 core:** session reuse, page validation, queue claiming, transactional writer, background
+   images, discovery; live-tested against dev on Mopar and Mini.
+3. ✅ **Under the operator:** `SCRAPE_DEADLINE` in scrape-job-manager; image, compose service, pool and a
+   gyopart-dev Mopar job (ran in-cluster; the week of watching was cut short by moving to prod).
+4. ✅ **Prod:** migrated, 16 ScrapeJobs (§0), 2026-10-11.
+5. ⬜ The held-back sites (§0), each its own piece of work.
 
 ## 6. Open questions
 
-- Pool hours and cadence for parts-direct (§4).
-- Raising `maxConcurrentRuns` to 6 and parts-direct concurrency to 4 (§3.7).
+- Brand-new models start sparse (the 2026 Mini Cooper lists accessories only) and, with refresh off,
+  won't be revisited: refresh current/next model-year vehicles sooner (e.g. 30 days)? ⬜ proposed, not
+  decided.
+- An image sweep job draining `image.saved = false` (images still in flight at a stop, CDN failures, the
+  2024 backlog) — agreed for later (user, 2026-10-11).
+- First-run discovery on the big sites (GM, Ford) may need more than one 3h run; it resumes, but
+  measure.
 - Whether `CachedParser` changes need to be shared with the single-threaded scraper (currently the
   updater imports it from `singlethreaded-scraper/src`), or the updater should own a copy.
