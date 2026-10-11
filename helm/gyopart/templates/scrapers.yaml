@@ -29,14 +29,26 @@ spec:
   timeout: {{ $scraper.timeout | default "1h" }}
   env:
     # Order matters: $(VAR) only expands variables defined earlier in the list.
+    {{- if eq ($scraper.database | default "junkyard") "parts-interchange" }}
+    # Parts catalogue writers (the parts-direct updater).
+    - name: PARTS_USER
+      valueFrom: {secretKeyRef: {name: {{ $.Values.postgres.partsSecret }}, key: PARTS_USER}}
+    - name: PARTS_PASSWORD
+      valueFrom: {secretKeyRef: {name: {{ $.Values.postgres.partsSecret }}, key: PARTS_PASSWORD}}
+    - name: PARTS_INTERCHANGE_DATABASE_URL
+      value: "postgresql://$(PARTS_USER):$(PARTS_PASSWORD)@{{ $.Values.postgres.host }}:5432/parts_interchange"
+    {{- else }}
     - name: JUNKYARD_USER
       valueFrom: {secretKeyRef: {name: {{ $.Values.postgres.junkyardSecret }}, key: JUNKYARD_USER}}
     - name: JUNKYARD_PASSWORD
       valueFrom: {secretKeyRef: {name: {{ $.Values.postgres.junkyardSecret }}, key: JUNKYARD_PASSWORD}}
     - name: JUNKYARD_DATABASE_URL
       value: "postgresql://$(JUNKYARD_USER):$(JUNKYARD_PASSWORD)@{{ $.Values.postgres.host }}:5432/junkyard_inventory"
+    {{- end }}
     - {name: WEBCACHE_URL, value: {{ $s.webcacheUrl | quote }}}
+    - {name: IMGCACHE_URL, value: {{ $s.imgcacheUrl | quote }}}
     - {name: REQUEST_AUTH_SERVER_URL, value: {{ $s.requestAuthServer | quote }}}
+    - {name: REQUEST_AUTH_URL, value: {{ $s.requestAuthServer | quote }}}
     {{- with $scraper.env }}
     {{- toYaml . | nindent 4 }}
     {{- end }}

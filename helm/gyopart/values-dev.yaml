@@ -19,8 +19,16 @@ scraping:
   imagePullPolicy: IfNotPresent
   webcacheUrl: http://webcache.scrapestack-dev.svc.cluster.local:8000
   requestAuthServer: request-auth-server.scrapestack-dev.svc.cluster.local:9000
+  imgcacheUrl: http://imgcache.scrapestack-dev.svc.cluster.local:8010
 
   pools:
+    # Parts catalogue updater (parts-interchange/parts-direct/update-scraper/docs/design-v2.md): each
+    # manufacturer job runs once a day and works its queue until SCRAPE_DEADLINE (end of these hours).
+    parts-direct:
+      every: 1d
+      activeHours:
+        tz: America/New_York
+        hours: "06:00-23:00"
     junkyard-inventory:
       every: 1w
       activeHours:
@@ -60,3 +68,25 @@ scraping:
         limits: {memory: 2Gi}
       jobs:
         ryans-pic-a-part: {pool: junkyard-inventory}
+    # Parts-direct update scraper v2: one image for every manufacturer site, one job per site. Works a
+    # DB queue, so items per run vary with what is due — no zero/drop checks. Browser is scrape-stack's
+    # browserless (headed); all site traffic goes through the VPN proxy.
+    parts-direct:
+      image: dwilson2547/gyopart-scraper-parts-direct:latest
+      database: parts-interchange
+      timeout: 17h
+      health: {minItems: 0, maxDropPct: 100}
+      policy:
+        spacing: {min: 2m, jitter: 3m}
+        retry: {attempts: 3, backoff: {initial: 15m, factor: 2, max: 1h}}
+      env:
+        - {name: VPN_PROXY_URL, value: "http://nordvpn-proxy-entrypoint.vpn.svc.cluster.local:8118"}
+        - {name: NO_PROXY, value: ".svc.cluster.local,.cluster.local,localhost,127.0.0.1"}
+        - {name: BROWSERLESS_URL, value: "ws://browserless.scrapestack-dev.svc.cluster.local:3000"}
+      resources:
+        requests: {cpu: 250m, memory: 512Mi}
+        limits: {memory: 1Gi}
+      jobs:
+        # Smoke-test each site on its own before adding its job (requested 2026-10-11).
+        # Suspended until the image is pushed and pinned (scripts/pin-scraper-images.sh).
+        parts-direct-mopar: {pool: parts-direct, params: {config: fiat}, suspend: true}
