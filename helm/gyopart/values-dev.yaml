@@ -72,7 +72,7 @@ scraping:
     # DB queue, so items per run vary with what is due — no zero/drop checks. Browser is scrape-stack's
     # browserless (headed); all site traffic goes through the VPN proxy.
     parts-direct:
-      image: dwilson2547/gyopart-scraper-parts-direct@sha256:7e0d31956ab7a8f4f87ce54aa050dfbb4de3c43895f3e4d5dbc13a1ae2a2fd1d
+      image: dwilson2547/gyopart-scraper-parts-direct@sha256:618c3193eee51564e335119da1d1ead401216afd9ad29ce474e8f7de7976880a
       database: parts-interchange
       timeout: 17h
       health: {minItems: 0, maxDropPct: 100}
