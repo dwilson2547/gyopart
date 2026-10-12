@@ -153,7 +153,8 @@ def _parse_card(card_div) -> dict | None:
 def _parse_vehicle_cards(html: str) -> list[dict]:
     soup = BeautifulSoup(html, "html.parser")
     results, skipped = [], 0
-    for card in soup.find_all("div", class_="iis-col-sm-4"):
+    # Cards used to be iis-col-sm-4 columns; the 2026 markup puts the stock id on the .card-price div itself.
+    for card in soup.find_all("div", class_="card-price"):
         parsed = _parse_card(card)
         if parsed:
             results.append(parsed)
@@ -173,7 +174,8 @@ def _fetch_makes(
     soup = BeautifulSoup(html, "html.parser")
     makes, seen = [], set()
     for a in soup.find_all("a", href=True):
-        m = re.search(r"/parts/([^/]+)/$", a["href"])
+        # Make links dropped their trailing slash in 2026 (/parts/ACURA); model links still have one.
+        m = re.search(r"/parts/([A-Z0-9_]+)/?$", a["href"])
         if m:
             make = m.group(1)
             if make not in seen:

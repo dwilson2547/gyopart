@@ -169,7 +169,8 @@ def _extract_yard_id(card_div) -> str:
     """Derive yard ID from the CDN image URL; falls back to 'UNKNOWN'."""
     img = card_div.find("img")
     if img:
-        src = img.get("src", "")
+        # Images are lazy-loaded: the real URL is in data-src, src is a placeholder.
+        src = img.get("data-src") or img.get("src", "")
         m = _CDN_YARD_RE.search(src)
         if m:
             cdn_prefix = m.group(1).lower()
@@ -199,7 +200,7 @@ def _parse_card(card_div) -> dict | None:
     img = card_div.find("img")
     preview_image_url = None
     if img:
-        src = img.get("src", "")
+        src = img.get("data-src") or img.get("src", "")
         if "cloudfront" in src:
             preview_image_url = src
 
@@ -239,7 +240,8 @@ def _fetch_makes(
     soup = BeautifulSoup(html, "html.parser")
     makes, seen = [], set()
     for a in soup.find_all("a", href=True):
-        m = re.search(r"/parts/([^/]+)/$", a["href"])
+        # Make links dropped their trailing slash in 2026 (/parts/ACURA); model links still have one.
+        m = re.search(r"/parts/([A-Z0-9_]+)/?$", a["href"])
         if m:
             make = m.group(1)
             if make not in seen:

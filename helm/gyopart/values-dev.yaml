@@ -85,22 +85,22 @@ scraping:
       jobs:
         pull-a-part: {pool: junkyard-inventory, suspend: true}
     speedway-ap:
-      image: dwilson2547/gyopart-scraper-speedway-ap@sha256:be42b632f2804d3270bb5a3b92dab0cbadc9b62386a9b98b82206ebb65ac3545
+      image: dwilson2547/gyopart-scraper-speedway-ap@sha256:5dac55a81b369e06a8221e91f61cc30112aef6a635a6d3db1afc70041cde3211
       timeout: 1h
       jobs:
         speedway-ap: {pool: junkyard-inventory, suspend: true}
     arizona-auto-parts:
-      image: dwilson2547/gyopart-scraper-arizona-auto-parts@sha256:f7855b5bf43805e2a7a0f1c7ff5a1a03f86a584772815c74e78db98810858381
+      image: dwilson2547/gyopart-scraper-arizona-auto-parts@sha256:5813ed5c79d51e0af4e319a7d58311347f04e811eadd90f5798a1a62a2592a48
       timeout: 1h
       jobs:
         arizona-auto-parts: {pool: junkyard-inventory, suspend: true}
     las-parts:
-      image: dwilson2547/gyopart-scraper-las-parts@sha256:a6654ac853901fbf1dc09d58beec0711dccc24c8c99d815937260c325ec34e8a
+      image: dwilson2547/gyopart-scraper-las-parts@sha256:c51fdbb697865601b1e7ae74066f71cc439631900d97af488932687b34818451
       timeout: 1h
       jobs:
         las-parts: {pool: junkyard-inventory, suspend: true}
     stricker-auto-parts:
-      image: dwilson2547/gyopart-scraper-stricker-auto-parts@sha256:58320938f5ac477f9ae66b7f4cbaeda5f043342f6f035dad2baa052f758fd5a0
+      image: dwilson2547/gyopart-scraper-stricker-auto-parts@sha256:c0efd73c448be6394fa4893ee5a06bda5667f1546c2830627901d227bd6c271c
       timeout: 1h
       jobs:
         stricker-auto-parts: {pool: junkyard-inventory, suspend: true}
@@ -115,7 +115,7 @@ scraping:
       jobs:
         central-florida-pick-and-pay: {pool: junkyard-inventory, suspend: true}
     picknpull-sa:
-      image: dwilson2547/gyopart-scraper-picknpull-sa@sha256:f47e6a8bc5a89a2cfba5f7957a94cdb728ae29afb1d7c2bfaeaa4ed7796c0253
+      image: dwilson2547/gyopart-scraper-picknpull-sa@sha256:910447fb4601118daf2b58002fc116524fceeabac3759dadafd2f5401f6b30c3
       timeout: 30m
       jobs:
         picknpull-sa: {pool: junkyard-inventory, suspend: true}

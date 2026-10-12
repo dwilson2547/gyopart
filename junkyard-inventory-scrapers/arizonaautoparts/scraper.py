@@ -218,7 +218,8 @@ def _fetch_makes(
     soup = BeautifulSoup(html, "html.parser")
     makes, seen = [], set()
     for a in soup.find_all("a", href=True):
-        m = re.search(r"/parts/([^/]+)/$", a["href"])
+        # Make links dropped their trailing slash in 2026 (/parts/ACURA); model links still have one.
+        m = re.search(r"/parts/([A-Z0-9_]+)/?$", a["href"])
         if m:
             make = m.group(1)
             if make not in seen:

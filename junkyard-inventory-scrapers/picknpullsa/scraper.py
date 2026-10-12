@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 # Site:     Pick n Pull San Antonio (https://picknpullsa.com)
-# Strategy: single GET /vehicle-inventory/ → parse <table id="vehicles-inventory">
-# Columns:  Year, Make, Model, Color, VIN, Engine, Row, Arrival Date
+# Strategy: GET /inventory?page=N (≈24 rows per page) → parse <table class="inv-table">  (site redesigned 2026;
+#           was a single /vehicle-inventory/ table)
+# Columns:  Year, Make, Model, Color, Stock #, VIN, Engine, Row, Arrival, Inquire
 # Note:     Pre-1981 vehicles may have short manufacturer serials (< 17 chars) — stored as-is.
 # Dedup key: VIN / serial (stored as source_key); engine → extras["engine"]
 # Source identifier: "picknpullsa"
 
 import logging
+import re
 import sys
 from pathlib import Path
 import os
@@ -29,7 +31,8 @@ from scrape_contract import Broken, run  # noqa: E402
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-INVENTORY_URL           = "https://picknpullsa.com/vehicle-inventory/"
+INVENTORY_URL           = "https://picknpullsa.com/inventory"
+MAX_PAGES               = 400  # ≈ 9,600 vehicles; the yard advertises 3,500+
 DOMAIN                  = "picknpullsa.com"
 SOURCE                  = "picknpullsa"
 CLIENT_NAME             = "picknpullsa"
@@ -73,64 +76,85 @@ def _fetch_page(
     http: requests.Session,
     web_cache: WebCacheClient,
     request_auth: RequestAuthClient,
+    page: int,
 ) -> str:
-    entry = web_cache.get(INVENTORY_URL, max_age=CACHE_MAX_AGE_SECONDS)
+    url = f"{INVENTORY_URL}?page={page}"
+    entry = web_cache.get(url, max_age=CACHE_MAX_AGE_SECONDS)
     if entry:
-        logger.info("Cache hit for inventory page")
         return entry["content"]
 
-    logger.info("GET %s", INVENTORY_URL)
+    logger.info("GET %s", url)
     with request_auth.acquire(DOMAIN) as permit:
-        resp = http.get(INVENTORY_URL, headers=HEADERS, timeout=60)
+        resp = http.get(url, headers=HEADERS, timeout=60)
         permit.set_status(resp.status_code)
         if resp.status_code == 429:
             logger.error("429 received — aborting run")
             raise Broken(f"429 rate limited by {SOURCE}")
         resp.raise_for_status()
 
-    web_cache.store(INVENTORY_URL, resp.text, CLIENT_NAME)
+    web_cache.store(url, resp.text, CLIENT_NAME)
     return resp.text
 
 
-def _parse_inventory(html: str) -> list[dict]:
+def _parse_inventory(html: str) -> tuple[list[dict], bool]:
+    """Vehicles on one page, and whether the page links to a next one."""
     soup = BeautifulSoup(html, "html.parser")
-    table = soup.find("table", {"id": "vehicles-inventory"})
+    table = soup.find("table", class_="inv-table")
     if not table:
-        raise ValueError("Inventory table 'vehicles-inventory' not found — possible selector drift")
-    tbody = table.find("tbody")
-    if not tbody:
-        raise ValueError("No <tbody> in 'vehicles-inventory' table")
+        raise Broken("Inventory table 'inv-table' not found — possible layout change")
 
     vehicles, skipped = [], 0
-    for tr in tbody.find_all("tr"):
+    for tr in table.find_all("tr"):
         cells = tr.find_all("td")
-        if len(cells) < 8:
-            skipped += 1
-            continue
+        if len(cells) < 9:
+            continue  # header row (th) or a short row
 
         def cell(i: int) -> str:
             return cells[i].get_text(strip=True)
 
-        # Columns: Year, Make, Model, Color, VIN, Engine, Row, Arrival Date
-        vin = cell(4)
+        # Columns: Year, Make, Model, Color, Stock #, VIN, Engine, Row, Arrival, Inquire
+        vin = cell(5)
         if not vin:
             skipped += 1
             continue
 
-        engine = cell(5) or None
+        extras = {k: v for k, v in (("engine", cell(6)), ("stock_number", cell(4))) if v}
         vehicles.append({
             "vin":          vin,
             "year":         _parse_year(cell(0)),
             "make":         cell(1) or None,
             "model":        cell(2) or None,
             "color":        cell(3) or None,
-            "row":          cell(6) or None,
-            "arrival_date": _parse_arrival_date(cell(7)),
-            "extras":       {"engine": engine} if engine else None,
+            "row":          cell(7) or None,
+            "arrival_date": _parse_arrival_date(cell(8)),
+            "extras":       extras or None,
         })
+    if skipped:
+        logger.debug("Skipped %d rows without a VIN", skipped)
+    has_next = soup.find("a", href=re.compile(r"[?&]page=\d+")) is not None and bool(vehicles)
+    return vehicles, has_next
 
-    logger.info("Parsed %d vehicles (%d skipped)", len(vehicles), skipped)
-    return vehicles
+
+def _fetch_inventory(
+    http: requests.Session,
+    web_cache: WebCacheClient,
+    request_auth: RequestAuthClient,
+) -> list[dict]:
+    """Walk the pages until one comes back empty. Rows can shift between pages while we crawl, so
+    vehicles are de-duplicated by VIN."""
+    by_vin: dict[str, dict] = {}
+    for page in range(1, MAX_PAGES + 1):
+        vehicles, has_next = _parse_inventory(_fetch_page(http, web_cache, request_auth, page))
+        new = [v for v in vehicles if v["vin"] not in by_vin]
+        for v in vehicles:
+            by_vin[v["vin"]] = v
+        # Past the end the site may repeat the last page instead of returning an empty one.
+        if not vehicles or not has_next or not new:
+            break
+    else:
+        logger.warning("Stopped at MAX_PAGES=%d — inventory may be incomplete", MAX_PAGES)
+    logger.info("Parsed %d vehicles over %d pages", len(by_vin), page)
+    return list(by_vin.values())
 
 
 def _ensure_location(db: Session, now: datetime) -> int:
@@ -243,9 +267,7 @@ def main() -> dict:
     try:
         with WebCacheClient(WEBCACHE_URL, timeout=WEBCACHE_TIMEOUT) as web_cache:
             http = requests.Session()
-            html = _fetch_page(http, web_cache, request_auth)
-
-        vehicles = _parse_inventory(html)
+            vehicles = _fetch_inventory(http, web_cache, request_auth)
 
         if not vehicles:
             raise Broken("0 vehicles parsed — possible layout change")

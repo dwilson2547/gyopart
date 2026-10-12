@@ -14,7 +14,7 @@ import re
 from datetime import datetime, timezone
 
 import requests
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, NavigableString
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -78,7 +78,8 @@ def _fetch(
 
 
 def _table_data(card_div) -> dict[str, str]:
-    """Extract key/value pairs from 2-column <tr><td>Key:</td><td>Value</td></tr> table rows."""
+    """Key/value pairs from a card: 2-column <tr><td>Key:</td><td>Value</td></tr> rows (old markup) or
+    <b>Key :</b> value<br> lines (2026 markup)."""
     data = {}
     for row in card_div.find_all("tr"):
         cells = row.find_all("td")
@@ -87,6 +88,16 @@ def _table_data(card_div) -> dict[str, str]:
             val = cells[1].get_text(strip=True)
             if key and val:
                 data[key] = val
+    for b in card_div.find_all("b"):
+        key = b.get_text(strip=True).rstrip(":").strip()
+        sibling = b.next_sibling
+        if key and isinstance(sibling, NavigableString):
+            val = str(sibling).strip().lstrip(":").strip()
+            if val:
+                data.setdefault(key, val)
+    if "Make" not in data and data.get("Make/Model"):
+        make, _, model = data["Make/Model"].partition(" ")
+        data["Make"], data["Model"] = make, model or None
     return data
 
 
@@ -179,10 +190,8 @@ def _parse_vehicle_cards(
 ) -> list[dict]:
     soup = BeautifulSoup(html, "html.parser")
     results, skipped = [], 0
-    for outer in soup.find_all("div", class_="iis-col-sm-4"):
-        card = outer.find("div", class_="card-price")
-        if not card:
-            continue
+    # Cards used to sit in an iis-col-sm-4 column; the 2026 markup dropped it, so find the cards directly.
+    for card in soup.find_all("div", class_="card-price"):
         parsed = _parse_card(card, make_hint=make_hint, model_hint=model_hint)
         if parsed:
             results.append(parsed)
@@ -202,7 +211,8 @@ def _fetch_makes(
     soup = BeautifulSoup(html, "html.parser")
     makes, seen = [], set()
     for a in soup.find_all("a", href=True):
-        m = re.search(r"/parts/([^/]+)/$", a["href"])
+        # Make links dropped their trailing slash in 2026 (/parts/ACURA); model links still have one.
+        m = re.search(r"/parts/([A-Z0-9_]+)/?$", a["href"])
         if m:
             make = m.group(1)
             if make not in seen:
