@@ -121,3 +121,32 @@ export interface InterchangeYear { year: number; cars: InterchangeCar[] }
 export interface InterchangeModel { model: string; year_ranges: string; car_count: number; years: InterchangeYear[] }
 export interface InterchangeMake { make: string; car_count: number; models: InterchangeModel[] }
 export interface Interchange { part_id: number; car_count: number; makes: InterchangeMake[] }
+
+export interface YardVehicle {
+  vehicle_id: number
+  year: number | null
+  make: string | null
+  model: string | null
+  trim: string | null
+  row: string | null
+  car_id: number | null
+  color: string | null
+  mileage: number | null
+  vin: string | null
+  arrival_date: string | null
+  match: 'exact' | 'likely'
+}
+
+export interface Yard {
+  location_id: number
+  name: string
+  address: string | null
+  city: string | null
+  state: string | null
+  zip_code: string | null
+  phone: string | null
+  distance_miles: number
+  lat: number | null
+  lng: number | null
+  matching_vehicles: YardVehicle[]
+}

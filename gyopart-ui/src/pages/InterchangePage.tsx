@@ -80,12 +80,12 @@ export function InterchangePage() {
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter by make">
-            <Chip on={!makeFilter} onClick={() => setParams(p => { p.delete('make'); return p }, { replace: true })}>
+            <Chip on={!makeFilter} onClick={() => setParams(prev => { const p = new URLSearchParams(prev); p.delete('make'); return p }, { replace: true })}>
               All · {data.car_count}
             </Chip>
             {data.makes.map(m => (
               <Chip key={m.make} on={makeFilter === m.make}
-                onClick={() => setParams(p => { p.set('make', m.make); return p }, { replace: true })}>
+                onClick={() => setParams(prev => { const p = new URLSearchParams(prev); p.set('make', m.make); return p }, { replace: true })}>
                 {m.make} · {m.car_count}
               </Chip>
             ))}

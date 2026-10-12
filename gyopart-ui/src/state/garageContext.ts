@@ -6,6 +6,7 @@ export interface GarageState {
   activeId: number | null // car_id of the active vehicle
   zip: string
   radius: number
+  homeYard: string // yard name (ids differ between dev and prod); pinned first in yard lists
 }
 
 export interface Garage extends GarageState {
@@ -14,6 +15,7 @@ export interface Garage extends GarageState {
   remove: (carId: number) => void
   setActive: (carId: number) => void
   setHome: (zip: string, radius: number) => void
+  setHomeYard: (name: string) => void
 }
 
 export const GarageContext = createContext<Garage | null>(null)

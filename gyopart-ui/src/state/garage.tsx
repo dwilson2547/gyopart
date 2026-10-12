@@ -4,7 +4,9 @@ import type { GarageVehicle } from '../types'
 import { GarageContext, type Garage, type GarageState } from './garageContext'
 
 const KEY = 'gyopart-garage'
-const DEFAULTS: GarageState = { vehicles: [], activeId: null, zip: '48314', radius: 50 }
+const DEFAULTS: GarageState = {
+  vehicles: [], activeId: null, zip: '48314', radius: 50, homeYard: 'US Auto Supply — Sterling Heights',
+}
 
 /** The user's vehicles, active vehicle and home ZIP/radius — kept in localStorage (single-user app). */
 export function GarageProvider({ children }: { children: ReactNode }) {
@@ -23,11 +25,12 @@ export function GarageProvider({ children }: { children: ReactNode }) {
   }), [])
   const setActive = useCallback((carId: number) => setState(s => ({ ...s, activeId: carId })), [])
   const setHome = useCallback((zip: string, radius: number) => setState(s => ({ ...s, zip, radius })), [])
+  const setHomeYard = useCallback((homeYard: string) => setState(s => ({ ...s, homeYard })), [])
 
   const value = useMemo<Garage>(() => ({
     ...state,
     active: state.vehicles.find(v => v.car_id === state.activeId) ?? null,
-    add, remove, setActive, setHome,
-  }), [state, add, remove, setActive, setHome])
+    add, remove, setActive, setHome, setHomeYard,
+  }), [state, add, remove, setActive, setHome, setHomeYard])
   return <GarageContext.Provider value={value}>{children}</GarageContext.Provider>
 }
