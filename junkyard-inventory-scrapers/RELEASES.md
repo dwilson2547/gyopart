@@ -2,16 +2,17 @@
 
 Where each yard scraper runs under scrape-job-manager. Tick **Dev** when a run has succeeded in
 `gyopart-dev` (`helm/gyopart/values-dev.yaml`) and the rows were checked in the dev DB; tick **Prod**
-when the job is in `helm/gyopart/values-prod.yaml` and deployed from `main`. Getting a scraper ready
+when the job is in `helm/gyopart/values-prod.yaml` and deployed from `main`, and a prod run has succeeded. Once a scraper is in prod its dev job is
+`suspend: true` (no duplicate traffic); run-now it in dev to test a change first. Getting a scraper ready
 to run under the operator (contract, image, schedule) is in `README.md` § Running under
 scrape-job-manager.
 
 | Scraper | Source | Dev | Prod | Notes |
 |---------|--------|:---:|:----:|-------|
 | `us_auto_parts_sterling_heights/` | `us_auto_supply` | [x] | [x] | Prod pool `junkyard-daily` (feed refreshes ~01:30). First runs 2026-10-12, dev and prod: 1,092 vehicles each |
-| `parts-galore/` | `parts_galore` | [x] | [ ] | |
-| `pic-n-pull/` | `pic_n_pull` | [x] | [ ] | One job loops every location |
-| `ryans_pic_a_part/` | `ryans_pic_a_part` | [x] | [ ] | Recent-arrivals feed: drop check off |
+| `parts-galore/` | `parts_galore` | [x] | [x] | First prod run 2026-10-12: 1,063 vehicles |
+| `pic-n-pull/` | `pic_n_pull` | [x] | [x] | One job loops every location. First prod run 2026-10-12: 12,725 vehicles |
+| `ryans_pic_a_part/` | `ryans_pic_a_part` | [x] | [x] | Recent-arrivals feed: drop check off. First prod run 2026-10-12: 17 vehicles |
 | `pull_a_part_scraper/` | `pull_a_part` | [ ] | [ ] | |
 | `speedwayap/` | `speedway_ap` | [ ] | [ ] | |
 | `arizonaautoparts/` | `arizona_auto_parts` | [ ] | [ ] | |
