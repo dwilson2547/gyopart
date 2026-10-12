@@ -236,3 +236,33 @@ class PartDetailOut(BaseModel):
     diagrams: list[PartDiagramOut]
     fit_count: int
     fits_car: bool | None
+
+
+class InterchangeCar(BaseModel):
+    car_id: int
+    trim: str | None
+    engine: str | None
+
+
+class InterchangeYear(BaseModel):
+    year: int
+    cars: list[InterchangeCar]
+
+
+class InterchangeModel(BaseModel):
+    model: str
+    year_ranges: str  # "2009–2011, 2013"
+    car_count: int
+    years: list[InterchangeYear]
+
+
+class InterchangeMake(BaseModel):
+    make: str
+    car_count: int
+    models: list[InterchangeModel]
+
+
+class InterchangeOut(BaseModel):
+    part_id: int
+    car_count: int
+    makes: list[InterchangeMake]

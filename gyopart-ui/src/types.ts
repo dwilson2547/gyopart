@@ -113,3 +113,11 @@ export interface PartDetail {
   fit_count: number
   fits_car: boolean | null
 }
+
+export interface PartSummary { id: number; title: string | null; part_number: string | null; description: string | null; other_names: string | null }
+
+export interface InterchangeCar { car_id: number; trim: string | null; engine: string | null }
+export interface InterchangeYear { year: number; cars: InterchangeCar[] }
+export interface InterchangeModel { model: string; year_ranges: string; car_count: number; years: InterchangeYear[] }
+export interface InterchangeMake { make: string; car_count: number; models: InterchangeModel[] }
+export interface Interchange { part_id: number; car_count: number; makes: InterchangeMake[] }

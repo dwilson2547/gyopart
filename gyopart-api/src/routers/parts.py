@@ -6,9 +6,12 @@ from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import func, select
 
 from src.db import DbDep
-from src.models import Diagram, Image, Manufacturer, Part, Subcategory, car_diagrams, car_parts, diagram_parts, part_images
+from src.models import Car, Diagram, Engine, Image, Make, Manufacturer, Model, Part, Trim, Year, Subcategory, car_diagrams, car_parts, diagram_parts, part_images
 from src.routers.catalogue import best_label, label_from_alt
-from src.schemas import ImageSet, PagedPartsResponse, PartDetailOut, PartDiagramOut, PartOut
+from src.schemas import (
+    ImageSet, InterchangeCar, InterchangeMake, InterchangeModel, InterchangeOut, InterchangeYear,
+    PagedPartsResponse, PartDetailOut, PartDiagramOut, PartOut,
+)
 
 _REF_RE = re.compile(r"reference\s*#\s*(\w+)", re.IGNORECASE)
 MAX_DIAGRAMS = 6
@@ -135,3 +138,58 @@ def get_part_detail(part_id: int, db: DbDep, car_id: int | None = Query(None)):
         msrp=part.msrp, manufacturer=manufacturer.name if manufacturer else None,
         photos=photos, illustrations=illustrations, diagrams=diagrams, fit_count=fit_count, fits_car=fits_car,
     )
+
+
+def year_ranges(years: list[int]) -> str:
+    """[2009, 2010, 2011, 2013] → "2009–2011, 2013"."""
+    out: list[str] = []
+    ys = sorted(set(years))
+    i = 0
+    while i < len(ys):
+        j = i
+        while j + 1 < len(ys) and ys[j + 1] == ys[j] + 1:
+            j += 1
+        out.append(str(ys[i]) if i == j else f"{ys[i]}–{ys[j]}")
+        i = j + 1
+    return ", ".join(out)
+
+
+def group_interchange(part_id: int, rows) -> InterchangeOut:
+    """Rows of (car_id, year, make, model, trim, engine) → make → model → year → cars."""
+    tree: dict[str, dict[str, dict[int, list[InterchangeCar]]]] = {}
+    for r in rows:
+        try:
+            year = int(r.year)
+        except (TypeError, ValueError):
+            continue
+        tree.setdefault(r.make, {}).setdefault(r.model, {}).setdefault(year, []).append(
+            InterchangeCar(car_id=r.car_id, trim=r.trim, engine=r.engine))
+    makes = []
+    for make in sorted(tree, key=str.lower):
+        models = []
+        for model in sorted(tree[make], key=str.lower):
+            by_year = tree[make][model]
+            years = [InterchangeYear(year=y, cars=sorted(by_year[y], key=lambda c: ((c.trim or ""), (c.engine or ""))))
+                     for y in sorted(by_year, reverse=True)]
+            models.append(InterchangeModel(model=model, year_ranges=year_ranges(list(by_year)),
+                                           car_count=sum(len(y.cars) for y in years), years=years))
+        makes.append(InterchangeMake(make=make, car_count=sum(m.car_count for m in models), models=models))
+    return InterchangeOut(part_id=part_id, car_count=sum(m.car_count for m in makes), makes=makes)
+
+
+@router.get("/{part_id}/interchange", response_model=InterchangeOut)
+def get_interchange(part_id: int, db: DbDep):
+    """Every catalogue car this part fits, grouped make → model → year."""
+    if db.get(Part, part_id) is None:
+        raise HTTPException(status_code=404, detail="part not found")
+    rows = db.execute(
+        select(Car.id.label("car_id"), Year.name.label("year"), Make.name.label("make"), Model.name.label("model"),
+               Trim.name.label("trim"), Engine.name.label("engine"))
+        .join(car_parts, (car_parts.c.car_id == Car.id) & (car_parts.c.part_id == part_id))
+        .join(Year, Year.id == Car.year_id)
+        .join(Make, Make.id == Car.make_id)
+        .join(Model, Model.id == Car.model_id)
+        .outerjoin(Trim, Trim.id == Car.trim_id)
+        .outerjoin(Engine, Engine.id == Car.engine_id)
+    ).all()
+    return group_interchange(part_id, rows)
