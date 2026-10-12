@@ -2,7 +2,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from pipeline.car_matcher import (
-    decoded_engine, decoded_vehicle_fields, match_decoded, parse_catalogue_engine,
+    decoded_model_keys, name_key, decoded_engine, decoded_vehicle_fields, match_decoded, parse_catalogue_engine,
 )
 
 # 2010 Chrysler Sebring as NHTSA decodes it (US Auto Supply feed, 2026-10-12)
@@ -11,9 +11,10 @@ SEBRING = {"VIN": "1C3CC4FBXAN197479", "Make": "CHRYSLER", "Model": "Sebring", "
            "DriveType": "FWD/Front-Wheel Drive", "BodyClass": "Sedan/Saloon", "Doors": "4", "Turbo": "No"}
 
 
-def _pi_engine(rows):
+def _pi_engine(rows, model="Sebring"):
     conn = MagicMock()
-    conn.execute.return_value.all.return_value = [SimpleNamespace(id=i, trim=t, engine=e) for i, t, e in rows]
+    conn.execute.return_value.all.return_value = [
+        SimpleNamespace(id=r[0], trim=r[1], engine=r[2], model=r[3] if len(r) > 3 else model) for r in rows]
     engine = MagicMock()
     engine.connect.return_value.__enter__ = MagicMock(return_value=conn)
     engine.connect.return_value.__exit__ = MagicMock(return_value=False)
@@ -66,3 +67,16 @@ def test_decoded_vehicle_fields():
         "engine_size": 2.4, "engine_cylinders": 4, "fuel_type": "G", "engine_aspiration": "N/A",
         "drive_type": "FWD", "body_type": "Sedan/Saloon", "doors": 4, "trim": "LX",
     }
+
+
+def test_name_keys_are_loose():
+    assert name_key("Town and Country") == name_key("Town & Country")
+    assert name_key("F-150") == name_key("F150")
+    assert decoded_model_keys({"Model": "Caravan/Grand Caravan"}) == {"caravangrandcaravan", "caravan", "grandcaravan"}
+    assert name_key("Ram 1500") in decoded_model_keys({"Model": "Ram", "Series": "1500"})
+
+
+def test_match_picks_the_model_among_the_makes_cars():
+    rows = [(1, "LX", "3.3L V6 - Gas", "Town & Country"), (2, "LX", "2.4L L4 - Gas", "Sebring")]
+    raw = dict(SEBRING, Model="Town and Country", DisplacementL="3.3", EngineCylinders="6", Trim="")
+    assert match_decoded(raw, _pi_engine(rows)).candidates == [1]

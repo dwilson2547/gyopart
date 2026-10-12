@@ -75,7 +75,7 @@ def match_car(
         model_match_name = models[model_idx].name
         confidence = min(make_score, model_score)
 
-        # Prefer year-specific cars; fall back to any car with this make+model
+        # Cars for this exact year/make/model
         car_id = None
         candidates: list[int] | None = None
         if year:
@@ -94,15 +94,8 @@ def match_car(
                     car_id = ids[0]
                     candidates = list(ids)
 
-        if car_id is None:
-            car_row = conn.execute(
-                select(pi_car_table.c.id).where(
-                    pi_car_table.c.make_id == make_id,
-                    pi_car_table.c.model_id == model_id,
-                )
-            ).first()
-            if car_row:
-                car_id = car_row[0]
+        # No cross-year fallback: a car from another year is a wrong match (it would show this yard
+        # vehicle for parts it does not take), and a discrepancy is the honest result.
 
         if car_id is None:
             return None

@@ -14,6 +14,7 @@ CLI:
   python -m pipeline.worker                       # run forever
   python -m pipeline.worker --once                # drain the queue, then exit
   python -m pipeline.worker --requeue vin_decode  # put vehicles resolved by these methods back in the queue
+  python -m pipeline.worker --requeue vin_exact vin_candidates ymmt_match rule_applied vin_decode discrepancy
 """
 from __future__ import annotations
 
@@ -88,10 +89,15 @@ def time_now() -> datetime:
 
 
 def requeue(ji_engine, methods: list[str]) -> int:
+    """Put vehicles back in the queue: those resolved by `methods`, plus unmatched ones if "discrepancy" is
+    listed. Use after improving matching logic (decodes come from vin_cache, so NHTSA is not re-hit)."""
+    cond = Vehicle.car_id_method.in_(methods)
+    if "discrepancy" in methods:
+        cond = cond | ((Vehicle.car_id_resolved == False) & Vehicle.resolve_attempted_at.isnot(None))  # noqa: E712
     with Session(ji_engine) as s:
         n = s.execute(
             update(Vehicle)
-            .where(Vehicle.car_id_method.in_(methods))
+            .where(cond)
             .values(car_id_resolved=False, car_id=None, car_id_method=None, car_id_confidence=None,
                     car_id_candidates=None, resolve_attempted_at=None)
         ).rowcount

@@ -89,6 +89,25 @@ def decoded_engine(raw: dict) -> EngineSpec:
     return EngineSpec(round(disp, 1) if disp else None, int(cyl) if cyl else None, fuel)
 
 
+_NON_ALNUM = re.compile(r"[^a-z0-9]+")
+
+
+def name_key(name: str | None) -> str:
+    """Loose name key: 'Town and Country' == 'Town & Country', 'F-150' == 'F150'."""
+    return _NON_ALNUM.sub("", (name or "").lower().replace("&", "and"))
+
+
+def decoded_model_keys(raw: dict) -> set[str]:
+    """Catalogue model names the decode may mean: NHTSA lists some as 'Caravan/Grand Caravan', and gives
+    Ram pickups as Model 'Ram' + Series '1500' where the catalogue says 'Ram 1500'."""
+    model = (raw.get("Model") or "").strip()
+    series = (raw.get("Series") or "").strip()
+    names = {model, *model.split("/")}
+    if series:
+        names |= {f"{n} {series}" for n in list(names)}
+    return {name_key(n) for n in names if n.strip()}
+
+
 def _narrow(rows: list, keep, label: str, match: CarMatch) -> list:
     kept = [r for r in rows if keep(r)]
     if kept and len(kept) < len(rows):
@@ -114,12 +133,11 @@ def match_decoded(raw: dict, pi_engine: Engine) -> CarMatch:
             .join(pi_model_table, pi_model_table.c.id == pi_car_table.c.model_id)
             .outerjoin(pi_trim_table, pi_trim_table.c.id == pi_car_table.c.trim_id)
             .outerjoin(pi_engine_table, pi_engine_table.c.id == pi_car_table.c.engine_id)
-            .where(
-                pi_year_table.c.name == year,
-                func.lower(pi_make_table.c.name) == make.lower(),
-                func.lower(pi_model_table.c.name) == model.lower(),
-            )
+            .add_columns(pi_model_table.c.name.label("model"))
+            .where(pi_year_table.c.name == year, func.lower(pi_make_table.c.name) == make.lower())
         ).all()
+    models = decoded_model_keys(raw)
+    rows = [r for r in rows if name_key(r.model) in models]
     if not rows:
         return match
 
