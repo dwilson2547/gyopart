@@ -8,7 +8,7 @@ scrape-job-manager.
 
 | Scraper | Source | Dev | Prod | Notes |
 |---------|--------|:---:|:----:|-------|
-| `us_auto_parts_sterling_heights/` | `us_auto_supply` | [x] | [ ] | Prod pool `junkyard-daily` (feed refreshes ~01:30). Dev run 2026-10-12: 1,092 vehicles |
+| `us_auto_parts_sterling_heights/` | `us_auto_supply` | [x] | [x] | Prod pool `junkyard-daily` (feed refreshes ~01:30). First runs 2026-10-12, dev and prod: 1,092 vehicles each |
 | `parts-galore/` | `parts_galore` | [x] | [ ] | |
 | `pic-n-pull/` | `pic_n_pull` | [x] | [ ] | One job loops every location |
 | `ryans_pic_a_part/` | `ryans_pic_a_part` | [x] | [ ] | Recent-arrivals feed: drop check off |
