@@ -11,8 +11,9 @@ from sqlalchemy.engine import Engine
 from uszipcode import SearchEngine
 
 from junkyard_common.models import Base
-from inventory_api.models import SearchResponse
+from inventory_api.models import SearchResponse, YardFacets, YardOut, YardVehiclesPage
 from inventory_api.search import search_inventory
+from inventory_api import yards
 
 _engine: Engine | None = None
 
@@ -85,3 +86,40 @@ def search_post(body: SearchRequest):
     if _engine is None:
         raise HTTPException(status_code=503, detail="service not ready")
     return SearchResponse(results=search_inventory(_engine, body.car_ids, lat, lng, body.radius_miles))
+
+
+def _engine_or_503() -> Engine:
+    if _engine is None:
+        raise HTTPException(status_code=503, detail="service not ready")
+    return _engine
+
+
+@app.get("/inventory/locations", response_model=list[YardOut])
+def locations(zip: str | None = Query(None, description="5-digit ZIP: adds distance and sorts nearest first")):
+    lat, lng = _resolve_zip(zip) if zip else (None, None)
+    return yards.list_yards(_engine_or_503(), lat, lng)
+
+
+@app.get("/inventory/locations/{location_id}", response_model=YardOut)
+def location(location_id: int):
+    yard = yards.get_yard(_engine_or_503(), location_id)
+    if yard is None:
+        raise HTTPException(status_code=404, detail="yard not found")
+    return yard
+
+
+@app.get("/inventory/locations/{location_id}/facets", response_model=YardFacets)
+def location_facets(location_id: int):
+    return yards.yard_facets(_engine_or_503(), location_id)
+
+
+@app.get("/inventory/locations/{location_id}/vehicles", response_model=YardVehiclesPage)
+def location_vehicles(
+    location_id: int,
+    make: str | None = Query(None),
+    model: str | None = Query(None),
+    year: int | None = Query(None, ge=1900, le=2100),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+):
+    return yards.yard_vehicles(_engine_or_503(), location_id, make, model, year, limit, offset)

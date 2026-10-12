@@ -1,6 +1,6 @@
 import axios from 'axios'
 import type {
-  CarDetail, CarDiagram, DiagramDetail, Interchange, Named, PartDetail, PartLookup, PartSearch, PartSummary, Yard, TreeCategory, VinDecode,
+  CarDetail, CarDiagram, DiagramDetail, Interchange, Named, PartDetail, PartLookup, PartSearch, PartSummary, Yard, YardFacets, YardSummary, YardVehiclesPage, TreeCategory, VinDecode,
 } from './types'
 
 const http = axios.create({ baseURL: import.meta.env.VITE_API_BASE_URL ?? '' })
@@ -44,5 +44,12 @@ export const api = {
     http.get<PartDetail>(`/v1/parts/${part_id}/detail`, { params: { car_id: car_id ?? undefined } }).then(r => r.data),
   searchYards: (part_id: number, zip: string, radius_miles: number) =>
     http.get<{ results: Yard[] }>('/v1/search', { params: { part_id, zip, radius_miles } }).then(r => r.data.results),
+  yards: (zip?: string) => http.get<YardSummary[]>('/v1/yards', { params: { zip } }).then(r => r.data),
+  yard: (id: number) => http.get<YardSummary>(`/v1/yards/${id}`).then(r => r.data),
+  yardFacets: (id: number) => http.get<YardFacets>(`/v1/yards/${id}/facets`).then(r => r.data),
+  yardVehicles: (id: number, f: { make?: string | null; model?: string | null; year?: number | null; offset?: number }) =>
+    http.get<YardVehiclesPage>(`/v1/yards/${id}/vehicles`, {
+      params: { make: f.make || undefined, model: f.model || undefined, year: f.year || undefined, offset: f.offset || 0, limit: 50 },
+    }).then(r => r.data),
   decodeVin: (vin: string) => http.get<VinDecode>(`/v1/vin/${encodeURIComponent(vin)}`).then(r => r.data),
 }

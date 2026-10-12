@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.db import create_tables
-from src.routers import cars, catalogue, categories, diagrams, parts, search, vehicles
+from src.routers import cars, catalogue, categories, diagrams, parts, search, vehicles, yards
 
 
 @asynccontextmanager
@@ -32,3 +32,4 @@ app.include_router(categories.router)
 app.include_router(diagrams.router)
 app.include_router(parts.router)
 app.include_router(search.router)
+app.include_router(yards.router)

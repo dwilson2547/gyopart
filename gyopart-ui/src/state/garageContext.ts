@@ -31,5 +31,5 @@ export function vehicleTitle(v: { year: string; make: string; model: string }) {
 }
 
 export function vehicleSubtitle(v: { trim: string | null; engine: string | null }) {
-  return [v.trim, v.engine].filter(Boolean).join(' · ')
+  return [v.trim && /[A-Za-z0-9]/.test(v.trim) ? v.trim : null, v.engine].filter(Boolean).join(' · ')
 }

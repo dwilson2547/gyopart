@@ -5,6 +5,8 @@ import { GaragePage } from './pages/GaragePage'
 import { InterchangePage } from './pages/InterchangePage'
 import { PartPage } from './pages/PartPage'
 import { PartYardsPage } from './pages/PartYardsPage'
+import { YardPage } from './pages/YardPage'
+import { YardsPage } from './pages/YardsPage'
 import { useGarage } from './state/garageContext'
 
 function Home() {
@@ -22,6 +24,8 @@ export default function App() {
         <Route path="/part/:partId" element={<PartPage />} />
         <Route path="/part/:partId/interchange" element={<InterchangePage />} />
         <Route path="/part/:partId/yards" element={<PartYardsPage />} />
+        <Route path="/yards" element={<YardsPage />} />
+        <Route path="/yards/:yardId" element={<YardPage />} />
         <Route path="*" element={<div className="p-6 text-muted">Page not found.</div>} />
       </Routes>
     </Shell>

@@ -14,7 +14,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [lookupOpen, setLookupOpen] = useState(false) // phones: the box opens as a row under the bar
   return (
     <div className="flex h-dvh flex-col bg-bg text-text">
-      <header className="z-20 flex h-13 shrink-0 items-center gap-1 border-b border-line bg-surface px-2">
+      <header className="z-20 flex h-13 shrink-0 items-center gap-0.5 border-b border-line bg-surface px-1 sm:gap-1 sm:px-2">
         <Link to="/" className="px-2 text-lg font-semibold text-text hover:text-accent">gyopart</Link>
         <div className="ml-2 hidden max-w-md flex-1 sm:block"><PartNumberBox /></div>
         <span className="flex-1" />
@@ -22,6 +22,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
           className="inline-flex size-10 items-center justify-center rounded-full hover:bg-hover sm:hidden">
           {lookupOpen ? <X className="size-5" /> : <Hash className="size-5" />}
         </button>
+        <NavLink to="/yards" aria-label="Yards" title="Yards"
+          className={({ isActive }) => `inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm hover:bg-hover ${isActive ? 'text-accent' : ''}`}>
+          <Warehouse className="size-4" /><span className="hidden md:inline">Yards</span>
+        </NavLink>
         <GarageSwitcher />
         <button
           type="button"
@@ -74,9 +78,9 @@ function GarageSwitcher() {
         aria-expanded={open}
         aria-haspopup="menu"
         aria-label="Switch vehicle"
-        className="flex max-w-[16rem] items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm hover:bg-hover sm:max-w-xs"
+        className="flex max-w-[9.5rem] min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-hover sm:max-w-xs sm:px-2.5"
       >
-        <Car className="size-4 shrink-0 text-muted" />
+        <Car className="hidden size-4 shrink-0 text-muted sm:block" />
         <span className="truncate">{active ? [vehicleTitle(active), active.trim].filter(Boolean).join(' ') : 'Choose vehicle'}</span>
         <ChevronDown className="size-4 shrink-0 text-muted" />
       </button>

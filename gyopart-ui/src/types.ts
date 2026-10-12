@@ -153,3 +153,44 @@ export interface Yard {
 
 export interface PartNumberHit { id: number; part_number: string | null; title: string | null; manufacturer: string | null }
 export interface PartLookup { q: string; exact: PartNumberHit[]; suggestions: PartNumberHit[] }
+
+export interface YardSummary {
+  location_id: number
+  name: string
+  chain: string | null
+  address: string | null
+  city: string | null
+  state: string | null
+  zip_code: string | null
+  phone: string | null
+  lat: number | null
+  lng: number | null
+  last_seen_at: string | null
+  distance_miles: number | null
+  vehicle_count: number
+  new_this_week: number
+  catalogued_count: number
+}
+
+export interface YardFacets {
+  makes: { make: string; count: number; models: { model: string; count: number }[] }[]
+  year_min: number | null
+  year_max: number | null
+}
+
+export interface YardInventoryVehicle {
+  vehicle_id: number
+  year: number | null
+  make: string | null
+  model: string | null
+  trim: string | null
+  row: string | null
+  color: string | null
+  vin: string | null
+  arrival_date: string | null
+  car_id: number | null
+  car_id_candidates: number[]
+  candidates: CarDetail[]
+}
+
+export interface YardVehiclesPage { total: number; limit: number; offset: number; vehicles: YardInventoryVehicle[] }
