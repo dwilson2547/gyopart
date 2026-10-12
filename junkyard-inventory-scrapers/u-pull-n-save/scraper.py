@@ -7,6 +7,8 @@
 
 import logging
 import os
+import sys
+from pathlib import Path
 from datetime import datetime, timezone
 
 import requests
@@ -17,6 +19,10 @@ from junkyard_common.models import Location, ScrapeRun, Vehicle
 from junkyard_common.db import get_engine
 from cache_client import WebCacheClient
 from request_auth_client import RequestAuthClient
+
+# scrape_contract.py lives one level up in the repo and next to scraper.py in the image.
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+from scrape_contract import Broken, run  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -72,7 +78,7 @@ def _fetch_json(
         permit.set_status(resp.status_code)
         if resp.status_code == 429:
             logger.error("429 received — aborting run")
-            raise SystemExit(1)
+            raise Broken(f"429 rate limited by {SOURCE}")
         resp.raise_for_status()
 
     web_cache.store(url, resp.text, CLIENT_NAME)
@@ -268,7 +274,7 @@ def _upsert_new_vehicles(
     return new_count, updated_count
 
 
-def main() -> None:
+def main() -> dict:
     request_auth = RequestAuthClient(REQUEST_AUTH_SERVER_URL)
     engine = get_engine()
     now = _utcnow()
@@ -303,10 +309,12 @@ def main() -> None:
                     run.removed_vehicles = 0
                     run.success = True
                     db.commit()
-                return
+                return {"items": len(known_vehicle_ids), "new": 0, "updated": 0, "removed": 0}
 
             # Full crawl: collect all vehicleIDs across year/make/model matrix
             current_vehicle_ids = _collect_all_vehicle_ids(http, web_cache, request_auth)
+            if not current_vehicle_ids:
+                raise Broken("0 vehicleIDs across the year/make/model matrix — possible API change")
 
             # Fetch detail only for vehicleIDs not already in DB
             new_vehicle_ids = current_vehicle_ids - set(known_vehicle_ids)
@@ -378,11 +386,13 @@ def main() -> None:
             run.success = True
             db.commit()
 
-    except SystemExit:
+        return {"items": total, "new": new_c, "updated": updated_c, "removed": removed_c}
+
+    except Broken as exc:
         with Session(engine) as db:
             run = db.get(ScrapeRun, run_id)
             run.completed_at = _utcnow()
-            run.error_message = "429 rate limit — permanent backoff"
+            run.error_message = str(exc)[:1000]
             run.success = False
             db.commit()
         raise
@@ -402,4 +412,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    run(main)

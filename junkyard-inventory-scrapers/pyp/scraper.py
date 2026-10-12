@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import re
+import sys
 from datetime import datetime, timezone
 
 from playwright.async_api import async_playwright, Page
@@ -22,6 +23,11 @@ from junkyard_common.models import Location, ScrapeRun, Vehicle
 from junkyard_common.db import get_engine
 from cache_client import WebCacheClient
 from request_auth_client import RequestAuthClient
+from pathlib import Path
+
+# scrape_contract.py lives one level up in the repo and next to scraper.py in the image.
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+from scrape_contract import Broken, run  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -276,7 +282,7 @@ def _upsert_and_deactivate(
     return new_count, updated_count, removed_count
 
 
-async def _run() -> None:
+async def _run() -> dict:
     request_auth = RequestAuthClient(REQUEST_AUTH_SERVER_URL)
     engine = get_engine()
     now = _utcnow()
@@ -315,7 +321,8 @@ async def _run() -> None:
 
                 m = _LOCATION_LIST_RE.search(seed_html)
                 if not m:
-                    raise RuntimeError("_locationList not found in page source")
+                    # Cloudflare challenge page or a layout change: either way a retry won't help.
+                    raise Broken("_locationList not found in page source (Cloudflare challenge or layout change)")
                 location_list = json.loads(m.group(1))
                 logger.info("Found %d locations", len(location_list))
 
@@ -346,7 +353,10 @@ async def _run() -> None:
                         loc.get("DisplayName", code), code, len(vehicles), is_full,
                     )
 
-                    if vehicles or is_full:
+                    if is_full and not vehicles:
+                        # An LKQ yard never really empties: this is a failed fetch. Don't mark its stock removed.
+                        logger.warning("  %s: full scrape returned 0 vehicles — leaving its inventory as is", code)
+                    elif vehicles:
                         with Session(engine) as db:
                             n, u, r = _upsert_and_deactivate(
                                 db, location_id, vehicles, now,
@@ -375,11 +385,15 @@ async def _run() -> None:
             run.success = True
             db.commit()
 
-    except SystemExit:
+        if not total_vehicles:
+            raise Broken(f"0 vehicles across {len(location_list)} locations — possible layout change")
+        return {"items": total_vehicles, "new": total_new, "updated": total_updated, "removed": total_removed}
+
+    except Broken as exc:
         with Session(engine) as db:
             run = db.get(ScrapeRun, run_id)
             run.completed_at = _utcnow()
-            run.error_message = "429 rate limit — permanent backoff"
+            run.error_message = str(exc)[:1000]
             run.success = False
             db.commit()
         raise
@@ -398,9 +412,9 @@ async def _run() -> None:
         request_auth.close()
 
 
-def main() -> None:
-    asyncio.run(_run())
+def main() -> dict:
+    return asyncio.run(_run())
 
 
 if __name__ == "__main__":
-    main()
+    run(main)

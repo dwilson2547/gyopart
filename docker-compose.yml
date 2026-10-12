@@ -58,6 +58,107 @@ services:
 
   # Parts-direct update scraper v2 (parts-interchange/parts-direct/update-scraper/docs/design-v2.md):
   # one shared image for every manufacturer site; run by scrape-job-manager, browser via browserless.
+  scraper-pull-a-part:
+    image: dwilson2547/gyopart-scraper-pull-a-part:latest
+    build:
+      context: ./junkyard-inventory-scrapers
+      dockerfile: pull_a_part_scraper/Dockerfile
+  scraper-speedway-ap:
+    image: dwilson2547/gyopart-scraper-speedway-ap:latest
+    build:
+      context: ./junkyard-inventory-scrapers
+      dockerfile: speedwayap/Dockerfile
+  scraper-arizona-auto-parts:
+    image: dwilson2547/gyopart-scraper-arizona-auto-parts:latest
+    build:
+      context: ./junkyard-inventory-scrapers
+      dockerfile: arizonaautoparts/Dockerfile
+  scraper-las-parts:
+    image: dwilson2547/gyopart-scraper-las-parts:latest
+    build:
+      context: ./junkyard-inventory-scrapers
+      dockerfile: las-parts/Dockerfile
+  scraper-stricker-auto-parts:
+    image: dwilson2547/gyopart-scraper-stricker-auto-parts:latest
+    build:
+      context: ./junkyard-inventory-scrapers
+      dockerfile: strickerautoparts/Dockerfile
+  scraper-midway-upull:
+    image: dwilson2547/gyopart-scraper-midway-upull:latest
+    build:
+      context: ./junkyard-inventory-scrapers
+      dockerfile: midwayupull/Dockerfile
+  scraper-central-florida-pick-and-pay:
+    image: dwilson2547/gyopart-scraper-central-florida-pick-and-pay:latest
+    build:
+      context: ./junkyard-inventory-scrapers
+      dockerfile: centralfloridapickandpay/Dockerfile
+  scraper-picknpull-sa:
+    image: dwilson2547/gyopart-scraper-picknpull-sa:latest
+    build:
+      context: ./junkyard-inventory-scrapers
+      dockerfile: picknpullsa/Dockerfile
+  scraper-budget-upullit:
+    image: dwilson2547/gyopart-scraper-budget-upullit:latest
+    build:
+      context: ./junkyard-inventory-scrapers
+      dockerfile: budgetupullit/Dockerfile
+  scraper-ipullupull:
+    image: dwilson2547/gyopart-scraper-ipullupull:latest
+    build:
+      context: ./junkyard-inventory-scrapers
+      dockerfile: ipullupull/Dockerfile
+  scraper-utpap:
+    image: dwilson2547/gyopart-scraper-utpap:latest
+    build:
+      context: ./junkyard-inventory-scrapers
+      dockerfile: utpap/Dockerfile
+  scraper-wrenchapart:
+    image: dwilson2547/gyopart-scraper-wrenchapart:latest
+    build:
+      context: ./junkyard-inventory-scrapers
+      dockerfile: wrenchapart/Dockerfile
+  scraper-u-pull-n-save:
+    image: dwilson2547/gyopart-scraper-u-pull-n-save:latest
+    build:
+      context: ./junkyard-inventory-scrapers
+      dockerfile: u-pull-n-save/Dockerfile
+  scraper-fenix-upull:
+    image: dwilson2547/gyopart-scraper-fenix-upull:latest
+    build:
+      context: ./junkyard-inventory-scrapers
+      dockerfile: fenixupull/Dockerfile
+  scraper-tear-a-part:
+    image: dwilson2547/gyopart-scraper-tear-a-part:latest
+    build:
+      context: ./junkyard-inventory-scrapers
+      dockerfile: tearapart/Dockerfile
+  scraper-pull-n-save:
+    image: dwilson2547/gyopart-scraper-pull-n-save:latest
+    build:
+      context: ./junkyard-inventory-scrapers
+      dockerfile: pull-n-save/Dockerfile
+  scraper-wegotused:
+    image: dwilson2547/gyopart-scraper-wegotused:latest
+    build:
+      context: ./junkyard-inventory-scrapers
+      dockerfile: wegotused/Dockerfile
+  scraper-chesterfield-auto:
+    image: dwilson2547/gyopart-scraper-chesterfield-auto:latest
+    build:
+      context: ./junkyard-inventory-scrapers
+      dockerfile: chesterfieldauto/Dockerfile
+  scraper-pyp:
+    image: dwilson2547/gyopart-scraper-pyp:latest
+    build:
+      context: ./junkyard-inventory-scrapers
+      dockerfile: pyp/Dockerfile
+  scraper-used-auto-parts-fl:
+    image: dwilson2547/gyopart-scraper-used-auto-parts-fl:latest
+    build:
+      context: ./junkyard-inventory-scrapers
+      dockerfile: usedautopartsfl/Dockerfile
+
   scraper-parts-direct:
     image: dwilson2547/gyopart-scraper-parts-direct:latest
     build:

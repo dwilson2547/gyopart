@@ -7,6 +7,8 @@
 # Source identifier: "arizona_auto_parts"
 
 import logging
+import sys
+from pathlib import Path
 import os
 import re
 from datetime import datetime, timezone
@@ -20,6 +22,10 @@ from junkyard_common.models import Location, ScrapeRun, Vehicle
 from junkyard_common.db import get_engine
 from cache_client import WebCacheClient
 from request_auth_client import RequestAuthClient
+
+# scrape_contract.py lives one level up in the repo and next to scraper.py in the image.
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+from scrape_contract import Broken, run  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -95,7 +101,7 @@ def _fetch(
         permit.set_status(resp.status_code)
         if resp.status_code == 429:
             logger.error("429 received — aborting run")
-            raise SystemExit(1)
+            raise Broken(f"429 rate limited by {SOURCE}")
         resp.raise_for_status()
 
     web_cache.store(url, resp.text, CLIENT_NAME)
@@ -389,7 +395,7 @@ def _upsert_vehicles(
     return new_count, updated_count, removed_count
 
 
-def main() -> None:
+def main() -> dict:
     request_auth = RequestAuthClient(REQUEST_AUTH_SERVER_URL)
     engine = get_engine()
     now = _utcnow()
@@ -422,6 +428,9 @@ def main() -> None:
                     full_crawl_mode = False
                     logger.info("Incremental mode: %d new vehicles", len(vehicles))
 
+        if full_crawl_mode and not vehicles:
+            raise Broken("0 vehicles parsed — possible layout change")
+
         with Session(engine) as db:
             new_c, updated_c, removed_c = _upsert_vehicles(
                 db, location_ids, vehicles, now, full_crawl_mode
@@ -443,11 +452,13 @@ def main() -> None:
             run.success = True
             db.commit()
 
-    except SystemExit:
+        return {"items": len(vehicles), "new": new_c, "updated": updated_c, "removed": removed_c}
+
+    except Broken as exc:
         with Session(engine) as db:
             run = db.get(ScrapeRun, run_id)
             run.completed_at = _utcnow()
-            run.error_message = "429 rate limit — permanent backoff"
+            run.error_message = str(exc)[:1000]
             run.success = False
             db.commit()
         raise
@@ -467,4 +478,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    run(main)

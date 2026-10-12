@@ -14,6 +14,8 @@
 
 import json
 import logging
+import sys
+from pathlib import Path
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 
@@ -26,6 +28,10 @@ from junkyard_common.db import get_engine
 from cache_client import WebCacheClient
 from request_auth_client import RequestAuthClient
 from config import Config
+
+# scrape_contract.py lives one level up in the repo and next to scraper.py in the image.
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+from scrape_contract import Broken, run  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -140,8 +146,8 @@ def _fetch_make_lookup(http, web_cache, request_auth) -> dict[int, str]:
     return lookup
 
 
-def _sync_inventory(http, web_cache, request_auth, db, location_ids, make_lookup, run) -> None:
-    """Upsert inventory across all locations. One POST per make."""
+def _sync_inventory(http, web_cache, request_auth, db, location_ids, make_lookup, run) -> int:
+    """Upsert inventory across all locations. One POST per make. Returns how many vehicles the feed listed."""
     logger.info("Syncing inventory — %d makes × %d locations …", len(make_lookup), len(location_ids))
     now = _utcnow()
 
@@ -165,6 +171,8 @@ def _sync_inventory(http, web_cache, request_auth, db, location_ids, make_lookup
         try:
             data = _post(http, web_cache, request_auth, Config.INVENTORY_URL, payload)
         except requests.HTTPError as exc:
+            if exc.response is not None and exc.response.status_code == 429:
+                raise Broken(f"429 rate limited by {SOURCE}") from exc
             logger.warning("HTTP error fetching make %s: %s", make_id, exc)
             continue
 
@@ -212,6 +220,10 @@ def _sync_inventory(http, web_cache, request_auth, db, location_ids, make_lookup
         if i % 10 == 0:
             logger.info("  … %d/%d makes processed", i, len(make_lookup))
 
+    # Nothing listed for any make = the API changed or every request failed. Don't mark the whole chain removed.
+    if not seen_keys:
+        raise Broken(f"0 vehicles across {len(make_lookup)} makes — possible API change")
+
     removed_count = 0
     for source_key, vehicle in existing.items():
         if source_key not in seen_keys and vehicle.is_active:
@@ -223,6 +235,7 @@ def _sync_inventory(http, web_cache, request_auth, db, location_ids, make_lookup
     run.removed_vehicles = removed_count
     db.commit()
     logger.info("Inventory sync complete — %d added, %d removed.", new_count, removed_count)
+    return len(seen_keys)
 
 
 def _fetch_details(http, web_cache, request_auth, db, run) -> None:
@@ -296,7 +309,7 @@ def _fetch_details(http, web_cache, request_auth, db, run) -> None:
     logger.info("Detail fetch complete — %d fetched.", fetched)
 
 
-def main() -> None:
+def main() -> dict:
     engine = get_engine()
     http = requests.Session()
     request_auth = RequestAuthClient(Config.REQUEST_AUTH_SERVER_URL)
@@ -313,14 +326,18 @@ def main() -> None:
             with WebCacheClient(Config.WEBCACHE_URL, timeout=Config.WEBCACHE_TIMEOUT) as web_cache:
                 location_ids = _sync_locations(http, web_cache, request_auth, db, now)
                 make_lookup  = _fetch_make_lookup(http, web_cache, request_auth)
-                _sync_inventory(http, web_cache, request_auth, db, location_ids, make_lookup, run)
+                if not location_ids:
+                    raise Broken("0 locations from the Pull-A-Part location API")
+                listed = _sync_inventory(http, web_cache, request_auth, db, location_ids, make_lookup, run)
                 _fetch_details(http, web_cache, request_auth, db, run)
 
             run.completed_at  = _utcnow()
-            run.total_in_feed = (run.new_vehicles or 0) + (run.updated_vehicles or 0)
+            run.total_in_feed = listed
             run.success       = True
             db.commit()
             logger.info("Scrape run completed successfully.")
+            return {"items": listed, "new": run.new_vehicles or 0, "updated": run.updated_vehicles or 0,
+                    "removed": run.removed_vehicles or 0}
 
         except Exception as exc:
             logger.exception("Scraper failed: %s", exc)
@@ -335,4 +352,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    run(main)

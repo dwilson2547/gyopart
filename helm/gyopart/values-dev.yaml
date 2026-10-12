@@ -76,6 +76,114 @@ scraping:
       timeout: 15m
       jobs:
         us-auto-supply: {pool: junkyard-inventory, suspend: true}
+    # Rest of the yard fleet (2026-10-12): suspended so dev never runs them on a schedule; each is tested
+    # with run-now, then moved to values-prod.yaml (junkyard-inventory-scrapers/RELEASES.md).
+    # Pull-A-Part JSON API: every location in one job, plus a detail call per new vehicle.
+    pull-a-part:
+      image: dwilson2547/gyopart-scraper-pull-a-part@sha256:448ac63893c574134449e09e464db6c30d7d073a5e3c8f67f90d06835b5b4a5f
+      timeout: 4h
+      jobs:
+        pull-a-part: {pool: junkyard-inventory, suspend: true}
+    speedway-ap:
+      image: dwilson2547/gyopart-scraper-speedway-ap@sha256:be42b632f2804d3270bb5a3b92dab0cbadc9b62386a9b98b82206ebb65ac3545
+      timeout: 1h
+      jobs:
+        speedway-ap: {pool: junkyard-inventory, suspend: true}
+    arizona-auto-parts:
+      image: dwilson2547/gyopart-scraper-arizona-auto-parts@sha256:f7855b5bf43805e2a7a0f1c7ff5a1a03f86a584772815c74e78db98810858381
+      timeout: 1h
+      jobs:
+        arizona-auto-parts: {pool: junkyard-inventory, suspend: true}
+    las-parts:
+      image: dwilson2547/gyopart-scraper-las-parts@sha256:a6654ac853901fbf1dc09d58beec0711dccc24c8c99d815937260c325ec34e8a
+      timeout: 1h
+      jobs:
+        las-parts: {pool: junkyard-inventory, suspend: true}
+    stricker-auto-parts:
+      image: dwilson2547/gyopart-scraper-stricker-auto-parts@sha256:58320938f5ac477f9ae66b7f4cbaeda5f043342f6f035dad2baa052f758fd5a0
+      timeout: 1h
+      jobs:
+        stricker-auto-parts: {pool: junkyard-inventory, suspend: true}
+    midway-upull:
+      image: dwilson2547/gyopart-scraper-midway-upull@sha256:812e44325cace304fb634ffd984f751c297b52a5e0849cd107f5463b55e16613
+      timeout: 1h
+      jobs:
+        midway-upull: {pool: junkyard-inventory, suspend: true}
+    central-florida-pick-and-pay:
+      image: dwilson2547/gyopart-scraper-central-florida-pick-and-pay@sha256:5ef022b1a48b24366a82d5dbc1a42794cfb18726ab443ce99154a1115406f104
+      timeout: 30m
+      jobs:
+        central-florida-pick-and-pay: {pool: junkyard-inventory, suspend: true}
+    picknpull-sa:
+      image: dwilson2547/gyopart-scraper-picknpull-sa@sha256:f47e6a8bc5a89a2cfba5f7957a94cdb728ae29afb1d7c2bfaeaa4ed7796c0253
+      timeout: 30m
+      jobs:
+        picknpull-sa: {pool: junkyard-inventory, suspend: true}
+    budget-upullit:
+      image: dwilson2547/gyopart-scraper-budget-upullit@sha256:fb573a5c52eaa28074dd977d6bc9ca3eaf7698e1e2eaaf8e2837a2428d4235f4
+      timeout: 1h
+      jobs:
+        budget-upullit: {pool: junkyard-inventory, suspend: true}
+    ipullupull:
+      image: dwilson2547/gyopart-scraper-ipullupull@sha256:f0b6cb32a561e1b8420723a1e06c5661db5f1f030c350f7dbc6513975cd668fa
+      timeout: 1h
+      jobs:
+        ipullupull: {pool: junkyard-inventory, suspend: true}
+    utpap:
+      image: dwilson2547/gyopart-scraper-utpap@sha256:f5b87d08e67e9add7573b72ba65c5ce4ca4ee86414a3817b825a175abd6e5257
+      timeout: 1h
+      jobs:
+        utpap: {pool: junkyard-inventory, suspend: true}
+    wrenchapart:
+      image: dwilson2547/gyopart-scraper-wrenchapart@sha256:dd0e2091e85138366fbdc16d64bdeb458390fd83ab26282d764f8cf1a89eea97
+      timeout: 1h
+      jobs:
+        wrenchapart: {pool: junkyard-inventory, suspend: true}
+    # Year/make/model search matrix, then a detail call per new vehicle.
+    u-pull-n-save:
+      image: dwilson2547/gyopart-scraper-u-pull-n-save@sha256:17a93cd50b5eb1c3c6164bf7db097665a1e59815b5e25cdbd46546edc0757c67
+      timeout: 2h
+      jobs:
+        u-pull-n-save: {pool: junkyard-inventory, suspend: true}
+    fenix-upull:
+      image: dwilson2547/gyopart-scraper-fenix-upull@sha256:5c2cb90476202a65788b5a4c633cdd604c2c42f3e787b5114ddf24ae5f7d6ef5
+      timeout: 1h
+      jobs:
+        fenix-upull: {pool: junkyard-inventory, suspend: true}
+    tear-a-part:
+      image: dwilson2547/gyopart-scraper-tear-a-part@sha256:7b1eae212e668fb2476f6f801b0079419afb0e1ceaa945e59502eaa91e2140a6
+      timeout: 1h
+      jobs:
+        tear-a-part: {pool: junkyard-inventory, suspend: true}
+    pull-n-save:
+      image: dwilson2547/gyopart-scraper-pull-n-save@sha256:4eee7df83859da530e730ab6a553432067644f85116a582a168ef42a3912d641
+      timeout: 1h
+      jobs:
+        pull-n-save: {pool: junkyard-inventory, suspend: true}
+    wegotused:
+      image: dwilson2547/gyopart-scraper-wegotused@sha256:3ac58a74a7268d29564795915424fe61963dce79bf3eb6e2280e429322109d09
+      timeout: 1h
+      jobs:
+        wegotused: {pool: junkyard-inventory, suspend: true}
+    chesterfield-auto:
+      image: dwilson2547/gyopart-scraper-chesterfield-auto@sha256:63eb6939acd642ec65955a8c9471a89cd31076ea771ea9ffde33062028bfa249
+      timeout: 1h
+      jobs:
+        chesterfield-auto: {pool: junkyard-inventory, suspend: true}
+    # LKQ Pick Your Part, 62 locations in one job. Drives its own headless Chromium (Playwright image) past Cloudflare.
+    pyp:
+      image: dwilson2547/gyopart-scraper-pyp@sha256:f754df43898422cc195bdbea69bbc4e4e7c0238dbad7677946edc9cb0fc09032
+      timeout: 3h
+      resources:
+        requests: {cpu: 500m, memory: 1Gi}
+        limits: {memory: 2Gi}
+      jobs:
+        pyp: {pool: junkyard-inventory, suspend: true}
+    used-auto-parts-fl:
+      image: dwilson2547/gyopart-scraper-used-auto-parts-fl@sha256:90bf1639bedee6b95bfca497f094191402be9cbb586da06f493213921a844a67
+      timeout: 1h
+      jobs:
+        used-auto-parts-fl: {pool: junkyard-inventory, suspend: true}
     # Parts-direct update scraper v2: one image for every manufacturer site, one job per site. Works a
     # DB queue, so items per run vary with what is due — no zero/drop checks. Browser is scrape-stack's
     # browserless (headed); all site traffic goes through the VPN proxy.
