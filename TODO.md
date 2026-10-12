@@ -19,7 +19,11 @@ Backlog imported from the retired todo store, 2026-07-06.
 ## Medium
 
 - [ ] **Bring the held-back parts-direct sites back** — audi/acura/porsche moved to oempartsonline.com (picker 403, different vehicle URLs), vw redirects to a dealer site, mazda's Cloudflare never clears from the VPN, suzuki has an expired certificate. Details: update-scraper `docs/design-v2.md` §0.
-- [ ] **Move the junkyard scrapers to prod** — parts-galore, pic-n-pull, ryans run under scrape-job-manager in gyopart-dev; add them (and the remaining yards) to `values-prod.yaml` now the prod data load is done.
+- [x] **Move the junkyard scrapers to prod** — done 2026-10-12: us-auto-supply (daily), parts-galore, pic-n-pull, ryans in prod; dev copies suspended. Remaining yards tracked in `junkyard-inventory-scrapers/RELEASES.md`.
+- [ ] **Ryan's Pic-a-Part barely matches** — 1 of 17 vehicles resolves to a catalogue car (prod, 2026-10-12); the other yards are 80–87%. Check what the feed gives (VINs? model names?) and the decodes.
+- [ ] **Requeue unmatched vehicles as the catalogue fills** — ~13% of yard vehicles have no candidates, mostly model years the catalogue hasn't scraped yet (Mopar stops ~2009). `python -m pipeline.worker --requeue discrepancy` re-resolves them but nothing runs it; schedule it (e.g. after parts-direct runs) or trigger on new cars.
+- [ ] **Calgary Pic-n-Pull doesn't geocode** — uszipcode has no Canadian postcodes, so the location has no lat/lng and never appears in radius search.
+- [ ] **Parts-direct crawl delay on the other 13 sites** — bmw/mitsubishi/volvo dropped from robots.txt's 10s to 2s (`base_delay_ms=2000` in request-auth) on 2026-10-12 as a trial; if they behave, apply to the rest.
 - [ ] **Image sweep job for parts-direct** — drain `image.saved = false` (images in flight when a run stopped, CDN failures, the 2024 backlog) on its own schedule. Agreed 2026-10-11, design-v2 §6.
 - [ ] **Decide refresh for brand-new models** — with refresh off, sparse new models (2026 Mini Cooper: accessories only) aren't revisited; refresh current/next model year sooner? design-v2 §6.
 
@@ -33,6 +37,10 @@ Backlog imported from the retired todo store, 2026-07-06.
 - [ ] **Build a framework for general document scrapers** — Create a reusable scraper system for document-centric scrapers such as the Ducati owners manual scraper.
 - [ ] **Explore local LLM rule generation for gyopart admin-api** — Experiment with a local LLM connected to the gyopart admin-api to automatically create rules that resolve mapping discrepancies.
 - [ ] **Evaluate RockAuto-style external parts reference scraping** — Consider scraping an external parts reference such as RockAuto to find parts interchangeable across manufacturers, but first collapse vehicles into distinct canonical car configurations so equivalent generations/configs are only scraped once instead of re-querying every model year.
+
+## Low
+
+- [ ] **Pre-existing admin-api test failure** — `test_list_discrepancies_requires_auth` fails (seen 2026-10-12, unrelated to the VIN resolver work).
 
 ## Unprioritized (imported from workman drafts, 2026-07-06)
 
