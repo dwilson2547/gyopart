@@ -6,6 +6,7 @@ import { Lightbox } from '../components/Lightbox'
 import { Empty, ErrorLine, Loading } from '../components/States'
 import { ZoomImage } from '../components/ZoomImage'
 import { useAsync } from '../lib/useAsync'
+import { copyText } from '../lib/clipboard'
 import { useCarParam } from '../lib/useCarParam'
 import { vehicleTitle } from '../state/garageContext'
 import type { CarDetail, PartDetail } from '../types'
@@ -59,13 +60,13 @@ export function PartPage() {
 
 function Header({ p, car, carQuery }: { p: PartDetail; car: CarDetail | null; carQuery: string }) {
   const [copied, setCopied] = useState(false)
+  const [copyFailed, setCopyFailed] = useState(false)
   const copy = async () => {
     if (!p.part_number) return
-    try {
-      await navigator.clipboard.writeText(p.part_number)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
-    } catch { /* clipboard blocked: the number is selectable text anyway */ }
+    const ok = await copyText(p.part_number)
+    setCopied(ok)
+    setCopyFailed(!ok)
+    setTimeout(() => { setCopied(false); setCopyFailed(false) }, 1500)
   }
 
   return (
@@ -79,7 +80,7 @@ function Header({ p, car, carQuery }: { p: PartDetail; car: CarDetail | null; ca
               <span className="font-mono text-lg tracking-wide select-all">{p.part_number}</span>
               <button onClick={copy} aria-label="Copy part number" title="Copy part number"
                 className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-muted hover:bg-hover">
-                {copied ? <><Check className="size-3.5 text-ok" /> Copied</> : <Copy className="size-3.5" />}
+                {copied ? <><Check className="size-3.5 text-ok" /> Copied</> : copyFailed ? <span className="text-danger">Couldn't copy — select the number</span> : <Copy className="size-3.5" />}
               </button>
             </div>
           )}

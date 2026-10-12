@@ -8,7 +8,7 @@ domain: gyopart-dev.local
 # promoted. Helm merges maps, so the other images keep values.yaml's tags.
 images:
   gyopartApi: dwilson2547/gyopart-api:3.0.0
-  gyopartUi: dwilson2547/gyopart-ui:3.0.0
+  gyopartUi: dwilson2547/gyopart-ui:3.0.1  # 3.0.1: copying the part number works over plain HTTP
   inventoryApi: dwilson2547/inventory-api:3.0.0
 
 imagePullPolicy: Always
