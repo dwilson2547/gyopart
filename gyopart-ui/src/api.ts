@@ -1,5 +1,7 @@
 import axios from 'axios'
-import type { CarDetail, Named, VinDecode } from './types'
+import type {
+  CarDetail, CarDiagram, DiagramDetail, Named, PartSearch, TreeCategory, VinDecode,
+} from './types'
 
 const http = axios.create({ baseURL: import.meta.env.VITE_API_BASE_URL ?? '' })
 
@@ -28,5 +30,12 @@ export const api = {
     http.get<{ id: number }[]>('/v1/vehicles/cars', { params: { year_id, make_id, model_id, trim_id, engine_id } })
       .then(r => r.data),
   car: (car_id: number) => http.get<CarDetail>(`/v1/cars/${car_id}`).then(r => r.data),
+  tree: (car_id: number) => http.get<TreeCategory[]>(`/v1/cars/${car_id}/tree`).then(r => r.data),
+  carDiagrams: (car_id: number, sub_category_id: number) =>
+    http.get<CarDiagram[]>(`/v1/cars/${car_id}/diagrams`, { params: { sub_category_id } }).then(r => r.data),
+  diagram: (diagram_id: number, car_id?: number) =>
+    http.get<DiagramDetail>(`/v1/diagrams/${diagram_id}`, { params: { car_id } }).then(r => r.data),
+  searchCarParts: (car_id: number, q: string) =>
+    http.get<PartSearch>(`/v1/cars/${car_id}/parts/search`, { params: { q } }).then(r => r.data),
   decodeVin: (vin: string) => http.get<VinDecode>(`/v1/vin/${encodeURIComponent(vin)}`).then(r => r.data),
 }

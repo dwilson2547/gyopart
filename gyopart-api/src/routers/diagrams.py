@@ -1,17 +1,18 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import select
 
 from src.db import DbDep
-from src.models import Diagram, Image, Part, diagram_parts
+from src.models import Diagram, Image, Part, car_parts, diagram_parts
+from src.routers.catalogue import label_from_alt
 from src.schemas import DiagramDetailOut, DiagramPartOut
 
 router = APIRouter(prefix="/v1/diagrams", tags=["diagrams"])
 
 
 @router.get("/{diagram_id}", response_model=DiagramDetailOut)
-def get_diagram(diagram_id: int, db: DbDep):
+def get_diagram(diagram_id: int, db: DbDep, car_id: int | None = Query(None)):
     diagram = db.get(Diagram, diagram_id)
     if diagram is None:
         raise HTTPException(status_code=404, detail="diagram not found")
@@ -24,6 +25,12 @@ def get_diagram(diagram_id: int, db: DbDep):
         .where(diagram_parts.c.diagram_id == diagram_id)
         .order_by(diagram_parts.c.part_index)
     ).all()
+    fitting: set[int] | None = None
+    if car_id is not None and rows:
+        fitting = set(db.execute(
+            select(car_parts.c.part_id).where(
+                car_parts.c.car_id == car_id, car_parts.c.part_id.in_([p.id for p, _ in rows]))
+        ).scalars().all())
 
     return DiagramDetailOut(
         id=diagram.id,
@@ -31,6 +38,7 @@ def get_diagram(diagram_id: int, db: DbDep):
         sub_category_id=diagram.sub_category_id,
         image_url=image.url if image else None,
         image_alt=image.alt_text if image else None,
+        label=label_from_alt(image.alt_text) if image else None,
         parts=[
             DiagramPartOut(
                 part_index=idx,
@@ -39,6 +47,7 @@ def get_diagram(diagram_id: int, db: DbDep):
                 part_number=part.part_number,
                 description=part.description,
                 other_names=part.other_names,
+                fits=None if fitting is None else part.id in fitting,
             )
             for part, idx in rows
         ],

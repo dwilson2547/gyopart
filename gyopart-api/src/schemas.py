@@ -73,6 +73,7 @@ class DiagramPartOut(_OrmBase):
     part_number: str | None
     description: str | None
     other_names: str | None
+    fits: bool | None = None  # with ?car_id: whether the part fits that car (diagrams are shared across trims)
 
 
 class DiagramDetailOut(BaseModel):
@@ -81,6 +82,7 @@ class DiagramDetailOut(BaseModel):
     sub_category_id: int | None
     image_url: str | None
     image_alt: str | None
+    label: str | None = None
     parts: list[DiagramPartOut]
 
 
@@ -158,3 +160,44 @@ class VinDecodeOut(BaseModel):
     decoded: VinDecoded
     candidates: list[CarDetailOut]
     narrowed_by: list[str]
+
+
+class TreeSubcategoryOut(BaseModel):
+    id: int
+    name: str
+    label: str
+    diagram_count: int
+
+
+class TreeCategoryOut(BaseModel):
+    id: int
+    name: str
+    label: str
+    subcategories: list[TreeSubcategoryOut]
+
+
+class CarDiagramOut(BaseModel):
+    id: int
+    category_id: int | None
+    sub_category_id: int | None
+    image_url: str | None
+    label: str | None
+    part_count: int
+    fitting_part_count: int
+
+
+class PartHitOut(BaseModel):
+    part_id: int
+    part_number: str | None
+    title: str | None
+    matched: Literal["title", "number", "other"]
+    diagram_id: int | None
+    part_index: str | None
+    category_id: int | None
+    sub_category_id: int | None
+
+
+class PartSearchOut(BaseModel):
+    q: str
+    hits: list[PartHitOut]
+    truncated: bool

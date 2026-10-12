@@ -38,3 +38,49 @@ export interface GarageVehicle extends CarDetail {
   decoded: VinDecoded | null
   added_at: string
 }
+
+export interface TreeSubcategory { id: number; name: string; label: string; diagram_count: number }
+export interface TreeCategory { id: number; name: string; label: string; subcategories: TreeSubcategory[] }
+
+export interface CarDiagram {
+  id: number
+  category_id: number | null
+  sub_category_id: number | null
+  image_url: string | null
+  label: string | null
+  part_count: number
+  fitting_part_count: number
+}
+
+export interface DiagramPart {
+  part_index: string | null
+  id: number
+  title: string | null
+  part_number: string | null
+  description: string | null
+  other_names: string | null
+  fits: boolean | null
+}
+
+export interface DiagramDetail {
+  id: number
+  category_id: number | null
+  sub_category_id: number | null
+  image_url: string | null
+  image_alt: string | null
+  label: string | null
+  parts: DiagramPart[]
+}
+
+export interface PartHit {
+  part_id: number
+  part_number: string | null
+  title: string | null
+  matched: 'title' | 'number' | 'other'
+  diagram_id: number | null
+  part_index: string | null
+  category_id: number | null
+  sub_category_id: number | null
+}
+
+export interface PartSearch { q: string; hits: PartHit[]; truncated: boolean }
