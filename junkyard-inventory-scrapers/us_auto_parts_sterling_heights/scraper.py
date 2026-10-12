@@ -2,14 +2,16 @@
 # Site:     US Auto Supply — Sterling Heights, MI
 # Strategy: XML feed (CrushYMS single-request XML inventory)
 # Feed URL: http://45.79.157.162/1066_inventory.xml
-# Dedup key: STOCKNUMBER stored as source_key
+# Dedup key: STOCKNUMBER stored as source_key (VIN is present on every asset too)
 # Source identifier: "us_auto_supply"
-# Extras JSONB: hol_model, reference, vehicle_row, location_string, last_update, status
+# Extras JSONB: hol_model, reference, location_string, last_update, status
 # Output DB: shared junkyard_inventory Postgres (JUNKYARD_DATABASE_URL)
 
 import logging
 import os
+import sys
 from datetime import datetime, timezone
+from pathlib import Path
 from urllib.parse import urlparse
 from xml.etree import ElementTree as ET
 
@@ -22,6 +24,10 @@ from junkyard_common.db import get_engine
 from cache_client import WebCacheClient
 from request_auth_client import RequestAuthClient
 
+# scrape_contract.py lives one level up in the repo and next to scraper.py in the image.
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+from scrape_contract import Broken, run  # noqa: E402
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
@@ -32,6 +38,7 @@ CLIENT_NAME             = "us_auto_supply_sterling_heights"
 WEBCACHE_URL            = os.environ.get("WEBCACHE_URL", "http://webcache.scrapestack.local")
 WEBCACHE_TIMEOUT        = float(os.environ.get("WEBCACHE_TIMEOUT", "30.0"))
 REQUEST_AUTH_SERVER_URL = os.environ.get("REQUEST_AUTH_SERVER_URL", "request-auth-server.scrapestack.local:9000")
+CACHE_MAX_AGE_SECONDS   = int(os.environ.get("CACHE_MAX_AGE_SECONDS", "3600"))
 
 HEADERS = {
     "User-Agent": (
@@ -49,14 +56,14 @@ CANONICAL_FIELDS = {
     "MODEL":        "model",
     "COLOR":        "color",
     "YARD_IN_DATE": "arrival_date",
-    "MILEAGE":      "mileage",
+    "VEHICLE_ROW":  "row",
 }
+# MILEAGE is not mapped: the feed reports 1 for every vehicle (placeholder, seen 2026-10-11).
 
 # XML fields that go into extras JSONB (yard-specific)
 EXTRAS_FIELDS = {
     "HOL_MODEL":   "hol_model",
     "REFERENCE":   "reference",
-    "VEHICLE_ROW": "vehicle_row",
     "LOCATION":    "location_string",
     "LASTUPDATE":  "last_update",
     "iSTATUS":     "status",
@@ -95,8 +102,6 @@ def _parse_asset(asset_el) -> dict | None:
         raw = (asset_el.findtext(xml_tag) or "").strip() or None
         if field == "year":
             canonical[field] = _parse_int(raw)
-        elif field == "mileage":
-            canonical[field] = _parse_int(raw)
         elif field == "arrival_date":
             canonical[field] = _parse_arrival_date(raw)
         else:
@@ -119,8 +124,10 @@ def _ensure_location(db: Session, now: datetime) -> int:
             source=SOURCE,
             source_location_id="1",
             name="US Auto Supply — Sterling Heights",
+            address="7575 18 1/2 Mile Rd",
             city="Sterling Heights",
             state="MI",
+            phone="(586) 731-1616",
             is_active=True,
             first_seen_at=now,
             last_seen_at=now,
@@ -132,13 +139,15 @@ def _ensure_location(db: Session, now: datetime) -> int:
 
 
 def fetch_xml(session, web_cache, request_auth) -> str:
-    entry = web_cache.get(XML_FEED_URL, max_age=3600)
+    entry = web_cache.get(XML_FEED_URL, max_age=CACHE_MAX_AGE_SECONDS)
     if entry:
         logger.info("Cache hit for XML feed")
         return entry["content"]
     with request_auth.acquire(XML_FEED_DOMAIN) as permit:
         resp = session.get(XML_FEED_URL, headers=HEADERS, timeout=60)
         permit.set_status(resp.status_code)
+        if resp.status_code == 429:
+            raise Broken(f"429 rate limited by {XML_FEED_DOMAIN}")
         resp.raise_for_status()
     web_cache.store(XML_FEED_URL, resp.text, CLIENT_NAME)
     return resp.text
@@ -172,7 +181,7 @@ def upsert_vehicles(
                 model=data.get("model"),
                 color=data.get("color"),
                 arrival_date=data.get("arrival_date"),
-                mileage=data.get("mileage"),
+                row=data.get("row"),
                 extras=data.get("extras"),
                 is_active=True,
                 first_seen_at=now,
@@ -187,7 +196,7 @@ def upsert_vehicles(
                     "model":        data.get("model"),
                     "color":        data.get("color"),
                     "arrival_date": data.get("arrival_date"),
-                    "mileage":      data.get("mileage"),
+                    "row":          data.get("row"),
                     "extras":       data.get("extras"),
                     "last_seen_at": now,
                     "is_active":    True,
@@ -211,7 +220,7 @@ def upsert_vehicles(
     return new_count, updated_count, removed_count
 
 
-def main() -> None:
+def main() -> dict:
     request_auth = RequestAuthClient(REQUEST_AUTH_SERVER_URL)
     engine = get_engine()
     now = _utcnow()
@@ -229,7 +238,10 @@ def main() -> None:
             http = requests.Session()
             xml_text = fetch_xml(http, web_cache, request_auth)
 
-        root = ET.fromstring(xml_text)
+        try:
+            root = ET.fromstring(xml_text)
+        except ET.ParseError as ex:
+            raise Broken(f"feed is not valid XML: {ex}") from ex
         all_assets, skipped = [], 0
         for asset_el in root.findall("ASSET"):
             parsed = _parse_asset(asset_el)
@@ -239,6 +251,8 @@ def main() -> None:
                 skipped += 1
 
         logger.info("Parsed %d assets (%d skipped)", len(all_assets), skipped)
+        if not all_assets:
+            raise Broken(f"0 assets parsed from feed ({skipped} skipped) — feed empty or format changed")
 
         with Session(engine) as db:
             new_c, updated_c, removed_c = upsert_vehicles(db, location_id, all_assets, now)
@@ -255,6 +269,7 @@ def main() -> None:
             run.removed_vehicles = removed_c
             run.success = True
             db.commit()
+        return {"items": len(all_assets), "new": new_c, "updated": updated_c, "removed": removed_c}
 
     except Exception as exc:
         logger.exception("Scraper failed: %s", exc)
@@ -271,4 +286,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    run(main)

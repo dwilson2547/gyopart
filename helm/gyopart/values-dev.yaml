@@ -68,6 +68,12 @@ scraping:
         limits: {memory: 2Gi}
       jobs:
         ryans-pic-a-part: {pool: junkyard-inventory}
+    # US Auto Supply, Sterling Heights MI: one GET of the yard's CrushYMS XML feed (full inventory).
+    us-auto-supply:
+      image: dwilson2547/gyopart-scraper-us-auto-supply@sha256:496fd4db70e3b839e2ac020c0e70e90d929bd910a336fbb4b12975187b1404cc
+      timeout: 15m
+      jobs:
+        us-auto-supply: {pool: junkyard-inventory}
     # Parts-direct update scraper v2: one image for every manufacturer site, one job per site. Works a
     # DB queue, so items per run vary with what is due — no zero/drop checks. Browser is scrape-stack's
     # browserless (headed); all site traffic goes through the VPN proxy.
