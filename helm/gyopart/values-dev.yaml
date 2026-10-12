@@ -110,7 +110,7 @@ scraping:
       jobs:
         midway-upull: {pool: junkyard-inventory, suspend: true}
     central-florida-pick-and-pay:
-      image: dwilson2547/gyopart-scraper-central-florida-pick-and-pay@sha256:5ef022b1a48b24366a82d5dbc1a42794cfb18726ab443ce99154a1115406f104
+      image: dwilson2547/gyopart-scraper-central-florida-pick-and-pay@sha256:ed2452deb19a3a18d6c617623884cf75cf80b4ac8c0b539340d2fc49929f053d
       timeout: 30m
       jobs:
         central-florida-pick-and-pay: {pool: junkyard-inventory, suspend: true}
@@ -120,7 +120,7 @@ scraping:
       jobs:
         picknpull-sa: {pool: junkyard-inventory, suspend: true}
     budget-upullit:
-      image: dwilson2547/gyopart-scraper-budget-upullit@sha256:fb573a5c52eaa28074dd977d6bc9ca3eaf7698e1e2eaaf8e2837a2428d4235f4
+      image: dwilson2547/gyopart-scraper-budget-upullit@sha256:b10471884400d375ee6fbf550809b3e282b7e1f22965b006e35c3e783fed1713
       timeout: 1h
       jobs:
         budget-upullit: {pool: junkyard-inventory, suspend: true}
