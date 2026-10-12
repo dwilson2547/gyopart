@@ -328,7 +328,7 @@ def main() -> dict:
                 len(all_vehicles), stopped_early,
             )
 
-        if not vehicles:
+        if not all_vehicles and not stopped_early:
             raise Broken("0 vehicles parsed — possible layout change")
 
         with Session(engine) as db:
@@ -352,7 +352,7 @@ def main() -> dict:
             run.success = True
             db.commit()
 
-        return {"items": len(vehicles), "new": new_c, "updated": updated_c, "removed": removed_c}
+        return {"items": len(all_vehicles), "new": new_c, "updated": updated_c, "removed": removed_c}
 
     except Broken as exc:
         with Session(engine) as db:

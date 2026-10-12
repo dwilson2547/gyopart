@@ -292,7 +292,7 @@ def main() -> dict:
                 logger.info("  %s: %d vehicles", slug, len(parsed))
 
         total = sum(len(v) for v in vehicles_by_location.values())
-        if not vehicles:
+        if not total:
             raise Broken("0 vehicles parsed — possible layout change")
 
         with Session(engine) as db:
@@ -315,7 +315,7 @@ def main() -> dict:
             run.success = True
             db.commit()
 
-        return {"items": len(vehicles), "new": new_c, "updated": updated_c, "removed": removed_c}
+        return {"items": total, "new": new_c, "updated": updated_c, "removed": removed_c}
 
     except Broken as exc:
         with Session(engine) as db:

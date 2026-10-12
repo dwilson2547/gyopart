@@ -321,7 +321,7 @@ def main() -> dict:
         if skipped:
             logger.info("Skipped %d records (no valid VIN)", skipped)
 
-        if not vehicles:
+        if not all_vehicles:
             raise Broken("0 vehicles parsed — possible layout change")
 
         with Session(engine) as db:
@@ -342,7 +342,7 @@ def main() -> dict:
             run.success = True
             db.commit()
 
-        return {"items": len(vehicles), "new": new_c, "updated": updated_c, "removed": removed_c}
+        return {"items": len(all_vehicles), "new": new_c, "updated": updated_c, "removed": removed_c}
 
     except Broken as exc:
         with Session(engine) as db:
