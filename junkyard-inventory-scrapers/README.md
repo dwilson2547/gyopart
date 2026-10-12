@@ -1,6 +1,8 @@
 # junkyard_inventory_scrapers
 ## Running under scrape-job-manager
 
+Release status per scraper (dev / prod): [`RELEASES.md`](RELEASES.md).
+
 Scheduled runs are owned by the scrape-job-manager operator (`web-scrapers/scrape-job-manager` in the
 workspace): weekly, Mon–Fri 09:00–19:00 America/New_York, balanced across the week. A scraper joins
 the fleet in three steps:

@@ -18,6 +18,13 @@ scraping:
       activeHours:
         tz: America/New_York
         hours: "06:00-23:00"
+    # Yards whose whole inventory is one cheap request: daily, so a car shows up the day after it
+    # lands (US Auto Supply's feed refreshes around 01:30).
+    junkyard-daily:
+      every: 1d
+      activeHours:
+        tz: America/New_York
+        hours: "06:00-22:00"
 
   defaults:
     resources:
@@ -70,3 +77,9 @@ scraping:
         parts-direct-subaru: {pool: parts-direct, params: {config: subaru, refresh: false, discovery_interval_days: 30}}
         parts-direct-toyota: {pool: parts-direct, params: {config: toyota, refresh: false, discovery_interval_days: 30}}
         parts-direct-volvo: {pool: parts-direct, params: {config: volvo, refresh: false, discovery_interval_days: 30}}
+    # US Auto Supply, Sterling Heights MI: one GET of the yard's CrushYMS XML feed (full inventory).
+    us-auto-supply:
+      image: dwilson2547/gyopart-scraper-us-auto-supply@sha256:496fd4db70e3b839e2ac020c0e70e90d929bd910a336fbb4b12975187b1404cc
+      timeout: 15m
+      jobs:
+        us-auto-supply: {pool: junkyard-daily}

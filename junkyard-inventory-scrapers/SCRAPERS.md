@@ -235,5 +235,4 @@ Not on the checklist — skip until VIN becomes available or a composite-key app
 | `jacksusedautoparts` | Zero VIN data |
 | `jksalvageco` | WP Car Manager — VIN not stored anywhere |
 | `sturtevantauto` | No VIN; `REFERENCE` col is engine spec |
-| `us_auto_parts_sterling_heights` | No VIN (already has a partial scraper) |
 | `mcdonoughautoparts` | Car-Part.com platform — not feasibly scrapable |
