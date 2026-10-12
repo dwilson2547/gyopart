@@ -34,7 +34,7 @@ async def lifespan(app: FastAPI):
     _engine.dispose()
 
 
-app = FastAPI(title="Inventory Search API", lifespan=lifespan)
+app = FastAPI(title="Inventory Search API", version="3.0.2", lifespan=lifespan)
 
 
 def _parse_car_ids(raw: str) -> list[int]:
