@@ -4,12 +4,13 @@ namespace:
 
 domain: gyopart-dev.local
 
-# Release 3.0.0 (UI redesign + catalogue/yard APIs) runs in dev first; prod stays on values.yaml's :latest until
-# promoted. Helm merges maps, so the other images keep values.yaml's tags.
+# Release 3.0.2 (UI redesign + catalogue/yard APIs) runs in dev first; prod stays on values.yaml's :latest until
+# promoted. Helm merges maps, so the other images keep values.yaml's tags. Images are built from a clean clone of the
+# tagged commit: GYOPART_TAG=3.0.2 docker compose build/push <service>.
 images:
-  gyopartApi: dwilson2547/gyopart-api:3.0.0
-  gyopartUi: dwilson2547/gyopart-ui:3.0.1  # 3.0.1: copying the part number works over plain HTTP
-  inventoryApi: dwilson2547/inventory-api:3.0.0
+  gyopartApi: dwilson2547/gyopart-api:3.0.2
+  gyopartUi: dwilson2547/gyopart-ui:3.0.2
+  inventoryApi: dwilson2547/inventory-api:3.0.2
 
 imagePullPolicy: Always
 
