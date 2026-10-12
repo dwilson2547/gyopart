@@ -86,7 +86,7 @@ scraping:
         parts-direct-volvo: {pool: parts-direct, params: {config: volvo, refresh: false, discovery_interval_days: 30}}
     # US Auto Supply, Sterling Heights MI: one GET of the yard's CrushYMS XML feed (full inventory).
     us-auto-supply:
-      image: dwilson2547/gyopart-scraper-us-auto-supply@sha256:496fd4db70e3b839e2ac020c0e70e90d929bd910a336fbb4b12975187b1404cc
+      image: dwilson2547/gyopart-scraper-us-auto-supply@sha256:f285dde7d5f6041ded1b493b3b4fdf2477950986c0de87acc864a527c7346179
       timeout: 15m
       jobs:
         us-auto-supply: {pool: junkyard-daily}
