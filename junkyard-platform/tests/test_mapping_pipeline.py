@@ -50,84 +50,91 @@ def test_decode_vin_invalid_length():
     session.get.assert_not_called()
 
 
+HONDA_RAW = {"VIN": "1HGCM82633A004352", "Make": "HONDA", "Model": "Accord", "ModelYear": "2003", "Trim": "EX",
+             "ErrorCode": "0", "DisplacementL": "2.4", "EngineCylinders": "4", "FuelTypePrimary": "Gasoline"}
+
+
 def test_decode_vin_cache_hit_success():
     from pipeline.vin_decoder import decode_vin
     from junkyard_common.models import VinCache
     cached = VinCache(
         vin="1HGCM82633A004352",
         make="Honda", model="Accord", model_year="2003", trim="EX",
-        error_code=None, fetched_at=datetime.datetime.now(),
+        error_code=None, raw=HONDA_RAW, fetched_at=datetime.datetime.now(),
     )
     session = MagicMock()
     session.get.return_value = cached
     result = decode_vin("1HGCM82633A004352", session)
-    assert result == {"make": "Honda", "model": "Accord", "model_year": "2003", "trim": "EX"}
+    assert result == {"make": "Honda", "model": "Accord", "model_year": "2003", "trim": "EX", "raw": HONDA_RAW}
 
 
 def test_decode_vin_cache_hit_error():
     from pipeline.vin_decoder import decode_vin
     from junkyard_common.models import VinCache
-    cached = VinCache(vin="1HGCM82633A004352", error_code="11", fetched_at=datetime.datetime.now())
+    cached = VinCache(vin="1HGCM82633A004352", error_code="11", raw={"ErrorCode": "11"},
+                      fetched_at=datetime.datetime.now())
     session = MagicMock()
     session.get.return_value = cached
     assert decode_vin("1HGCM82633A004352", session) is None
 
 
-def test_decode_vin_cache_miss_success():
+def test_decode_vin_cache_miss_success_keeps_full_record():
     from pipeline.vin_decoder import decode_vin
     session = MagicMock()
     session.get.return_value = None  # cache miss
-    with patch("pipeline.vin_decoder._fetch_nhtsa", return_value={
-        "Make": "Honda", "Model": "Accord", "ModelYear": "2003",
-        "Trim": "EX", "ErrorCode": "0",
-    }), patch("pipeline.vin_decoder.time.sleep"):
+    session.merge.side_effect = lambda row: row
+    with patch("pipeline.vin_decoder._fetch_nhtsa_batch", return_value=[HONDA_RAW]), \
+         patch("pipeline.vin_decoder.time.sleep"):
         result = decode_vin("1HGCM82633A004352", session)
-    assert result["make"] == "Honda"
-    assert result["model"] == "Accord"
-    session.merge.assert_called_once()
+    assert result["make"] == "HONDA"
+    assert result["raw"] == HONDA_RAW
+    stored = session.merge.call_args[0][0]
+    assert stored.raw == HONDA_RAW
     session.commit.assert_called_once()
+
+
+def test_decode_vin_cache_row_without_raw_is_refetched():
+    from pipeline.vin_decoder import decode_vin
+    from junkyard_common.models import VinCache
+    session = MagicMock()
+    session.get.return_value = VinCache(vin="1HGCM82633A004352", make="Honda", model="Accord",
+                                        model_year="2003", fetched_at=datetime.datetime.now())
+    session.merge.side_effect = lambda row: row
+    with patch("pipeline.vin_decoder._fetch_nhtsa_batch", return_value=[HONDA_RAW]) as fetch, \
+         patch("pipeline.vin_decoder.time.sleep"):
+        result = decode_vin("1HGCM82633A004352", session)
+    fetch.assert_called_once()
+    assert result["raw"] == HONDA_RAW
 
 
 def test_decode_vin_pre1980():
     from pipeline.vin_decoder import decode_vin
     session = MagicMock()
     session.get.return_value = None
-    with patch("pipeline.vin_decoder._fetch_nhtsa", return_value={
-        "Make": "", "Model": "", "ModelYear": "", "Trim": "", "ErrorCode": "11 - "
-    }), patch("pipeline.vin_decoder.time.sleep"):
+    session.merge.side_effect = lambda row: row
+    with patch("pipeline.vin_decoder._fetch_nhtsa_batch", return_value=[{
+        "VIN": "1HGCM82633A004352", "Make": "", "Model": "", "ModelYear": "", "Trim": "", "ErrorCode": "11 - "
+    }]), patch("pipeline.vin_decoder.time.sleep"):
         result = decode_vin("1HGCM82633A004352", session)
     assert result is None
-    session.merge.assert_called_once()
+    assert session.merge.call_args[0][0].raw["ErrorCode"] == "11 - "
 
 
-def test_resolve_vin_to_car_id_found():
-    from pipeline.vin_decoder import resolve_vin_to_car_id
-
-    pi_engine = MagicMock()
-    conn = MagicMock()
-    pi_engine.connect.return_value.__enter__ = MagicMock(return_value=conn)
-    pi_engine.connect.return_value.__exit__ = MagicMock(return_value=False)
-
-    # year row → id=5, make row → id=3, model row → id=12, car → id=99
-    conn.execute.side_effect = [
-        MagicMock(one_or_none=MagicMock(return_value=(5,))),   # year
-        MagicMock(one_or_none=MagicMock(return_value=(3,))),   # make
-        MagicMock(one_or_none=MagicMock(return_value=(12,))),  # model
-        MagicMock(first=MagicMock(return_value=(99,))),        # car
-    ]
-    decoded = {"make": "Honda", "model": "Accord", "model_year": "2003", "trim": "EX"}
-    assert resolve_vin_to_car_id(decoded, pi_engine) == 99
-
-
-def test_resolve_vin_to_car_id_missing_year():
-    from pipeline.vin_decoder import resolve_vin_to_car_id
-    pi_engine = MagicMock()
-    conn = MagicMock()
-    pi_engine.connect.return_value.__enter__ = MagicMock(return_value=conn)
-    pi_engine.connect.return_value.__exit__ = MagicMock(return_value=False)
-    conn.execute.return_value.one_or_none.return_value = None  # year not found
-    decoded = {"make": "Honda", "model": "Accord", "model_year": "1899", "trim": ""}
-    assert resolve_vin_to_car_id(decoded, pi_engine) is None
+def test_fetch_into_cache_batches_only_misses():
+    from pipeline.vin_decoder import fetch_into_cache
+    from junkyard_common.models import VinCache
+    hit = VinCache(vin="1HGCM82633A004352", make="Honda", model="Accord", model_year="2003",
+                   raw=HONDA_RAW, fetched_at=datetime.datetime.now())
+    miss_raw = dict(HONDA_RAW, VIN="1C3CC4FBXAN197479", Make="CHRYSLER", Model="Sebring", ModelYear="2010")
+    session = MagicMock()
+    session.execute.return_value.scalars.return_value = [hit]
+    session.merge.side_effect = lambda row: row
+    with patch("pipeline.vin_decoder._fetch_nhtsa_batch", return_value=[miss_raw]) as fetch:
+        out = fetch_into_cache(["1HGCM82633A004352", "1c3cc4fbxan197479", "SHORT"], session)
+    fetch.assert_called_once_with(["1C3CC4FBXAN197479"])
+    assert out["1HGCM82633A004352"]["make"] == "Honda"
+    assert out["1C3CC4FBXAN197479"]["make"] == "CHRYSLER"
+    assert "SHORT" not in out
 
 
 def test_normalize_strips_punctuation_and_suffixes():
@@ -181,8 +188,8 @@ def _make_pi_engine_mock(makes, models_by_make_id, cars):
             # year lookup
             result.one_or_none.return_value = (10,) if cars else None
         else:
-            # car lookup
-            result.first.return_value = cars[0] if cars else None
+            # cars for the matched year/make/model
+            result.scalars.return_value.all.return_value = [c[0] for c in cars]
         return result
 
     conn.execute.side_effect = execute_side_effect
@@ -199,6 +206,7 @@ def test_match_car_above_threshold():
     result = match_car(2003, "Honda", "Accord", pi_engine)
     assert result is not None
     assert result.car_id == 99
+    assert result.candidates == [99]
     assert result.confidence >= 0.85
 
 
@@ -357,23 +365,36 @@ def test_resolve_vehicle_already_resolved_skips():
     session.commit.assert_not_called()
 
 
-def test_resolve_vehicle_vin_decode_success():
+def test_resolve_vehicle_vin_exact():
+    from pipeline.car_matcher import CarMatch
     from pipeline.resolution_pipeline import resolve_vehicle
     vehicle = _make_vehicle(vin="1HGCM82633A004352")
     session = MagicMock()
-    pi_engine = MagicMock()
+    with patch("pipeline.resolution_pipeline.decode_vin", return_value={"raw": HONDA_RAW}), \
+         patch("pipeline.resolution_pipeline.match_decoded", return_value=CarMatch(candidates=[42])):
+        result = resolve_vehicle(vehicle, session, MagicMock(), rules=[], dry_run=False)
 
-    with patch("pipeline.resolution_pipeline.decode_vin",
-               return_value={"make": "Honda", "model": "Accord", "model_year": "2003", "trim": "EX"}), \
-         patch("pipeline.resolution_pipeline.resolve_vin_to_car_id", return_value=42):
-        result = resolve_vehicle(vehicle, session, pi_engine, rules=[], dry_run=False)
-
-    assert result == "vin_decode"
+    assert result == "vin_exact"
     assert vehicle.car_id == 42
+    assert vehicle.car_id_candidates == [42]
     assert vehicle.car_id_resolved is True
-    assert vehicle.car_id_method == "vin_decode"
     assert vehicle.car_id_confidence == 1.0
+    assert vehicle.resolve_attempted_at is not None
     session.commit.assert_called()
+
+
+def test_resolve_vehicle_vin_candidates_leave_car_id_empty():
+    from pipeline.car_matcher import CarMatch
+    from pipeline.resolution_pipeline import resolve_vehicle
+    vehicle = _make_vehicle(vin="1HGCM82633A004352")
+    with patch("pipeline.resolution_pipeline.match_decoded", return_value=CarMatch(candidates=[7, 8, 9, 10])):
+        result = resolve_vehicle(vehicle, MagicMock(), MagicMock(), rules=[], decoded={"raw": HONDA_RAW},
+                                 commit=False)
+
+    assert result == "vin_candidates"
+    assert vehicle.car_id is None
+    assert vehicle.car_id_candidates == [7, 8, 9, 10]
+    assert vehicle.car_id_confidence == 0.25
 
 
 def test_resolve_vehicle_ymmt_match_success():

@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from sqlalchemy import bindparam, text
+from sqlalchemy import Integer, bindparam, text
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.engine import Engine
 
 from inventory_api.models import LocationResult, VehicleResult
@@ -35,7 +36,10 @@ FROM (
         v.row               AS row,
         v.car_id            AS car_id,
         v.color             AS color,
-        v.mileage           AS mileage
+        v.mileage           AS mileage,
+        v.vin               AS vin,
+        v.arrival_date      AS arrival_date,
+        cardinality(v.car_id_candidates) AS candidate_count
     FROM locations l
     JOIN vehicles v ON v.location_id = l.id
     WHERE l.is_active = true
@@ -43,11 +47,11 @@ FROM (
       AND l.lat IS NOT NULL
       AND l.lng IS NOT NULL
       AND v.car_id_resolved = true
-      AND v.car_id IN :car_ids
+      AND v.car_id_candidates && :car_ids
 ) sub
 WHERE distance_miles <= :radius_miles
-ORDER BY distance_miles ASC
-""").bindparams(bindparam("car_ids", expanding=True))
+ORDER BY distance_miles ASC, arrival_date DESC NULLS LAST
+""").bindparams(bindparam("car_ids", type_=ARRAY(Integer)))
 
 
 def search_inventory(
@@ -62,7 +66,7 @@ def search_inventory(
     with engine.connect() as conn:
         rows = conn.execute(
             _HAVERSINE_SQL,
-            {"lat": lat, "lng": lng, "radius_miles": radius_miles, "car_ids": tuple(car_ids)},
+            {"lat": lat, "lng": lng, "radius_miles": radius_miles, "car_ids": list(car_ids)},
         ).mappings().all()
 
     locations: dict[int, dict] = {}
@@ -93,6 +97,10 @@ def search_inventory(
             car_id=row["car_id"],
             color=row["color"],
             mileage=row["mileage"],
+            vin=row.get("vin"),
+            arrival_date=row.get("arrival_date"),
+            # One candidate car = the VIN pinned trim/engine; several = it is one of them.
+            match="exact" if (row.get("candidate_count") or 0) == 1 else "likely",
         ))
 
     return [

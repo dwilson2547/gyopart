@@ -37,12 +37,13 @@ def apply_rules(
     rules: list[MappingRule],
     session: Session,
     dry_run: bool = False,
+    commit: bool = True,
 ) -> tuple[dict, list[MappingRule]]:
     """
     Apply active MappingRules to vehicle's make/model/trim.
     Returns (transformed_fields_dict, list_of_applied_rules).
     Scope priority: location > source > global. Within same scope, lower priority number wins.
-    Increments applied_count on matched rules and commits.
+    Increments applied_count on matched rules and commits (unless commit=False: caller owns the transaction).
     """
     transformed = {
         "make":  getattr(vehicle, "make",  "") or "",
@@ -66,7 +67,7 @@ def apply_rules(
                 applied.append(rule)
                 break  # first matching rule wins per field
 
-    if applied and not dry_run:
+    if applied and not dry_run and commit:
         session.commit()
 
     return transformed, applied

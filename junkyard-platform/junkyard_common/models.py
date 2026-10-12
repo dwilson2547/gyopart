@@ -8,7 +8,7 @@ from sqlalchemy import (
     Boolean, Column, DateTime, Float, ForeignKey,
     Integer, String, UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
@@ -86,8 +86,13 @@ class Vehicle(Base):
     # Car-ID mapping — populated by resolution pipeline (Phase 3)
     car_id            = Column(Integer,    nullable=True, index=True)
     car_id_resolved   = Column(Boolean,    nullable=False, default=False)
-    car_id_method     = Column(String(20), nullable=True)    # vin_decode|ymmt_match|manual|rule_applied
+    car_id_method     = Column(String(20), nullable=True)    # vin_exact|vin_candidates|vin_decode|ymmt_match|manual|rule_applied
     car_id_confidence = Column(Float,      nullable=True)
+    # Every catalogue car the vehicle may be (the VIN decode narrows by trim/engine where it can). car_id is
+    # set only when this is exactly one car; part lookups match on overlap, flagged "likely" when > 1.
+    car_id_candidates    = Column(ARRAY(Integer), nullable=True)
+    # Set when the resolver worker has processed the vehicle; NULL + car_id_resolved false = queued.
+    resolve_attempted_at = Column(DateTime,       nullable=True)
 
     # Bookkeeping
     is_active     = Column(Boolean,  nullable=False, default=True)
@@ -179,6 +184,7 @@ class VinCache(Base):
     model_year  = Column(String(10),  nullable=True)
     trim        = Column(String(200), nullable=True)
     error_code  = Column(String(20),  nullable=True)   # "11" for pre-1980; "INCOMPLETE" for bad decode
+    raw         = Column(JSONB,       nullable=True)   # full NHTSA result row, kept so decoding can be re-derived
     fetched_at  = Column(DateTime,    nullable=False, index=True)
 
     def __repr__(self) -> str:

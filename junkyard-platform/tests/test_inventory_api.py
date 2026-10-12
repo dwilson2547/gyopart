@@ -53,14 +53,16 @@ def _make_db_row(
     location_id=1, name="Pick-n-Pull", address="123 Main", city="Detroit",
     state="MI", zip_code="48210", phone="313-555-0100", distance_miles=4.2,
     vehicle_id=42, year=2003, make="Honda", model="Accord", trim="EX",
-    row="B14", car_id=99,
+    row="B14", car_id=99, candidate_count=1,
 ):
     return {
         "location_id": location_id, "name": name, "address": address,
         "city": city, "state": state, "zip_code": zip_code, "phone": phone,
         "distance_miles": distance_miles, "vehicle_id": vehicle_id,
         "year": year, "make": make, "model": model, "trim": trim,
-        "row": row, "car_id": car_id,
+        "row": row, "car_id": car_id, "lat": 42.3, "lng": -83.1, "color": "RED",
+        "mileage": None, "vin": "1HGCM56603A000001", "arrival_date": None,
+        "candidate_count": candidate_count,
     }
 
 
@@ -102,6 +104,19 @@ def test_search_inventory_groups_multiple_vehicles_per_location():
     )
     assert len(results) == 1
     assert len(results[0].matching_vehicles) == 2
+
+
+def test_search_inventory_flags_exact_and_likely_matches():
+    mock_engine = MagicMock()
+    mock_conn = MagicMock()
+    mock_engine.connect.return_value.__enter__.return_value = mock_conn
+    mock_conn.execute.return_value.mappings.return_value.all.return_value = [
+        _make_db_row(vehicle_id=10, candidate_count=1),
+        _make_db_row(vehicle_id=20, car_id=None, candidate_count=4),
+    ]
+
+    results = search_inventory(engine=mock_engine, car_ids=[99], lat=42.33, lng=-83.04, radius_miles=50.0)
+    assert [v.match for v in results[0].matching_vehicles] == ["exact", "likely"]
 
 
 def test_search_inventory_empty_result():

@@ -1,4 +1,7 @@
 from __future__ import annotations
+from datetime import datetime
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -12,6 +15,9 @@ class VehicleResult(BaseModel):
     car_id: int | None
     color: str | None = None
     mileage: int | None = None
+    vin: str | None = None
+    arrival_date: datetime | None = None
+    match: Literal["exact", "likely"] = "exact"
 
 
 class LocationResult(BaseModel):

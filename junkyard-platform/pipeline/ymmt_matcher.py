@@ -28,6 +28,7 @@ class YmmtMatch:
     make_score: float
     model_match: str
     model_score: float
+    candidates: list[int] | None = None  # every car for the matched year/make/model (trim/engine unknown)
 
 
 def match_car(
@@ -74,22 +75,24 @@ def match_car(
         model_match_name = models[model_idx].name
         confidence = min(make_score, model_score)
 
-        # Prefer year-specific car; fall back to any car with this make+model
+        # Prefer year-specific cars; fall back to any car with this make+model
         car_id = None
+        candidates: list[int] | None = None
         if year:
             year_row = conn.execute(
                 select(pi_year_table.c.id).where(pi_year_table.c.name == str(year))
             ).one_or_none()
             if year_row:
-                car_row = conn.execute(
+                ids = conn.execute(
                     select(pi_car_table.c.id).where(
                         pi_car_table.c.year_id == year_row[0],
                         pi_car_table.c.make_id == make_id,
                         pi_car_table.c.model_id == model_id,
-                    )
-                ).first()
-                if car_row:
-                    car_id = car_row[0]
+                    ).order_by(pi_car_table.c.id)
+                ).scalars().all()
+                if ids:
+                    car_id = ids[0]
+                    candidates = list(ids)
 
         if car_id is None:
             car_row = conn.execute(
@@ -111,4 +114,5 @@ def match_car(
             make_score=make_score,
             model_match=model_match_name,
             model_score=model_score,
+            candidates=candidates,
         )

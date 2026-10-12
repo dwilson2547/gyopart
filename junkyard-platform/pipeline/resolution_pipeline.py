@@ -24,7 +24,8 @@ from sqlalchemy.orm import Session
 from junkyard_common.db import get_engine, get_session
 from junkyard_common.models import Location, MappingDiscrepancy, MappingRule, Vehicle
 from pipeline.rule_engine import apply_rules
-from pipeline.vin_decoder import decode_vin, resolve_vin_to_car_id, warm_vin_cache_bulk
+from pipeline.car_matcher import decoded_vehicle_fields, match_decoded
+from pipeline.vin_decoder import decode_vin, warm_vin_cache_bulk
 from pipeline.ymmt_matcher import YmmtMatch, match_car
 
 logger = logging.getLogger(__name__)
@@ -53,36 +54,57 @@ def geocode_locations(engine, dry_run: bool = False) -> None:
         logger.info("Geocoded %d/%d locations", updated, len(locations))
 
 
+def _set_match(vehicle: Vehicle, candidates: list[int], method: str, confidence: float, now: datetime) -> None:
+    vehicle.car_id_candidates = candidates
+    vehicle.car_id = candidates[0] if len(candidates) == 1 else None
+    vehicle.car_id_resolved = True
+    vehicle.car_id_method = method
+    vehicle.car_id_confidence = confidence
+    vehicle.resolve_attempted_at = now
+
+
 def resolve_vehicle(
     vehicle: Vehicle,
     session: Session,
     pi_engine,
     rules: list[MappingRule],
     dry_run: bool = False,
+    decoded: dict | None = None,
+    commit: bool = True,
 ) -> str:
     """
-    Attempt to resolve vehicle.car_id. Returns one of:
-    "already_resolved" | "vin_decode" | "ymmt_match" | "rule_applied" | "discrepancy"
+    Attempt to resolve the catalogue cars a yard vehicle can be. Returns one of:
+    "already_resolved" | "vin_exact" | "vin_candidates" | "ymmt_match" | "rule_applied" | "discrepancy"
+
+    `decoded` is the VIN decode when the caller already has it (the worker decodes in batches); otherwise the
+    VIN is decoded here, cache-first.
     """
     if vehicle.car_id_resolved:
         return "already_resolved"
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
 
-    # Step 1: VIN decode
-    if vehicle.vin:
+    def done(result: str) -> str:
+        if commit and not dry_run:
+            session.commit()
+        return result
+
+    # Step 1: VIN decode, narrowed to trim/engine where the decode allows
+    if decoded is None and vehicle.vin:
         decoded = decode_vin(vehicle.vin, session)
-        if decoded:
-            car_id = resolve_vin_to_car_id(decoded, pi_engine)
-            if car_id:
-                vehicle.car_id = car_id
-                vehicle.car_id_resolved = True
-                vehicle.car_id_method = "vin_decode"
-                vehicle.car_id_confidence = 1.0
-                if not dry_run:
-                    session.commit()
-                return "vin_decode"
+    if decoded:
+        raw = decoded.get("raw") or {}
+        for column, value in decoded_vehicle_fields(raw).items():
+            if getattr(vehicle, column) is None:
+                setattr(vehicle, column, value)
+        match = match_decoded(raw, pi_engine)
+        if match.candidates:
+            exact = match.exact
+            _set_match(vehicle, match.candidates, "vin_exact" if exact else "vin_candidates",
+                       1.0 if exact else round(1.0 / len(match.candidates), 4), now)
+            return done("vin_exact" if exact else "vin_candidates")
 
     # Step 2: Apply rules to transform make/model/trim
-    transformed, applied_rules = apply_rules(vehicle, rules, session, dry_run=dry_run)
+    transformed, applied_rules = apply_rules(vehicle, rules, session, dry_run=dry_run, commit=commit)
 
     # Step 3: Fuzzy YMMT match
     ymmt: YmmtMatch | None = match_car(
@@ -91,16 +113,11 @@ def resolve_vehicle(
 
     if ymmt is not None:
         method = "rule_applied" if applied_rules else "ymmt_match"
-        vehicle.car_id = ymmt.car_id
-        vehicle.car_id_resolved = True
-        vehicle.car_id_method = method
-        vehicle.car_id_confidence = ymmt.confidence
-        if not dry_run:
-            session.commit()
-        return method
+        _set_match(vehicle, ymmt.candidates or [ymmt.car_id], method, ymmt.confidence, now)
+        return done(method)
 
     # Step 4: Discrepancy
-    now = datetime.now(timezone.utc)
+    vehicle.resolve_attempted_at = now
     discrepancy = MappingDiscrepancy(
         vehicle_id=vehicle.id,
         raw_year=str(vehicle.year) if vehicle.year else None,
@@ -117,9 +134,14 @@ def resolve_vehicle(
         last_processed_at=now,
     )
     if not dry_run:
+        existing = session.execute(
+            select(MappingDiscrepancy).where(MappingDiscrepancy.vehicle_id == vehicle.id)
+        ).scalar_one_or_none()
+        if existing is not None:
+            discrepancy.id = existing.id
+            discrepancy.created_at = existing.created_at
         session.merge(discrepancy)
-        session.commit()
-    return "discrepancy"
+    return done("discrepancy")
 
 
 def run_pipeline(
