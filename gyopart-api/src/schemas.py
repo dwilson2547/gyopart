@@ -201,3 +201,38 @@ class PartSearchOut(BaseModel):
     q: str
     hits: list[PartHitOut]
     truncated: bool
+
+
+class ImageSet(BaseModel):
+    """One picture; the parts sites store each at three sizes (640/300/150 px wide)."""
+    large: str
+    medium: str
+    small: str
+    callout: str | None = None  # for illustrations: the part's reference number on it
+
+
+class PartDiagramOut(BaseModel):
+    diagram_id: int
+    image_url: str | None
+    label: str | None
+    part_index: str | None
+    category_id: int | None
+    sub_category_id: int | None
+
+
+class PartDetailOut(BaseModel):
+    id: int
+    part_number: str | None
+    title: str | None
+    other_names: list[str]
+    description: str | None
+    replaces: str | None
+    positions: str | None
+    notes: str | None
+    msrp: float | None
+    manufacturer: str | None
+    photos: list[ImageSet]
+    illustrations: list[ImageSet]
+    diagrams: list[PartDiagramOut]
+    fit_count: int
+    fits_car: bool | None

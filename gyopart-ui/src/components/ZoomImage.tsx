@@ -25,7 +25,7 @@ export function ZoomImage({ src, alt }: { src: string | null; alt: string }) {
 
   if (!src || failed === src) {
     return (
-      <div className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-1 rounded-lg border border-line bg-bg text-sm text-muted">
+      <div className="flex aspect-[4/3] max-h-[min(65vh,38rem)] w-full flex-col items-center justify-center gap-1 rounded-lg border border-line bg-bg text-sm text-muted">
         <ImageOff className="size-7" />
         {src ? 'The diagram image failed to load.' : 'No image for this diagram.'}
         <span className="text-xs">The parts list still works.</span>
@@ -37,7 +37,7 @@ export function ZoomImage({ src, alt }: { src: string | null; alt: string }) {
     <div className="relative">
       <div
         ref={box}
-        className={`relative aspect-[4/3] w-full touch-none overflow-hidden rounded-lg border border-line bg-white ${
+        className={`relative aspect-[4/3] max-h-[min(65vh,38rem)] w-full touch-none overflow-hidden rounded-lg border border-line bg-white ${
           view.scale > 1 ? 'cursor-grab active:cursor-grabbing' : 'cursor-zoom-in'
         }`}
         onWheel={e => { const [cx, cy] = fromCentre(e); zoomAt(e.deltaY < 0 ? 1.2 : 1 / 1.2, cx, cy) }}

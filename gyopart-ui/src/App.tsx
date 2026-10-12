@@ -18,6 +18,8 @@ export default function App() {
         <Route path="/garage" element={<GaragePage />} />
         <Route path="/car/:carId" element={<CarPage />} />
         <Route path="/part/:partId" element={<PartPage />} />
+        <Route path="/part/:partId/interchange" element={<div className="p-6 text-muted">Interchange — coming next.</div>} />
+        <Route path="/part/:partId/yards" element={<div className="p-6 text-muted">Yards — coming soon.</div>} />
         <Route path="*" element={<div className="p-6 text-muted">Page not found.</div>} />
       </Routes>
     </Shell>

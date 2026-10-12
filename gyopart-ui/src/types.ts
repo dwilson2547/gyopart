@@ -84,3 +84,32 @@ export interface PartHit {
 }
 
 export interface PartSearch { q: string; hits: PartHit[]; truncated: boolean }
+
+export interface ImageSet { large: string; medium: string; small: string; callout: string | null }
+
+export interface PartDiagram {
+  diagram_id: number
+  image_url: string | null
+  label: string | null
+  part_index: string | null
+  category_id: number | null
+  sub_category_id: number | null
+}
+
+export interface PartDetail {
+  id: number
+  part_number: string | null
+  title: string | null
+  other_names: string[]
+  description: string | null
+  replaces: string | null
+  positions: string | null
+  notes: string | null
+  msrp: number | null
+  manufacturer: string | null
+  photos: ImageSet[]
+  illustrations: ImageSet[]
+  diagrams: PartDiagram[]
+  fit_count: number
+  fits_car: boolean | null
+}

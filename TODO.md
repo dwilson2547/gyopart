@@ -40,6 +40,8 @@ Backlog imported from the retired todo store, 2026-07-06.
 
 ## Low
 
+- [ ] **Index `diagram_parts.part_id`** — the PK is (diagram_id, part_id), so "which diagrams is this part on" scans ~135M rows (~8 s). gyopart-api works around it by going through car_parts → car_diagrams (0.7–1.5 s without a car). Needs the index in `parts_interchange_common` (new PyPI version) and `CREATE INDEX CONCURRENTLY` on dev + prod.
+
 - [ ] **Pre-existing admin-api test failure** — `test_list_discrepancies_requires_auth` fails (seen 2026-10-12, unrelated to the VIN resolver work).
 
 ## Unprioritized (imported from workman drafts, 2026-07-06)
