@@ -1,8 +1,13 @@
 FROM python:3.13-slim
 WORKDIR /app
+# junkyard_common from this tree (not PyPI), so the image always has the schema the migrations describe.
+COPY pyproject.toml ./
+COPY junkyard_common/ ./junkyard_common/
 COPY admin_api/requirements.txt ./admin_api_requirements.txt
 COPY pipeline/requirements.txt ./pipeline_requirements.txt
-RUN pip install --no-cache-dir -r admin_api_requirements.txt -r pipeline_requirements.txt
+RUN pip install --no-cache-dir . \
+ && cat admin_api_requirements.txt pipeline_requirements.txt | grep -v '^dwilson-junkyard-common' > reqs.txt \
+ && pip install --no-cache-dir -r reqs.txt "sqlalchemy>=2.0,<2.1"
 COPY admin_api/ ./admin_api/
 COPY pipeline/ ./pipeline/
 EXPOSE 8300

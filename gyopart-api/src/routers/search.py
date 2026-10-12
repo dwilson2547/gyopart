@@ -27,13 +27,9 @@ def search_junkyards(
         return SearchResponse(results=[])
 
     try:
-        resp = httpx.get(
+        resp = httpx.post(
             f"{settings.inventory_api_url}/inventory/search",
-            params={
-                "car_ids": ",".join(str(i) for i in car_ids),
-                "zip": zip,
-                "radius_miles": radius_miles,
-            },
+            json={"car_ids": list(car_ids), "zip": zip, "radius_miles": radius_miles},
             timeout=settings.inventory_api_timeout,
         )
         resp.raise_for_status()

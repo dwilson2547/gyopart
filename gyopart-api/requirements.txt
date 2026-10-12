@@ -1,7 +1,7 @@
 dwilson-parts-interchange-common
 fastapi>=0.111
 uvicorn[standard]>=0.29
-sqlalchemy>=2.0
+sqlalchemy>=2.0,<2.1  # 2.1 defaults postgresql:// to psycopg 3; only psycopg2 is installed
 psycopg2-binary>=2.9
 pydantic>=2.0
 pydantic-settings>=2.0

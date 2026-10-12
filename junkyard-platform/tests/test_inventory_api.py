@@ -287,3 +287,16 @@ def test_integration_zip_not_found_returns_422():
         resp = client.get("/inventory/search?car_ids=1&zip=00000&radius_miles=50")
     assert resp.status_code == 422
     assert "zip code not found" in resp.json()["detail"].lower()
+
+
+def test_post_search_accepts_more_than_100_car_ids():
+    from fastapi.testclient import TestClient
+    import inventory_api.main as main
+
+    with patch.object(main, "_resolve_zip", return_value=(42.6, -83.05)), \
+         patch.object(main, "_engine", MagicMock()), \
+         patch.object(main, "search_inventory", return_value=[]) as search:
+        resp = TestClient(main.app).post("/inventory/search",
+                                         json={"car_ids": list(range(1, 501)), "zip": "48314"})
+    assert resp.status_code == 200
+    assert len(search.call_args.args[1]) == 500

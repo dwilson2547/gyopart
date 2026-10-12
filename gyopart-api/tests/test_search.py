@@ -38,7 +38,7 @@ def test_search_calls_inventory_api_with_car_ids(client, mock_db):
     mock_resp.json.return_value = {"results": [_yard()]}
     mock_resp.raise_for_status = MagicMock()
 
-    with patch("src.routers.search.httpx.get", return_value=mock_resp) as mock_get:
+    with patch("src.routers.search.httpx.post", return_value=mock_resp) as mock_post:
         resp = client.get("/v1/search?part_id=1&zip=48093&radius_miles=25")
 
     assert resp.status_code == 200
@@ -48,14 +48,12 @@ def test_search_calls_inventory_api_with_car_ids(client, mock_db):
     assert data["results"][0]["distance_miles"] == 12.5
     assert data["results"][0]["matching_vehicles"][0]["make"] == "Toyota"
 
-    params = mock_get.call_args.kwargs["params"]
-    assert params["car_ids"] == "1,2,3"
-    assert params["zip"] == "48093"
-    assert params["radius_miles"] == 25.0
+    body = mock_post.call_args.kwargs["json"]
+    assert body == {"car_ids": [1, 2, 3], "zip": "48093", "radius_miles": 25.0}
 
 
 def test_search_returns_502_on_inventory_service_error(client, mock_db):
     mock_db.execute.return_value.scalars.return_value.all.return_value = [1]
-    with patch("src.routers.search.httpx.get", side_effect=httpx.ConnectError("refused")):
+    with patch("src.routers.search.httpx.post", side_effect=httpx.ConnectError("refused")):
         resp = client.get("/v1/search?part_id=1&zip=48093")
     assert resp.status_code == 502

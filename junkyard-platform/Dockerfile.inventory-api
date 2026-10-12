@@ -1,7 +1,15 @@
 FROM python:3.13-slim
 WORKDIR /app
+# junkyard_common from this tree (not PyPI), so the image always has the schema the migrations describe.
+COPY pyproject.toml ./
+COPY junkyard_common/ ./junkyard_common/
 COPY inventory_api/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir . \
+ && grep -v '^dwilson-junkyard-common' requirements.txt > reqs.txt \
+ && pip install --no-cache-dir -r reqs.txt "sqlalchemy>=2.0,<2.1"
 COPY inventory_api/ ./inventory_api/
+# uszipcode downloads its zip database on first use; fetch it at build time so the first search is not slow.
+ENV HOME=/app
+RUN python -c "from uszipcode import SearchEngine; SearchEngine().by_zipcode('48314')"
 EXPOSE 8100
 CMD ["uvicorn", "inventory_api.main:app", "--host", "0.0.0.0", "--port", "8100"]

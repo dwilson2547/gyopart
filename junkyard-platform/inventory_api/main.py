@@ -5,6 +5,7 @@ import re
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from uszipcode import SearchEngine
@@ -69,3 +70,18 @@ def search(
         raise HTTPException(status_code=503, detail="service not ready")
     results = search_inventory(_engine, ids, lat, lng, radius_miles)
     return SearchResponse(results=results)
+
+
+class SearchRequest(BaseModel):
+    # A part's interchange can span thousands of catalogue cars, more than fits a query string.
+    car_ids: list[int] = Field(..., min_length=1, max_length=50000)
+    zip: str
+    radius_miles: float = Field(50.0, ge=1.0, le=500.0)
+
+
+@app.post("/inventory/search", response_model=SearchResponse)
+def search_post(body: SearchRequest):
+    lat, lng = _resolve_zip(body.zip)
+    if _engine is None:
+        raise HTTPException(status_code=503, detail="service not ready")
+    return SearchResponse(results=search_inventory(_engine, body.car_ids, lat, lng, body.radius_miles))
