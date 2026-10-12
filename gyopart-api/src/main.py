@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.db import create_tables
-from src.routers import categories, diagrams, parts, search, vehicles
+from src.routers import cars, categories, diagrams, parts, search, vehicles
 
 
 @asynccontextmanager
@@ -26,6 +26,7 @@ app.add_middleware(
 )
 
 app.include_router(vehicles.router)
+app.include_router(cars.router)
 app.include_router(categories.router)
 app.include_router(diagrams.router)
 app.include_router(parts.router)

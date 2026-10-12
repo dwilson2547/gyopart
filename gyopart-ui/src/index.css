@@ -1,1 +1,75 @@
 @import "tailwindcss";
+
+/* Colour tokens (photo-dump's palette). Components use only these, through the Tailwind names below
+   (bg-bg, bg-surface, text-text, text-muted, border-line, bg-hover, text-accent, …). */
+:root {
+  --bg: #f4f5f7;
+  --surface: #ffffff;
+  --text: #1f2328;
+  --muted: #6b7280;
+  --line: #dde1e6;
+  --hover: rgba(31, 35, 40, 0.06);
+  --accent: #0d6efd;
+  --accent-soft: rgba(13, 110, 253, 0.1);
+  --danger: #dc3545;
+  --danger-soft: rgba(220, 53, 69, 0.07);
+  --ok: #198754;
+  --ok-soft: rgba(25, 135, 84, 0.1);
+  --warn-soft: rgba(255, 193, 7, 0.14);
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  --bg: #121316;
+  --surface: #1b1d21;
+  --text: #e6e7ea;
+  --muted: #9aa0a8;
+  --line: #30343a;
+  --hover: rgba(255, 255, 255, 0.07);
+  --accent: #5b9bff;
+  --accent-soft: rgba(91, 155, 255, 0.14);
+  --danger: #ff6b78;
+  --danger-soft: rgba(255, 107, 120, 0.12);
+  --ok: #4cc38a;
+  --ok-soft: rgba(76, 195, 138, 0.13);
+  --warn-soft: rgba(255, 193, 7, 0.14);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-hover: var(--hover);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn-soft: var(--warn-soft);
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden; /* the shell scrolls its content area, never the page */
+}
+
+/* Uppercase muted section label (photo-dump .pd-section-label). */
+.section-label {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}

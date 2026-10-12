@@ -122,3 +122,39 @@ class YardResult(BaseModel):
 
 class SearchResponse(BaseModel):
     results: list[YardResult]
+
+
+class CarDetailOut(BaseModel):
+    car_id: int
+    year_id: int
+    year: str
+    make_id: int
+    make: str
+    model_id: int
+    model: str
+    trim_id: int | None
+    trim: str | None
+    engine_id: int | None
+    engine: str | None
+
+
+class VinDecoded(BaseModel):
+    year: str | None
+    make: str | None
+    model: str | None
+    trim: str | None
+    series: str | None
+    displacement_l: float | None
+    cylinders: int | None
+    fuel: str | None
+    drive: str | None
+    body: str | None
+    error_code: str | None
+    error_text: str | None
+
+
+class VinDecodeOut(BaseModel):
+    vin: str
+    decoded: VinDecoded
+    candidates: list[CarDetailOut]
+    narrowed_by: list[str]
