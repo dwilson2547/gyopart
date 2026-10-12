@@ -43,3 +43,24 @@ def test_part_detail(client, mock_db):
 def test_part_detail_404(client, mock_db):
     mock_db.get.return_value = None
     assert client.get("/v1/parts/5/detail").status_code == 404
+
+
+def test_lookup_needs_three_characters(client):
+    assert client.get("/v1/parts/lookup?q=d-g").status_code == 422
+
+
+def test_lookup_splits_exact_and_suggestions(client, mock_db):
+    mock_db.execute.return_value.all.return_value = [
+        SimpleNamespace(id=1, part_number="76515-SMA-004", title="Wiper", manufacturer="Honda", exact=True),
+        SimpleNamespace(id=2, part_number="76515-SMA-004", title="Wiper", manufacturer="Acura", exact=True),
+        SimpleNamespace(id=3, part_number="76515-SMA-0045", title="Wiper arm", manufacturer="Honda", exact=False),
+    ]
+    data = client.get("/v1/parts/lookup?q=76515 sma 004").json()
+    assert data["q"] == "76515SMA004"
+    assert [h["manufacturer"] for h in data["exact"]] == ["Honda", "Acura"]
+    assert [h["id"] for h in data["suggestions"]] == [3]
+
+
+def test_part_id_route_still_works(client, mock_db):
+    mock_db.get.return_value = SimpleNamespace(id=5, title="Alternator", part_number="X", description=None, other_names=None)
+    assert client.get("/v1/parts/5").json()["title"] == "Alternator"

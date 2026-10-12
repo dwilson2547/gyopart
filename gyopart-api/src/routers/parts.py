@@ -3,14 +3,14 @@ from __future__ import annotations
 import re
 
 from fastapi import APIRouter, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 
 from src.db import DbDep
 from src.models import Car, Diagram, Engine, Image, Make, Manufacturer, Model, Part, Trim, Year, Subcategory, car_diagrams, car_parts, diagram_parts, part_images
 from src.routers.catalogue import best_label, label_from_alt
 from src.schemas import (
     ImageSet, InterchangeCar, InterchangeMake, InterchangeModel, InterchangeOut, InterchangeYear,
-    PagedPartsResponse, PartDetailOut, PartDiagramOut, PartOut,
+    PagedPartsResponse, PartDetailOut, PartDiagramOut, PartLookupOut, PartNumberHit, PartOut,
 )
 
 _REF_RE = re.compile(r"reference\s*#\s*(\w+)", re.IGNORECASE)
@@ -57,6 +57,36 @@ def get_parts(
         .all()
     )
     return PagedPartsResponse(items=items, total=total, page=page, per_page=per_page)
+
+
+LOOKUP_LIMIT = 20
+
+
+def normalize_number(q: str) -> str:
+    return re.sub(r"[^A-Za-z0-9]", "", q).upper()
+
+
+# Declared before /{part_id} so "lookup" isn't taken for a part id.
+@router.get("/lookup", response_model=PartLookupOut)
+def lookup_part_number(db: DbDep, q: str = Query(..., min_length=1, max_length=60)):
+    """Part numbers matching q, ignoring dashes, spaces and case. There's no index on the normalized number, so
+    candidates are narrowed with the part_number trigram index on the first three characters (as stored, or
+    after a leading dash, like Ford's "-W715092-S437") and then compared normalized."""
+    n = normalize_number(q)
+    if len(n) < 3:
+        raise HTTPException(status_code=422, detail="Type at least 3 letters or digits of the part number")
+    pre = n[:3]
+    normalized = func.upper(func.regexp_replace(Part.part_number, "[^A-Za-z0-9]", "", "g"))
+    rows = db.execute(
+        select(Part.id, Part.part_number, Part.title, Manufacturer.name.label("manufacturer"),
+               (normalized == n).label("exact"))
+        .outerjoin(Manufacturer, Manufacturer.id == Part.manufacturer_id)
+        .where(or_(Part.part_number.ilike(f"{pre}%"), Part.part_number.ilike(f"-{pre}%")), normalized.like(f"{n}%"))
+        .order_by(normalized != n, func.length(Part.part_number), Part.part_number, Manufacturer.name)
+        .limit(LOOKUP_LIMIT)
+    ).all()
+    hit = lambda r: PartNumberHit(id=r.id, part_number=r.part_number, title=r.title, manufacturer=r.manufacturer)
+    return PartLookupOut(q=n, exact=[hit(r) for r in rows if r.exact], suggestions=[hit(r) for r in rows if not r.exact])
 
 
 @router.get("/{part_id}", response_model=PartOut)

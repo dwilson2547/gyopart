@@ -266,3 +266,16 @@ class InterchangeOut(BaseModel):
     part_id: int
     car_count: int
     makes: list[InterchangeMake]
+
+
+class PartNumberHit(BaseModel):
+    id: int
+    part_number: str | None
+    title: str | None
+    manufacturer: str | None
+
+
+class PartLookupOut(BaseModel):
+    q: str
+    exact: list[PartNumberHit]        # same number ignoring dashes/spaces/case (several = several manufacturers)
+    suggestions: list[PartNumberHit]  # numbers starting with it

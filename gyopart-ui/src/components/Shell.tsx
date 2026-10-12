@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router'
-import { Car, Check, ChevronDown, Monitor, Moon, Plus, Sun, Warehouse } from 'lucide-react'
+import { Car, Check, ChevronDown, Hash, Monitor, Moon, Plus, Sun, Warehouse, X } from 'lucide-react'
 import { useTheme } from '../lib/theme'
+import { PartNumberBox } from './PartNumberBox'
 import { useGarage, vehicleSubtitle, vehicleTitle } from '../state/garageContext'
 
 const THEME_ICON = { system: Monitor, light: Sun, dark: Moon }
@@ -10,11 +11,17 @@ const THEME_ICON = { system: Monitor, light: Sun, dark: Moon }
 export function Shell({ children }: { children: React.ReactNode }) {
   const { mode, cycle } = useTheme()
   const ThemeIcon = THEME_ICON[mode]
+  const [lookupOpen, setLookupOpen] = useState(false) // phones: the box opens as a row under the bar
   return (
     <div className="flex h-dvh flex-col bg-bg text-text">
       <header className="z-20 flex h-13 shrink-0 items-center gap-1 border-b border-line bg-surface px-2">
         <Link to="/" className="px-2 text-lg font-semibold text-text hover:text-accent">gyopart</Link>
+        <div className="ml-2 hidden max-w-md flex-1 sm:block"><PartNumberBox /></div>
         <span className="flex-1" />
+        <button type="button" onClick={() => setLookupOpen(o => !o)} aria-label="Look up a part number" aria-expanded={lookupOpen}
+          className="inline-flex size-10 items-center justify-center rounded-full hover:bg-hover sm:hidden">
+          {lookupOpen ? <X className="size-5" /> : <Hash className="size-5" />}
+        </button>
         <GarageSwitcher />
         <button
           type="button"
@@ -26,6 +33,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <ThemeIcon className="size-5" />
         </button>
       </header>
+      {lookupOpen && (
+        <div className="z-10 border-b border-line bg-surface px-3 py-2 sm:hidden">
+          <PartNumberBox autoFocus onDone={() => setLookupOpen(false)} />
+        </div>
+      )}
       <main className="min-h-0 flex-1 overflow-auto">{children}</main>
     </div>
   )

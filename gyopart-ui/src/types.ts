@@ -150,3 +150,6 @@ export interface Yard {
   lng: number | null
   matching_vehicles: YardVehicle[]
 }
+
+export interface PartNumberHit { id: number; part_number: string | null; title: string | null; manufacturer: string | null }
+export interface PartLookup { q: string; exact: PartNumberHit[]; suggestions: PartNumberHit[] }
