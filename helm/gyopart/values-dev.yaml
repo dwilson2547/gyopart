@@ -4,6 +4,13 @@ namespace:
 
 domain: gyopart-dev.local
 
+# Release 3.0.0 (UI redesign + catalogue/yard APIs) runs in dev first; prod stays on values.yaml's :latest until
+# promoted. Helm merges maps, so the other images keep values.yaml's tags.
+images:
+  gyopartApi: dwilson2547/gyopart-api:3.0.0
+  gyopartUi: dwilson2547/gyopart-ui:3.0.0
+  inventoryApi: dwilson2547/inventory-api:3.0.0
+
 imagePullPolicy: Always
 
 postgres:
