@@ -25,6 +25,13 @@ scraping:
       activeHours:
         tz: America/New_York
         hours: "06:00-22:00"
+    # Every other yard: weekly, weekday business hours, balanced across the week.
+    junkyard-inventory:
+      every: 1w
+      activeHours:
+        tz: America/New_York
+        days: [Mon, Tue, Wed, Thu, Fri]
+        hours: "09:00-19:00"
 
   defaults:
     resources:
@@ -83,3 +90,24 @@ scraping:
       timeout: 15m
       jobs:
         us-auto-supply: {pool: junkyard-daily}
+    parts-galore:
+      image: dwilson2547/gyopart-scraper-parts-galore@sha256:2145d9f961df853b990d74c247d0698dbce1fb0d2418289d59a3a36c3bb82ae0
+      timeout: 30m
+      jobs:
+        parts-galore: {pool: junkyard-inventory}
+    pic-n-pull:
+      image: dwilson2547/gyopart-scraper-pic-n-pull@sha256:ff6eb876d1d71e3cab09ad1b13c17f7ed17ff3035d5416ee2a6732b519c02f89
+      timeout: 2h
+      jobs:
+        pic-n-pull: {pool: junkyard-inventory}   # one job: the scraper loops every location
+    ryans-pic-a-part:
+      image: dwilson2547/gyopart-scraper-ryans-pic-a-part@sha256:48be126c6408c2d4d7da88cb97656da0e4e726cd8a4a41be53a604cb5132d2c3
+      timeout: 1h
+      # Feed is recent arrivals only, so weekly counts swing naturally: keep the zero check,
+      # skip drop detection (100% = never).
+      health: {maxDropPct: 100}
+      resources:
+        requests: {cpu: 500m, memory: 1Gi}
+        limits: {memory: 2Gi}
+      jobs:
+        ryans-pic-a-part: {pool: junkyard-inventory}
