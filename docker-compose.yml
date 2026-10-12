@@ -23,6 +23,12 @@ services:
       context: ./junkyard-platform
       dockerfile: Dockerfile.admin-api
 
+  vin-resolver:
+    image: dwilson2547/vin-resolver:latest
+    build:
+      context: ./junkyard-platform
+      dockerfile: Dockerfile.vin-resolver
+
   # Junkyard inventory scrapers — one image per yard company, run by scrape-job-manager
   # (Scraper/ScrapeJob resources in helm/gyopart). Build context is the scrapers root so each
   # image can include scrape_contract.py.

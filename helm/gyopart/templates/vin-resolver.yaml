@@ -1,0 +1,47 @@
+{{- if .Values.vinResolver.enabled }}
+# Live VIN resolver (junkyard-platform/pipeline/worker.py): resolves newly scraped yard vehicles to catalogue
+# cars via NHTSA, using the vehicles table as its queue. One replica is plenty (one NHTSA batch per pass);
+# more would be safe (FOR UPDATE SKIP LOCKED) but only adds load on NHTSA.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vin-resolver
+  namespace: {{ include "gyopart.namespace" . }}
+  labels:
+    app: vin-resolver
+    {{- include "gyopart.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: vin-resolver
+  template:
+    metadata:
+      labels:
+        app: vin-resolver
+        {{- include "gyopart.labels" . | nindent 8 }}
+    spec:
+      terminationGracePeriodSeconds: 60  # lets the current batch finish
+      containers:
+        - name: vin-resolver
+          image: {{ .Values.images.vinResolver }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          env:
+            - name: JUNKYARD_USER
+              valueFrom: {secretKeyRef: {name: {{ .Values.postgres.junkyardSecret }}, key: JUNKYARD_USER}}
+            - name: JUNKYARD_PASSWORD
+              valueFrom: {secretKeyRef: {name: {{ .Values.postgres.junkyardSecret }}, key: JUNKYARD_PASSWORD}}
+            - name: JUNKYARD_DATABASE_URL
+              value: "postgresql://$(JUNKYARD_USER):$(JUNKYARD_PASSWORD)@{{ .Values.postgres.host }}:5432/junkyard_inventory"
+            - name: PARTS_USER
+              valueFrom: {secretKeyRef: {name: {{ .Values.postgres.partsSecret }}, key: PARTS_USER}}
+            - name: PARTS_PASSWORD
+              valueFrom: {secretKeyRef: {name: {{ .Values.postgres.partsSecret }}, key: PARTS_PASSWORD}}
+            - name: PARTS_DATABASE_URL
+              value: "postgresql://$(PARTS_USER):$(PARTS_PASSWORD)@{{ .Values.postgres.host }}:5432/parts_interchange"
+          resources:
+            requests: {cpu: 50m, memory: 256Mi}
+            limits: {memory: 512Mi}
+{{- end }}

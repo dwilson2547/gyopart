@@ -1,0 +1,21 @@
+# Live VIN resolver worker (pipeline/worker.py) + the junkyard Alembic migrations (run as a one-off Job:
+# `alembic -c db/alembic.ini upgrade head`). junkyard_common is installed from this tree, not PyPI, so the
+# image always carries the schema the migrations describe.
+FROM python:3.13-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 HOME=/app
+WORKDIR /app
+COPY pyproject.toml ./
+COPY junkyard_common/ ./junkyard_common/
+COPY pipeline/requirements.txt ./pipeline_requirements.txt
+RUN pip install --no-cache-dir . \
+ && grep -v '^dwilson-junkyard-common' pipeline_requirements.txt > reqs.txt \
+ && pip install --no-cache-dir -r reqs.txt alembic>=1.13
+COPY pipeline/ ./pipeline/
+COPY db/ ./db/
+# uszipcode downloads its zip database on first use; fetch it at build time so geocoding works offline.
+RUN python -c "from uszipcode import SearchEngine; SearchEngine().by_zipcode('48314')" \
+ && chown -R 10001 /app
+
+USER 10001
+CMD ["python", "-m", "pipeline.worker"]

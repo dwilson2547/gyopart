@@ -135,9 +135,11 @@ def apply_manual_override(engine: Engine, vehicle_id: int, car_id: int) -> dict:
         if vehicle is None:
             raise HTTPException(status_code=404, detail="vehicle not found")
         vehicle.car_id = car_id
+        vehicle.car_id_candidates = [car_id]
         vehicle.car_id_resolved = True
         vehicle.car_id_method = "manual"
         vehicle.car_id_confidence = 1.0
+        vehicle.resolve_attempted_at = now
 
         discrepancy = session.execute(
             select(MappingDiscrepancy).where(MappingDiscrepancy.vehicle_id == vehicle_id)

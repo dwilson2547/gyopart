@@ -9,6 +9,7 @@ images:
   gyopartUi: dwilson2547/gyopart-ui:latest
   inventoryApi: dwilson2547/inventory-api:latest
   adminApi: dwilson2547/admin-api:latest
+  vinResolver: dwilson2547/vin-resolver:latest
 
 imagePullPolicy: Always
 
@@ -25,6 +26,10 @@ monitoring:
   otelCollector:
     httpEndpoint: "http://otel-collector.monitoring.svc.cluster.local:4318"
     grpcEndpoint: "otel-collector.monitoring.svc.cluster.local:4317"
+
+# Live VIN resolver worker (templates/vin-resolver.yaml). Needs junkyard migration 0004 applied first.
+vinResolver:
+  enabled: true
 
 llmSuggester:
   enabled: false

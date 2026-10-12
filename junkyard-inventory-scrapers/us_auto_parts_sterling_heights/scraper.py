@@ -117,24 +117,29 @@ def _parse_asset(asset_el) -> dict | None:
     return canonical
 
 
+# Kept current on every run (not just on insert), so a corrected field reaches the existing row.
+LOCATION_FIELDS = dict(
+    name="US Auto Supply — Sterling Heights",
+    address="7575 18 1/2 Mile Rd",
+    city="Sterling Heights",
+    state="MI",
+    zip_code="48314",  # user, 2026-10-12 (the yard config has no zip)
+    phone="(586) 731-1616",
+)
+
+
 def _ensure_location(db: Session, now: datetime) -> int:
     obj = db.query(Location).filter_by(source=SOURCE, source_location_id="1").first()
     if obj is None:
-        obj = Location(
-            source=SOURCE,
-            source_location_id="1",
-            name="US Auto Supply — Sterling Heights",
-            address="7575 18 1/2 Mile Rd",
-            city="Sterling Heights",
-            state="MI",
-            phone="(586) 731-1616",
-            is_active=True,
-            first_seen_at=now,
-            last_seen_at=now,
-        )
+        obj = Location(source=SOURCE, source_location_id="1", is_active=True, first_seen_at=now)
         db.add(obj)
-        db.commit()
-        db.refresh(obj)
+    if obj.zip_code != LOCATION_FIELDS["zip_code"]:
+        obj.lat = obj.lng = None  # re-geocoded by the VIN resolver
+    for field, value in LOCATION_FIELDS.items():
+        setattr(obj, field, value)
+    obj.last_seen_at = now
+    db.commit()
+    db.refresh(obj)
     return obj.id
 
 
