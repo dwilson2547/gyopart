@@ -396,7 +396,11 @@ def main() -> dict:
                             f"{BASE_URL}/inventory/"
                             f"?location={slug}&make={make}&model={model}"
                         )
-                        html = _fetch(http, web_cache, request_auth, url)
+                        # Since 2026 the inventory page ignores ?location= unless the fnx_location cookie
+                        # selects the yard too (without it: "please select a location", no table).
+                        html = _fetch(http, web_cache, request_auth, url,
+                                      cookies={"fnx_location": str(defn["fnx_cookie_id"])},
+                                      cache_key_suffix=f"#fnx_location={defn['fnx_cookie_id']}")
                         total_requests += 1
                         for v in _parse_inventory_table(html, location_id, slug):
                             vehicles_by_vin[v["vin"]] = v

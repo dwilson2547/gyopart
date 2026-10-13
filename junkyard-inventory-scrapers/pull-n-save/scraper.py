@@ -39,10 +39,9 @@ REQUEST_AUTH_SERVER_URL = os.environ.get("REQUEST_AUTH_SERVER_URL", "request-aut
 CACHE_MAX_AGE_SECONDS   = int(os.environ.get("CACHE_MAX_AGE_SECONDS", str(23 * 3600)))
 
 HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-    ),
+    # The host's firewall 403s any request whose User-Agent claims a browser but whose TLS isn't one (and
+    # python-requests' default UA). An honest client name passes (checked 2026-10-13).
+    "User-Agent": "gyopart-inventory/1.0",
     "Accept": "text/html,application/xhtml+xml,*/*",
     "Content-Type": "application/x-www-form-urlencoded",
 }

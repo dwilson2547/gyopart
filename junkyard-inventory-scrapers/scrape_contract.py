@@ -79,7 +79,8 @@ def _classify_one(exc: BaseException) -> int:
     try:
         import requests
 
-        if isinstance(exc, (requests.ConnectionError, requests.Timeout)):
+        # ChunkedEncodingError: the server dropped the connection mid-response — a retry usually succeeds.
+        if isinstance(exc, (requests.ConnectionError, requests.Timeout, requests.exceptions.ChunkedEncodingError)):
             return EXIT_TEMPFAIL
         if isinstance(exc, requests.HTTPError):
             status = _http_status(exc) or 0

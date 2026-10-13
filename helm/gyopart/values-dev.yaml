@@ -90,7 +90,7 @@ scraping:
       jobs:
         speedway-ap: {pool: junkyard-inventory, suspend: true}
     arizona-auto-parts:
-      image: dwilson2547/gyopart-scraper-arizona-auto-parts@sha256:5813ed5c79d51e0af4e319a7d58311347f04e811eadd90f5798a1a62a2592a48
+      image: dwilson2547/gyopart-scraper-arizona-auto-parts@sha256:102c12d35fefe95933af4dafd9d3a553364622850e043c1fcbf16eb7dde97fec
       timeout: 1h
       jobs:
         arizona-auto-parts: {pool: junkyard-inventory, suspend: true}
@@ -100,12 +100,12 @@ scraping:
       jobs:
         las-parts: {pool: junkyard-inventory, suspend: true}
     stricker-auto-parts:
-      image: dwilson2547/gyopart-scraper-stricker-auto-parts@sha256:c0efd73c448be6394fa4893ee5a06bda5667f1546c2830627901d227bd6c271c
+      image: dwilson2547/gyopart-scraper-stricker-auto-parts@sha256:e54a0cead0648f09df66523ab185e3668ac25c0f147e7d29771ec38b31549b43
       timeout: 1h
       jobs:
         stricker-auto-parts: {pool: junkyard-inventory, suspend: true}
     midway-upull:
-      image: dwilson2547/gyopart-scraper-midway-upull@sha256:812e44325cace304fb634ffd984f751c297b52a5e0849cd107f5463b55e16613
+      image: dwilson2547/gyopart-scraper-midway-upull@sha256:59fc1d5f34caa4135c1bb8738a02fbc6d3453bed11ecb2273bcccdae17637c06
       timeout: 1h
       jobs:
         midway-upull: {pool: junkyard-inventory, suspend: true}
@@ -130,7 +130,7 @@ scraping:
       jobs:
         ipullupull: {pool: junkyard-inventory, suspend: true}
     utpap:
-      image: dwilson2547/gyopart-scraper-utpap@sha256:f5b87d08e67e9add7573b72ba65c5ce4ca4ee86414a3817b825a175abd6e5257
+      image: dwilson2547/gyopart-scraper-utpap@sha256:9a42b64ac4c6e015bdd52fc666622f31faeeb3145e8baf3fa3e0d2b1af8a979c
       timeout: 1h
       jobs:
         utpap: {pool: junkyard-inventory, suspend: true}
@@ -141,22 +141,22 @@ scraping:
         wrenchapart: {pool: junkyard-inventory, suspend: true}
     # Year/make/model search matrix, then a detail call per new vehicle.
     u-pull-n-save:
-      image: dwilson2547/gyopart-scraper-u-pull-n-save@sha256:17a93cd50b5eb1c3c6164bf7db097665a1e59815b5e25cdbd46546edc0757c67
+      image: dwilson2547/gyopart-scraper-u-pull-n-save@sha256:f0adcc0e67ca5c67937ffa4dc3acf2edbb64c6b7f3adc6d5b7cd113f87feafd8
       timeout: 2h
       jobs:
         u-pull-n-save: {pool: junkyard-inventory, suspend: true}
     fenix-upull:
-      image: dwilson2547/gyopart-scraper-fenix-upull@sha256:5c2cb90476202a65788b5a4c633cdd604c2c42f3e787b5114ddf24ae5f7d6ef5
+      image: dwilson2547/gyopart-scraper-fenix-upull@sha256:cfe44c8cea4c48ce71409598dc9713136a00a344d375336e1dad1c9ed0a78b1e
       timeout: 1h
       jobs:
         fenix-upull: {pool: junkyard-inventory, suspend: true}
     tear-a-part:
-      image: dwilson2547/gyopart-scraper-tear-a-part@sha256:7b1eae212e668fb2476f6f801b0079419afb0e1ceaa945e59502eaa91e2140a6
+      image: dwilson2547/gyopart-scraper-tear-a-part@sha256:99f067199e2f8a8d10d3f69b762840a964093b07c01a8bf75ab94da7d1197a05
       timeout: 1h
       jobs:
         tear-a-part: {pool: junkyard-inventory, suspend: true}
     pull-n-save:
-      image: dwilson2547/gyopart-scraper-pull-n-save@sha256:4eee7df83859da530e730ab6a553432067644f85116a582a168ef42a3912d641
+      image: dwilson2547/gyopart-scraper-pull-n-save@sha256:d9aab8ba8f23b810027020e396b6e3a43319deb3e823ecf315b05abfdc5d3816
       timeout: 1h
       jobs:
         pull-n-save: {pool: junkyard-inventory, suspend: true}
