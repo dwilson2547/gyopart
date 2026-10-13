@@ -175,3 +175,30 @@ scraping:
       timeout: 4h
       jobs:
         fenix-upull: {pool: junkyard-inventory}
+    speedway-ap:
+      image: dwilson2547/gyopart-scraper-speedway-ap@sha256:5dac55a81b369e06a8221e91f61cc30112aef6a635a6d3db1afc70041cde3211
+      timeout: 3h
+      health: {minItems: 0, maxDropPct: 100}
+      jobs:
+        speedway-ap: {pool: junkyard-inventory}
+    stricker-auto-parts:
+      image: dwilson2547/gyopart-scraper-stricker-auto-parts@sha256:e54a0cead0648f09df66523ab185e3668ac25c0f147e7d29771ec38b31549b43
+      timeout: 3h
+      health: {minItems: 0, maxDropPct: 100}
+      jobs:
+        stricker-auto-parts: {pool: junkyard-inventory}
+    utpap:
+      image: dwilson2547/gyopart-scraper-utpap@sha256:9a42b64ac4c6e015bdd52fc666622f31faeeb3145e8baf3fa3e0d2b1af8a979c
+      timeout: 1h
+      jobs:
+        utpap: {pool: junkyard-inventory}
+    tear-a-part:
+      image: dwilson2547/gyopart-scraper-tear-a-part@sha256:99f067199e2f8a8d10d3f69b762840a964093b07c01a8bf75ab94da7d1197a05
+      timeout: 1h
+      jobs:
+        tear-a-part: {pool: junkyard-inventory}
+    pull-a-part:
+      image: dwilson2547/gyopart-scraper-pull-a-part@sha256:1104982a8e6ae6877b5aa423be3278408fb90a0561106db1e29001ae68468cd0
+      timeout: 4h
+      jobs:
+        pull-a-part: {pool: junkyard-inventory}
