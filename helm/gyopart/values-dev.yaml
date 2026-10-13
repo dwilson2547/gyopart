@@ -80,7 +80,7 @@ scraping:
     # with run-now, then moved to values-prod.yaml (junkyard-inventory-scrapers/RELEASES.md).
     # Pull-A-Part JSON API: every location in one job, plus a detail call per new vehicle.
     pull-a-part:
-      image: dwilson2547/gyopart-scraper-pull-a-part@sha256:1104982a8e6ae6877b5aa423be3278408fb90a0561106db1e29001ae68468cd0
+      image: dwilson2547/gyopart-scraper-pull-a-part@sha256:6be20cf0f5264dfeaad18911e7658ba7b428aeb42852bc85a8698ecaf84d8906
       timeout: 20m  # dev: short on purpose — SCRAPE_DEADLINE ends the detail phase ~10 min in, proving the clean stop
       jobs:
         pull-a-part: {pool: junkyard-inventory, suspend: true}
