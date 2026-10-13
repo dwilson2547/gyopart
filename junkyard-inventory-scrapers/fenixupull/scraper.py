@@ -362,7 +362,8 @@ def main() -> dict:
                         cache_key_suffix=f"?fnx_location={cookie_id}",
                     )
                     recent_vins = _extract_vins_from_table(html)
-                    if recent_vins and not recent_vins.issubset(known_vins):
+                    # An empty recent list means the page didn't parse: crawl rather than assume nothing changed.
+                    if not recent_vins or not recent_vins.issubset(known_vins):
                         all_recent_known = False
                         break
 
@@ -377,7 +378,7 @@ def main() -> dict:
                         run.removed_vehicles = 0
                         run.success = True
                         db.commit()
-                    return
+                    return {"items": len(known_vins), "new": 0, "updated": 0, "removed": 0}
 
             # Build models per make (cached)
             models_by_make: dict[str, list[str]] = {}

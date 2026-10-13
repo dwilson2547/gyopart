@@ -146,7 +146,7 @@ scraping:
       jobs:
         u-pull-n-save: {pool: junkyard-inventory, suspend: true}
     fenix-upull:
-      image: dwilson2547/gyopart-scraper-fenix-upull@sha256:cfe44c8cea4c48ce71409598dc9713136a00a344d375336e1dad1c9ed0a78b1e
+      image: dwilson2547/gyopart-scraper-fenix-upull@sha256:d87d42fabd5f75dd1743c44e237bfc9f9cce831a6cf7e6a4ad1ae923a795440e
       timeout: 1h
       jobs:
         fenix-upull: {pool: junkyard-inventory, suspend: true}
@@ -156,7 +156,7 @@ scraping:
       jobs:
         tear-a-part: {pool: junkyard-inventory, suspend: true}
     pull-n-save:
-      image: dwilson2547/gyopart-scraper-pull-n-save@sha256:d9aab8ba8f23b810027020e396b6e3a43319deb3e823ecf315b05abfdc5d3816
+      image: dwilson2547/gyopart-scraper-pull-n-save@sha256:461af6d0ecab2688fde6604778f1e53266749a6ae8c81bb89c4877c93129e884
       timeout: 1h
       jobs:
         pull-n-save: {pool: junkyard-inventory, suspend: true}

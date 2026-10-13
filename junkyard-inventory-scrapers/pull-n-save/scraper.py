@@ -46,15 +46,19 @@ HEADERS = {
     "Content-Type": "application/x-www-form-urlencoded",
 }
 
+# Addresses from pullnsave.com/location/* (2026-10-13). The two Phoenix yards are 320 and 504 S 27th Ave
+# (both 85009) but the site doesn't say which is North/South, so they carry only the ZIP. Springville and
+# Tucson pages give no address: those come from third-party directories (ScrapMonster, iExit) — unverified.
+# Riverside: no address found, so it isn't geocoded. The ZIP is what geocoding (radius search) uses.
 _STORE_DEFS = {
-    1: {"source_location_id": "1", "name": "Pull-N-Save — Salt Lake City, UT",  "city": "Salt Lake City", "state": "UT", "store_name": "Salt Lake City"},
-    2: {"source_location_id": "2", "name": "Pull-N-Save — Phoenix South, AZ",   "city": "Phoenix",        "state": "AZ", "store_name": "Phoenix - South"},
-    3: {"source_location_id": "3", "name": "Pull-N-Save — Glendale, AZ",        "city": "Glendale",       "state": "AZ", "store_name": "Glendale"},
-    4: {"source_location_id": "4", "name": "Pull-N-Save — Phoenix North, AZ",   "city": "Phoenix",        "state": "AZ", "store_name": "Phoenix - North"},
-    5: {"source_location_id": "5", "name": "Pull-N-Save — Gilbert, UT",         "city": "Gilbert",        "state": "UT", "store_name": "Gilbert"},
-    6: {"source_location_id": "6", "name": "Pull-N-Save — Springville, UT",     "city": "Springville",    "state": "UT", "store_name": "Springville"},
-    7: {"source_location_id": "7", "name": "Pull-N-Save — Tucson, AZ",          "city": "Tucson",         "state": "AZ", "store_name": "Tucson"},
-    9: {"source_location_id": "9", "name": "Pull-N-Save — Riverside, CA",       "city": "Riverside",      "state": "CA", "store_name": "Riverside"},
+    1: {"source_location_id": "1", "name": "Pull-N-Save — Salt Lake City, UT",  "city": "Salt Lake City", "state": "UT", "store_name": "Salt Lake City",  "address": "6980 W 2100 S",          "zip_code": "84128"},
+    2: {"source_location_id": "2", "name": "Pull-N-Save — Phoenix South, AZ",   "city": "Phoenix",        "state": "AZ", "store_name": "Phoenix - South", "address": None,                     "zip_code": "85009"},
+    3: {"source_location_id": "3", "name": "Pull-N-Save — Glendale, AZ",        "city": "Glendale",       "state": "AZ", "store_name": "Glendale",        "address": "6841 W Northern Ave",    "zip_code": "85303"},
+    4: {"source_location_id": "4", "name": "Pull-N-Save — Phoenix North, AZ",   "city": "Phoenix",        "state": "AZ", "store_name": "Phoenix - North", "address": None,                     "zip_code": "85009"},
+    5: {"source_location_id": "5", "name": "Pull-N-Save — Gilbert, AZ",         "city": "Gilbert",        "state": "AZ", "store_name": "Gilbert",         "address": "623 N Cooper Rd",        "zip_code": "85233"},
+    6: {"source_location_id": "6", "name": "Pull-N-Save — Springville, UT",     "city": "Springville",    "state": "UT", "store_name": "Springville",     "address": "615 W 1600 S",           "zip_code": "84663"},
+    7: {"source_location_id": "7", "name": "Pull-N-Save — Tucson, AZ",          "city": "Tucson",         "state": "AZ", "store_name": "Tucson",          "address": "6671 E Littletown Rd",   "zip_code": "85756"},
+    9: {"source_location_id": "9", "name": "Pull-N-Save — Riverside, CA",       "city": "Riverside",      "state": "CA", "store_name": "Riverside",       "address": None,                     "zip_code": None},
 }
 
 # Map store name string from HTML response → store number for location lookup
@@ -215,8 +219,14 @@ def _ensure_locations(db: Session, now: datetime) -> dict[int, int]:
                 state=defn["state"],
             )
             db.add(obj)
-            db.commit()
-            db.refresh(obj)
+        # Keep existing rows in step with the definitions (e.g. Gilbert was filed under UT). A new ZIP
+        # clears lat/lng so the resolver worker geocodes the yard again.
+        if obj.zip_code != defn["zip_code"]:
+            obj.lat = obj.lng = None
+        obj.name, obj.city, obj.state = defn["name"], defn["city"], defn["state"]
+        obj.address, obj.zip_code = defn["address"], defn["zip_code"]
+        db.commit()
+        db.refresh(obj)
         location_ids[store_id] = obj.id
     return location_ids
 

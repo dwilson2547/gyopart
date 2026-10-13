@@ -154,3 +154,11 @@ scraping:
       timeout: 1h
       jobs:
         used-auto-parts-fl: {pool: junkyard-inventory}
+    # Arizona Auto Parts, Phoenix + Tucson. Incremental after the first crawl (new arrivals only).
+    arizona-auto-parts:
+      image: dwilson2547/gyopart-scraper-arizona-auto-parts@sha256:102c12d35fefe95933af4dafd9d3a553364622850e043c1fcbf16eb7dde97fec
+      timeout: 1h
+      # Incremental runs report only new vehicles (often 0): no zero or drop checks.
+      health: {minItems: 0, maxDropPct: 100}
+      jobs:
+        arizona-auto-parts: {pool: junkyard-inventory}
