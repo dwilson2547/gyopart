@@ -227,9 +227,9 @@ journal, cache/robots handling, and permit status reporting have focused tests.
 No gyopart database schema or fleet configuration was changed.
 
 The first independent local Chrome run required repeated operator validation and
-was stopped; the full prototype has not yet demonstrated live collection.
-It now requires an explicit CDP endpoint rather than implicitly opening fresh
-local browsers. See
+was stopped. The prototype now requires an explicit CDP endpoint rather than
+implicitly opening fresh local browsers. Subsequent current-image collection
+results are documented below. See
 [the bootstrap issue](../issues/2026_10_13_scuderia_cold_browser_validation.md).
 Recon success above must not be substituted for standalone runtime verification.
 
@@ -251,7 +251,8 @@ live scrape-stack deployment, rather than inferred from a hostname:
 The smoke used real webcache/imgcache/request-auth clients and did not open local
 Chrome, retry bootstrap, or require operator validation. Its failure log did not
 capture the final page title/status; the specific timeout cause remains
-**unverified**. The collector is not yet a proven live scraper on this runtime.
+**unverified**. The collector is not a proven live scraper on this legacy runtime. The subsequent
+current-image comparison below does establish bounded live collection.
 
 [Current Browserless documentation](https://docs.browserless.io/baas/bot-detection/captchas)
 describes managed-endpoint `solveCaptchas=true` and CDP CAPTCHA-solving events and
@@ -265,5 +266,54 @@ reinforces why copying HTTP headers alone is not equivalent to browser transport
 and why returning HTTP 200 is not enough: the actual catalog must be validated.
 Its vendor success claims are not measurements of Scuderia or this cluster.
 It does not justify building a bespoke bypass, rotating proxies, or accessing an
-undocumented origin. The next access experiment needs an explicitly selected
-runtime with verified capabilities, not more manual-validation loops.
+undocumented origin. This motivated the explicitly selected current-image
+comparison below, not more manual-validation loops.
+
+### Verified current-image collection
+
+An isolated, loopback-only Docker comparison used Browserless **2.57.0**, Chrome
+**156.0.8078.4**, pinned image
+`ghcr.io/browserless/chromium@sha256:c4fd6493ff97936eb62cb35bbc19a428dda3d30905c3a59a28d9620f29b85db1`.
+It reused the fleet's headed/window-size/`AutomationControlled` launch settings.
+It did not request managed CAPTCHA solving, inject cookies, or require manual
+validation. Ordinary browser access was sufficient in the measured runs.
+
+**Verified:** four fresh collections each fetched robots and all three catalog
+pages live (`--max-age 0`), yielding 69 Ferrari, 11 Lamborghini, and 27 McLaren
+memberships. Three runs used direct networking, including two after a real
+Browserless container restart. The fourth used the existing VPN service through
+its verified NodePort. The shared cluster Browserless deployment was unchanged.
+
+**Verified:** each output had 113 JSONL records and three completion markers.
+The three direct-run journals exactly matched original recon on source URL, row
+ID, callout string, site part ID, OEM number, and part URL, preserving duplicate
+memberships. Distinct site IDs per diagram remained 61/11/26.
+
+**Verified:** all three diagram GIFs exist in imgcache with matching journal
+hashes. Ferrari was stored during the initial current-image attempt; the first
+complete run hit that cached image and fetched/stored the other two. Later
+successful runs reused all three images, so those runs demonstrate live HTML
+access, not repeated image-network downloads.
+
+| Diagram | GIF size | Imgcache hash |
+|---|---:|---|
+| Ferrari crankcase | 163576 bytes | `2152c425bbfba80597a882d418cce7f98b85d3788e7f9fe2087d34c265df29e4` |
+| Lamborghini water pump | 112520 bytes | `5c852c5a0a1c374819ca63bbb301920a096cc0326602cbf0d22f16168f593964` |
+| McLaren heat insulation | 636605 bytes | `cf414f0051c3f4990c9350ad79b228cc7d54bb1cdc28f61ed12a7f7e5ca766b1` |
+
+**Verified:** resume reported three completed diagrams skipped, zero new
+diagrams, no target response statuses, and an unchanged journal. The collector
+was corrected to use imgcache's `hash`, not webcache's `content_hash`; focused
+tests cover both image-cache hit and miss responses and sanitized timeouts.
+
+Evidence is session-local: `scuderia-modern-browserless.jsonl`,
+`scuderia-modern-after-restart.jsonl`, `scuderia-modern-repeat.jsonl`, and
+`scuderia-modern-vpn.jsonl`, with corresponding collection logs.
+
+**Still unverified:** broad catalog coverage, 24-hour reliability, and running
+the current image as a cluster fleet service. Playwright does not independently
+route automatic navigation redirects; timeout diagnostics therefore distinguish
+observed navigation statuses from intercepted-request permit statuses.
+Redirect pacing/permit coverage must be reviewed before broad fleet adoption.
+The bounded collection prototype now has a reproducible working runtime; this
+does not certify the existing legacy cluster deployment or production readiness.

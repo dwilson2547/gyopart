@@ -275,7 +275,13 @@ class BrowserTransport:
             return body, result["type"]
         except BrowserTimeout as exc:
             self._check_failure()
-            raise ScrapeError(f"browser_timeout: page/challenge did not settle at {url}") from exc
+            navigation_statuses = [response.status for response in self.navigation_responses]
+            raise ScrapeError(
+                f"browser_timeout: page/challenge did not settle at {url}; "
+                f"navigation_statuses={navigation_statuses}; "
+                f"target_response_statuses={dict(self.statuses)}; "
+                f"active_permits={len(self.active_permits)}"
+            ) from exc
         except BrowserError as exc:
             self._check_failure()
             raise ScrapeError(f"browser_transport: request failed at {url}") from exc
@@ -358,7 +364,7 @@ class Collector:
                 bucket=self.bucket, filename=Path(urlsplit(url).path).name,
             )
             self.stats["live_images"] += 1
-        image_hash = entry.get("content_hash")
+        image_hash = entry.get("hash")
         if not isinstance(image_hash, str) or len(image_hash) != 64:
             raise ScrapeError(f"cache_invalid: missing image content hash at {url}")
         return image_hash

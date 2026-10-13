@@ -20,26 +20,51 @@ access: the operator reported repeated Cloudflare validation on robots.txt, and
 the run was stopped. Successful MCP reconnaissance is not proof that a separately
 launched automated Chrome behaves identically.
 
-**Explicit CDP access is now required.** Use a dedicated ordinary Chrome session
-that has legitimate site access, or an explicitly configured browserless session.
-The collector does not implicitly open local Chrome, export/inject clearance
-cookies, add stealth flags, solve challenges, or retry a failed bootstrap.
-The existing cluster Browserless service has now been identified and tested:
-it runs Browserless **1.61.1** with Chrome **121.0.6167.85**. A headed connection
-succeeded, but a fresh collector run failed to settle robots.txt within its
-30-second timeout and produced **zero records**. Live collection and
-long-duration operation remain unverified.
+**Verified live collection:** an isolated Browserless **2.57.0**, running Chrome
+**156.0.8078.4**, collected all three diagrams and **107 membership rows** in four
+fresh runs. Three runs used direct networking; the fourth used the fleet's
+existing VPN proxy. Two direct runs followed a real Browserless service restart.
+Row IDs, callout strings, site part IDs, OEM numbers, URLs, and image hashes
+matched across runs and against recon. All three GIFs are in imgcache. Resume
+skipped all three completed diagrams without target requests or journal changes.
+
+**Explicit CDP access remains required.** The collector does not implicitly open
+local Chrome, export/inject clearance cookies, implement a CAPTCHA solver, or
+retry a failed bootstrap. The tested launch configuration reused the existing
+fleet's headed/window-size/`AutomationControlled` settings; no injected
+fingerprinting code, CAPTCHA provider credentials, or managed solving was used.
+
+The shared cluster service still runs Browserless **1.61.1** with Chrome
+**121.0.6167.85**. Both its ordinary headed configuration and the existing fleet
+configuration timed out on robots.txt; the latter observed navigation 307 then
+403. **That deployment was not upgraded.** The working comparison is not a
+claim that Scuderia is deployed or operational in the cluster fleet. Long-duration
+and broad-catalog operation remain unverified.
 
 The deployed service rejected `Browserless.solveCaptcha` with a CDP
 method-not-found error on a blank page. The
 [current Browserless CAPTCHA documentation](https://docs.browserless.io/baas/bot-detection/captchas)
 describes `solveCaptchas=true` and solver commands on managed endpoints; that
 does not make the feature available in the deployed legacy image. No CAPTCHA
-solver, paid service, or cluster upgrade has been enabled.
+solver, paid service, or shared-cluster upgrade has been enabled. The successful
+current-browser runs did not require that solver feature.
 
 ## Install and run
 
-Requires Python 3.11+ and reachable scrape-stack services. From this directory:
+Requires Python 3.11+, Docker for the verified isolated runtime, and reachable
+scrape-stack services. Start the pinned Browserless image in another terminal:
+
+```bash
+docker run --rm --name scuderia-browserless \
+  --publish 127.0.0.1:19301:3000 --shm-size=1g --memory=2g --cpus=2 \
+  --env CONCURRENT=1 --env TIMEOUT=240000 \
+  ghcr.io/browserless/chromium@sha256:c4fd6493ff97936eb62cb35bbc19a428dda3d30905c3a59a28d9620f29b85db1
+```
+
+This is the image tested above, not a replacement for the shared cluster service.
+Binding only to loopback avoids exposing an unauthenticated browser service.
+Stop that specific container with `docker stop scuderia-browserless`.
+From the collector directory:
 
 ```bash
 python -m venv .venv
@@ -48,22 +73,43 @@ python -m venv .venv
 export WEBCACHE_URL=http://webcache.scrapestack.local
 export IMGCACHE_URL=http://imgcache.scrapestack.local
 export REQUEST_AUTH_SERVER_URL=request-auth-server.scrapestack.local:9000
-# On this workstation, forward the existing cluster service in another terminal:
-# kubectl port-forward -n scrape-stack service/browserless 19300:3000
-export BROWSERLESS_URL='ws://127.0.0.1:19300?headless=false&timeout=180000'
+# Optional: use the existing VPN proxy via its verified workstation NodePort.
+# Omit this variable for the independently verified direct-network configuration.
+export BROWSER_PROXY_URL=http://192.168.0.35:30008
+export BROWSERLESS_URL="$(python - <<'PY'
+import json
+import os
+from urllib.parse import urlencode
+launch = {
+    "headless": False,
+    "args": ["--window-size=1400,1000",
+             "--disable-blink-features=AutomationControlled"],
+}
+if os.environ.get("BROWSER_PROXY_URL"):
+    launch["args"].append("--proxy-server=" + os.environ["BROWSER_PROXY_URL"])
+print("ws://127.0.0.1:19301/chromium?" + urlencode({
+    "launch": json.dumps(launch), "timeout": 240000,
+}))
+PY
+)"
 
-.venv/bin/python scraper.py --output output/sample.jsonl
+.venv/bin/python scraper.py --timeout 60 --output output/sample.jsonl
 ```
 
-The service hostnames above and the forwarded CDP endpoint were reachable during
-development. The command reproduces the **tested runtime, not proven site access**.
+The service hostnames, VPN NodePort, and current Browserless endpoint above were
+verified during development. The four-minute session lifetime is for a bounded
+smoke run, not a full catalog crawl; increase it deliberately for larger bounds.
+There is no implicit local-browser fallback if the configured runtime is absent.
+
+For deployment comparison only, the legacy service can be reached with
+`kubectl port-forward -n scrape-stack service/browserless 19300:3000`.
 From inside the cluster, the production browser service is
 `ws://browserless.scrape-stack.svc.cluster.local:3000`; the existing dev fleet uses
 `ws://browserless.scrapestack-dev.svc.cluster.local:3000`. These addresses are
 verified in the gyopart Helm configuration; Kubernetes service DNS is not a
-workstation endpoint. Preserve the headed/session-timeout query parameters when
-selecting that service. The example session lifetime is for a bounded smoke run,
-not a full catalog crawl.
+workstation endpoint. Inside the cluster the existing VPN proxy address is
+`http://nordvpn-proxy-entrypoint.vpn.svc.cluster.local:8118`. These legacy browser
+addresses are **not** the successful current-image endpoint used above.
 
 A missing browser endpoint remains an explicit CLI error, not an implicit fresh
 local browser launch. There is no Browserless ingress in the verified production
@@ -133,20 +179,24 @@ retain those details before ingesting them. No migration is generated here.
 - Webcache lookup precedes catalog/robots fetches; only validated responses are
   cached. Cached robots text can establish a new collector tab's origin locally
   without revisiting the target's robots endpoint.
-- Every allowed real browser request, including bootstrap/challenge subrequests,
-  acquires a request-auth permit and reports its actual response status. Cache
-  service calls and locally fulfilled cached robots do not acquire target permits.
+- Intercepted site/challenge requests acquire request-auth permits and report
+  their observed response status. Cache service calls and locally fulfilled
+  cached robots do not acquire target permits. Automatic navigation redirects
+  are not independently intercepted/paced by Playwright; their statuses are
+  tracked separately for bootstrap validation and timeout diagnostics.
 - Configure at least the site's observed one-second crawl delay in request-auth.
   There is no competing local delay/backoff state or proxy rotation.
 - Unrelated third-party requests are blocked. Site resources and Cloudflare's
   normal challenge host remain permitted. Only the collector's tab is routed;
   other tabs in the supplied browser context are not modified or closed.
-- Image lookup/store uses imgcache. Source media is fetched through the browser
+- Image lookup/store uses imgcache's `hash` field, not webcache's `content_hash`.
+  Source media is fetched through the browser
   under permits, limited to 20 MiB, and must have an image content type.
 - Unresolved startup challenges, catalog 403/429, robots restrictions, malformed
   tables, wrong selected vehicles, and cache/service failures stop the run.
   Incomplete diagrams do not get completion markers.
-- Exit 0 prints collection counters and actual target response-status counts.
+- Exit 0 prints collection counters and intercepted-response status counts,
+  not a complete physical-request trace of automatic redirect chains.
   `page_limit`/`diagram_limit` mean bounded progress, not full-catalog completion.
   Exit 1 indicates an explicit collection/service failure; CLI errors exit 2.
 
@@ -161,5 +211,7 @@ dependency. The fixture contains selected catalog controls, parts-table markup,
 image references, and hotspot metadata from the existing working browser page,
 not image bytes, cookies, or browser storage state.
 
-Before fleet integration, validate a correctly configured CDP runtime, process
-restarts, ten diagrams per sampled marque, and repeated runs over 24 hours.
+Before fleet integration, adopt and verify a current cluster browser runtime,
+review redirect permit/pacing coverage, collect ten diagrams per sampled marque,
+and repeat over 24 hours. The bounded collection proof is complete; that broader
+operational gate is not.

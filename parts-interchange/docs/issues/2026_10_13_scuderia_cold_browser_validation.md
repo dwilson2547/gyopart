@@ -38,6 +38,14 @@ another real robots navigation solely to establish origin before subsequent
 browser fetches. Reusing cached content locally avoids that unnecessary network
 step, while still requiring legitimate browser access for actual catalog requests.
 
+### Image-cache metadata was mistaken for webcache metadata
+
+Once a current Browserless session obtained valid catalog data, the collector
+successfully stored the Ferrari GIF but rejected its cache response. It looked
+for webcache's `content_hash`; the deployed imgcache lookup/store contract uses
+`hash`. Earlier mocked image-cache responses repeated that incorrect assumption.
+This was a collection integration defect, not a site-access failure.
+
 ---
 
 ## Troubleshooting steps taken
@@ -75,6 +83,29 @@ step, while still requiring legitimate browser access for actual catalog request
    the documented managed-endpoint solver API is not exposed by this deployment.
    The article's browser-transport/session distinctions are relevant; its managed
    vendor success claims do not establish access through the existing runtime.
+10. **Matched the existing fleet's browser/VPN settings and added diagnostics** —
+    the legacy service still timed out, with navigation statuses `[307, 403]` and
+    zero active permits at failure. The default request-status counter did not
+    include every automatic redirect response, so it was not a complete network
+    trace.
+11. **Ran an isolated current Browserless image** — used a loopback-only,
+    resource-limited Docker container, Browserless 2.57.0 / Chrome 156.0.8078.4,
+    without changing the shared cluster deployment. Browser startup and Ferrari
+    collection succeeded without operator validation or a CAPTCHA provider.
+    Actual imgcache metadata exposed the incorrect hash-field assumption.
+12. **Corrected the imgcache contract and verified collection** — four fresh
+    successful runs each collected 69 Ferrari, 11 Lamborghini, and 27 McLaren
+    membership rows. Three used direct networking and one used the existing
+    fleet VPN through its NodePort. Two direct runs followed a real container
+    restart. Each output contained three complete diagram batches and 113 lines.
+13. **Checked identities, media, and resume** — the three direct-run journals
+    matched original recon identities and each other's image hashes. Imgcache
+    contained all three nonempty GIFs. A resume run skipped all completed
+    diagrams, performed no target requests, and left the journal unchanged.
+14. **Rejected a body-completion wait experiment** — waiting on
+    `Response.finished()` while holding permits caused a reproduced startup
+    timeout and Playwright target-closed errors. That experiment was removed;
+    the subsequent header-response path completed both post-restart runs.
 
 ---
 
@@ -94,14 +125,26 @@ same-origin document. Do not make another real robots request on that cache hit.
 Real catalog/media requests still need browser access and request-auth permits.
 An unresolved challenge remains an explicit bounded failure with no retry.
 
-### Runtime verification — connection confirmed, collection still blocked
+### `Collector.image` — use the actual imgcache hash contract
 
-Captured-page and mocked-runtime tests pass. The existing cluster CDP endpoint
-now has a verified connection path, but the standalone collector still has no
-successful live collection. The last smoke did not record page title or HTTP
-status details at failure, so the specific cause of its timeout remains
-**unverified**; an old browser, challenge behavior, or permit-gated subrequests
-must not individually be asserted as the cause.
+Use imgcache's `hash` for both lookup hits and successful stores. Keep explicit
+failure on missing/invalid metadata. Tests now cover the actual hit/miss shape
+and reject the erroneous webcache-only field.
+
+### `BrowserTransport.fetch` — actionable bounded timeout
+
+Report observed navigation statuses, intercepted-response counts, and the active
+permit count. Do not log CDP credentials, cookies, storage state, or challenge
+tokens. Navigation and permit-status counters cover different surfaces because
+automatic redirect requests are not independently routed by Playwright.
+
+### Runtime verification — current image collects, legacy cluster remains blocked
+
+The pinned isolated image now has a demonstrated collection path, including the
+existing VPN network, process restart, and resume. The shared legacy deployment
+still fails startup. The precise original validation-loop cause remains
+**unverified**; the current-image comparison does not prove one individual
+browser flag or browser-version difference was the sole cause.
 
 The deployed legacy service does not expose the documented
 `Browserless.solveCaptcha` command. Adding `solveCaptchas=true` cannot be treated
@@ -109,8 +152,11 @@ as a verified fix for that image. Using an offering with the documented solver
 would be a separate runtime/service decision; neither a shared cluster upgrade
 nor a paid service was activated.
 
-The README now uses the existing fleet's service rather than asking the operator
-to identify a browser. No custom Cloudflare bypass has been implemented.
+The README now provides the pinned, verified current-image command and identifies
+the existing fleet service separately. It reuses the fleet's launch settings;
+no bespoke challenge-solving code or managed CAPTCHA service was added.
+Broad crawling, redirect permit/pacing coverage, and 24-hour reliability remain
+future fleet-adoption gates, not claims established by these samples.
 
 Sources:
 [Browserless CAPTCHA API](https://docs.browserless.io/baas/bot-detection/captchas),
@@ -125,5 +171,6 @@ log are session-local evidence, not evidence of successful collection.
 ## Files changed
 
 - `scuderia/scraper.py` — startup, browser ownership, cached-robots bootstrap, CLI requirements
-- `scuderia/tests/` — parsing, recovery, robots/cache behavior, permit-status coverage
-- `scuderia/README.md` — explicit runtime setup and unresolved live-access limitation
+- `scuderia/scraper.py` — correct imgcache hash field and sanitized timeout diagnostics
+- `scuderia/tests/` — parsing, recovery, robots/cache behavior, permit-status and image-contract coverage
+- `scuderia/README.md` — pinned current runtime, verified collection, and legacy deployment distinction

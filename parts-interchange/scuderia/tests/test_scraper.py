@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from catalog import ScrapeError, parse_catalog
-from scraper import BrowserTransport, Collector, Journal, ROBOTS_URL, arguments
+from scraper import BrowserTimeout, BrowserTransport, Collector, Journal, ROBOTS_URL, arguments
 
 ROBOTS = "User-agent: *\nDisallow: /account/\nDisallow: /images/misc/\nCrawl-delay: 1\n"
 
@@ -74,7 +74,7 @@ def collector(captured, *, cached=True):
     entries = {ROBOTS_URL: ROBOTS, captured["source_url"]: captured["html"]}
     web.get.side_effect = lambda url, **kwargs: {"content": entries[url]} if cached else None
     image = Mock()
-    image.lookup.return_value = {"content_hash": "a" * 64}
+    image.lookup.return_value = {"hash": "a" * 64}
     transport = SimpleNamespace(statuses=Counter(), robots=None, fetch=Mock())
     result = Collector(web, image, transport, bucket="scuderia", max_age=3600)
     return result, web, image, transport
@@ -105,6 +105,35 @@ def test_bad_cached_html_fails_without_marking_complete(captured, tmp_path):
             asyncio.run(c.collect([captured["source_url"]], journal, max_diagrams=1, max_pages=5, metadata_only=True))
         assert not journal.completed
     web.store.assert_not_called()
+
+
+def test_image_miss_uses_imgcache_hash_contract(captured):
+    c, _, image, transport = collector(captured)
+    image.lookup.return_value = None
+    image.store.return_value = {"hash": "b" * 64}
+    transport.fetch = AsyncMock(return_value=(b"GIF89a", "image/gif"))
+
+    async def exercise():
+        await c.load_robots()
+        return await c.image(diagram(captured).image_url)
+
+    assert asyncio.run(exercise()) == "b" * 64
+    transport.fetch.assert_awaited_once_with(diagram(captured).image_url, binary=True)
+    image.store.assert_called_once()
+    assert c.stats["live_images"] == 1
+
+
+def test_image_cache_does_not_accept_webcache_hash_field(captured):
+    c, _, image, transport = collector(captured)
+    image.lookup.return_value = {"content_hash": "a" * 64}
+
+    async def exercise():
+        await c.load_robots()
+        await c.image(diagram(captured).image_url)
+
+    with pytest.raises(ScrapeError, match="cache_invalid: missing image content hash"):
+        asyncio.run(exercise())
+    transport.fetch.assert_not_called()
 
 
 def test_robots_block_target_even_with_cached_data(captured, tmp_path):
@@ -228,6 +257,24 @@ def test_close_preserves_supplied_browser_context_and_other_tabs():
     transport.context.close.assert_not_awaited()
     transport.browser.close.assert_not_awaited()
     transport.pw.stop.assert_awaited_once()
+
+
+def test_bootstrap_timeout_reports_observed_statuses_without_browser_secrets():
+    transport = BrowserTransport(Mock(), cdp_url="ws://browser?token=private", timeout_ms=1000)
+    transport.statuses.update({403: 2})
+
+    async def goto(url, **kwargs):
+        transport.navigation_responses.append(SimpleNamespace(status=403))
+        raise BrowserTimeout("navigation timeout")
+
+    transport.page = SimpleNamespace(url="about:blank", goto=goto)
+    with pytest.raises(ScrapeError, match="browser_timeout") as error:
+        asyncio.run(transport.fetch(ROBOTS_URL))
+    message = str(error.value)
+    assert "navigation_statuses=[403]" in message
+    assert "target_response_statuses={403: 2}" in message
+    assert "active_permits=0" in message
+    assert "private" not in message
 
 
 def test_category_traversal_respects_page_and_diagram_bounds(captured, tmp_path):
