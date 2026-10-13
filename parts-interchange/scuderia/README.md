@@ -24,7 +24,18 @@ launched automated Chrome behaves identically.
 that has legitimate site access, or an explicitly configured browserless session.
 The collector does not implicitly open local Chrome, export/inject clearance
 cookies, add stealth flags, solve challenges, or retry a failed bootstrap.
-Remote/headless and long-duration prototype operation remain unverified.
+The existing cluster Browserless service has now been identified and tested:
+it runs Browserless **1.61.1** with Chrome **121.0.6167.85**. A headed connection
+succeeded, but a fresh collector run failed to settle robots.txt within its
+30-second timeout and produced **zero records**. Live collection and
+long-duration operation remain unverified.
+
+The deployed service rejected `Browserless.solveCaptcha` with a CDP
+method-not-found error on a blank page. The
+[current Browserless CAPTCHA documentation](https://docs.browserless.io/baas/bot-detection/captchas)
+describes `solveCaptchas=true` and solver commands on managed endpoints; that
+does not make the feature available in the deployed legacy image. No CAPTCHA
+solver, paid service, or cluster upgrade has been enabled.
 
 ## Install and run
 
@@ -37,16 +48,26 @@ python -m venv .venv
 export WEBCACHE_URL=http://webcache.scrapestack.local
 export IMGCACHE_URL=http://imgcache.scrapestack.local
 export REQUEST_AUTH_SERVER_URL=request-auth-server.scrapestack.local:9000
-# Set BROWSERLESS_URL to YOUR verified CDP endpoint; do not guess its address.
-# A local, explicitly configured Chrome debugging endpoint can also be supplied
-# using --cdp-url. Use a dedicated browser profile, not a personal browsing session.
+# On this workstation, forward the existing cluster service in another terminal:
+# kubectl port-forward -n scrape-stack service/browserless 19300:3000
+export BROWSERLESS_URL='ws://127.0.0.1:19300?headless=false&timeout=180000'
 
 .venv/bin/python scraper.py --output output/sample.jsonl
 ```
 
-The service hostnames above were reachable during development. No working CDP
-endpoint has been verified for the standalone prototype. A missing browser
-endpoint is an explicit CLI error, not an implicit fresh browser launch.
+The service hostnames above and the forwarded CDP endpoint were reachable during
+development. The command reproduces the **tested runtime, not proven site access**.
+From inside the cluster, the production browser service is
+`ws://browserless.scrape-stack.svc.cluster.local:3000`; the existing dev fleet uses
+`ws://browserless.scrapestack-dev.svc.cluster.local:3000`. These addresses are
+verified in the gyopart Helm configuration; Kubernetes service DNS is not a
+workstation endpoint. Preserve the headed/session-timeout query parameters when
+selecting that service. The example session lifetime is for a bounded smoke run,
+not a full catalog crawl.
+
+A missing browser endpoint remains an explicit CLI error, not an implicit fresh
+local browser launch. There is no Browserless ingress in the verified production
+deployment, so `browserless.scrapestack.local` must not be assumed to work.
 
 Default targets are the three diagram URLs from recon. Scope is always bounded:
 three new diagrams and 50 catalog pages by default. To traverse a selected

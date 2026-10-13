@@ -53,6 +53,28 @@ step, while still requiring legitimate browser access for actual catalog request
 5. **Ran captured-page and mocked-runtime tests** — verified parser, journal,
    cache, robots restrictions, and real-status permit handling without asking the
    operator to solve further challenges.
+6. **Inspected the existing fleet and live deployment** — gyopart's Parts Direct
+   scraper uses headed Browserless over the internal service on port 3000.
+   The production deployment had no Browserless ingress. Its running package
+   reported `browserless-chrome` 1.61.1 and Chrome 121.0.6167.85, despite the
+   chart's `browserless/chrome:latest` tag. The running image digest was
+   `sha256:57d19e414d9fe4ae9d2ab12ba768c97f38d51246c5b31af55a009205c136012f`.
+7. **Checked the deployed solver capability without visiting Scuderia** —
+   connected to a blank headed session through a temporary service port-forward.
+   `Browserless.solveCaptcha` returned CDP method-not-found. No environment
+   variable names matching CAPTCHA, LICENSE, or STEALTH were present; no secret
+   values or browser cookies were inspected or exported.
+8. **Ran one bounded cluster collector smoke** — used the existing Browserless
+   service with `headless=false`, a 180-second session lifetime, real cache and
+   request-auth clients, `--max-age 0`, and the existing
+   `scuderia-recon-20261013` bucket. The robots lookup missed and the collector
+   exited 1 with `browser_timeout` after its 30-second page/challenge wait.
+   The output journal contained zero records. There was no application retry,
+   local Chrome window, or request for manual validation.
+9. **Reviewed current Browserless documentation and the supplied ZenRows article** —
+   the documented managed-endpoint solver API is not exposed by this deployment.
+   The article's browser-transport/session distinctions are relevant; its managed
+   vendor success claims do not establish access through the existing runtime.
 
 ---
 
@@ -72,11 +94,31 @@ same-origin document. Do not make another real robots request on that cache hit.
 Real catalog/media requests still need browser access and request-auth permits.
 An unresolved challenge remains an explicit bounded failure with no retry.
 
-### Runtime verification — still incomplete
+### Runtime verification — connection confirmed, collection still blocked
 
-Captured-page and mocked-runtime tests pass. A working CDP endpoint and a full
-standalone live collection remain unverified; do not claim production readiness
-or infer it from successful MCP reconnaissance.
+Captured-page and mocked-runtime tests pass. The existing cluster CDP endpoint
+now has a verified connection path, but the standalone collector still has no
+successful live collection. The last smoke did not record page title or HTTP
+status details at failure, so the specific cause of its timeout remains
+**unverified**; an old browser, challenge behavior, or permit-gated subrequests
+must not individually be asserted as the cause.
+
+The deployed legacy service does not expose the documented
+`Browserless.solveCaptcha` command. Adding `solveCaptchas=true` cannot be treated
+as a verified fix for that image. Using an offering with the documented solver
+would be a separate runtime/service decision; neither a shared cluster upgrade
+nor a paid service was activated.
+
+The README now uses the existing fleet's service rather than asking the operator
+to identify a browser. No custom Cloudflare bypass has been implemented.
+
+Sources:
+[Browserless CAPTCHA API](https://docs.browserless.io/baas/bot-detection/captchas),
+[user-supplied ZenRows article](https://www.zenrows.com/blog/bypass-cloudflare),
+`web-scrapers/scrape-stack/helm/scrape-stack/templates/browserless.yaml`,
+and `automotive/gyopart/helm/gyopart/values-prod.yaml` /
+`values-dev.yaml` in the workspace. Live package/CDP checks and the failed-run
+log are session-local evidence, not evidence of successful collection.
 
 ---
 

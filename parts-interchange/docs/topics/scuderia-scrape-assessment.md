@@ -232,3 +232,38 @@ It now requires an explicit CDP endpoint rather than implicitly opening fresh
 local browsers. See
 [the bootstrap issue](../issues/2026_10_13_scuderia_cold_browser_validation.md).
 Recon success above must not be substituted for standalone runtime verification.
+
+### Verified cluster Browserless runtime
+
+The existing fleet's browser was identified from gyopart Helm values and the
+live scrape-stack deployment, rather than inferred from a hostname:
+
+| Surface | Verified finding |
+|---|---|
+| Production service | `browserless.scrape-stack.svc.cluster.local:3000`; no Browserless ingress |
+| Dev fleet configuration | `browserless.scrapestack-dev.svc.cluster.local:3000` |
+| Running package | `browserless-chrome` 1.61.1 |
+| Running Chrome | 121.0.6167.85 |
+| Headed connection | Successful through a temporary `kubectl port-forward`; `headless=false` |
+| Documented solver command | `Browserless.solveCaptcha` rejected as an unknown CDP method on a blank page |
+| Collector smoke | Fresh robots cache miss, then 30-second startup timeout; exit 1, zero output records |
+
+The smoke used real webcache/imgcache/request-auth clients and did not open local
+Chrome, retry bootstrap, or require operator validation. Its failure log did not
+capture the final page title/status; the specific timeout cause remains
+**unverified**. The collector is not yet a proven live scraper on this runtime.
+
+[Current Browserless documentation](https://docs.browserless.io/baas/bot-detection/captchas)
+describes managed-endpoint `solveCaptchas=true` and CDP CAPTCHA-solving events and
+commands. Those APIs must not be attributed to the deployed legacy image.
+No solver, paid endpoint, shared browser upgrade, or proxy change was enabled.
+An automatic CAPTCHA solve is also not a guarantee that subsequent catalog
+requests will pass the site's other checks.
+
+The [user-supplied ZenRows article](https://www.zenrows.com/blog/bypass-cloudflare)
+reinforces why copying HTTP headers alone is not equivalent to browser transport
+and why returning HTTP 200 is not enough: the actual catalog must be validated.
+Its vendor success claims are not measurements of Scuderia or this cluster.
+It does not justify building a bespoke bypass, rotating proxies, or accessing an
+undocumented origin. The next access experiment needs an explicitly selected
+runtime with verified capabilities, not more manual-validation loops.
