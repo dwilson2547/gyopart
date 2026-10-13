@@ -42,7 +42,7 @@ def geocode_locations(engine, dry_run: bool = False) -> None:
             return
         updated = 0
         for loc in locations:
-            result = sz.by_zipcode(loc.zip_code)
+            result = sz.by_zipcode(loc.zip_code[:5])  # ZIP+4 → ZIP
             if result and result.lat and result.lng:
                 loc.lat = result.lat
                 loc.lng = result.lng

@@ -93,6 +93,19 @@ def _post(http, web_cache, request_auth, url, payload):
     return resp.json()
 
 
+def _location_fields(loc: dict) -> dict:
+    """Map a /Location record (address1, cityName, stateName, ZIP+4) onto Location columns."""
+    address = ", ".join(p for p in (loc.get("address1"), loc.get("address2")) if p) or None
+    return {
+        "name": loc.get("locationName") or str(loc["locationID"]),
+        "address": address,
+        "city": loc.get("cityName"),
+        "state": loc.get("stateName"),
+        "zip_code": (loc.get("zip") or "")[:5] or None,
+        "phone": loc.get("phone"),
+    }
+
+
 def _sync_locations(http, web_cache, request_auth, db, now) -> list[int]:
     """Upsert all PAP locations; return list of active API location IDs."""
     logger.info("Syncing locations …")
@@ -104,25 +117,23 @@ def _sync_locations(http, web_cache, request_auth, db, now) -> list[int]:
         api_ids.add(loc_id)
         source_loc_id = str(loc_id)
 
+        fields = _location_fields(loc)
         obj = db.query(Location).filter_by(source=SOURCE, source_location_id=source_loc_id).first()
         if obj is None:
             db.add(Location(
                 source=SOURCE,
                 source_location_id=source_loc_id,
-                name=loc.get("name") or loc.get("locationName") or loc.get("locName") or source_loc_id,
                 chain=Config.CHAIN,
-                address=loc.get("address"),
-                city=loc.get("city"),
-                state=loc.get("state"),
-                zip_code=loc.get("zip") or loc.get("postalCode"),
-                phone=loc.get("phone"),
-                lat=loc.get("lat") or loc.get("latitude"),
-                lng=loc.get("lng") or loc.get("longitude"),
                 is_active=True,
                 first_seen_at=now,
                 last_seen_at=now,
+                **fields,
             ))
         else:
+            if fields["zip_code"] != obj.zip_code:
+                obj.lat = obj.lng = None  # the resolver re-geocodes from the new ZIP
+            for k, v in fields.items():
+                setattr(obj, k, v)
             obj.last_seen_at = now
             obj.is_active = True
 
