@@ -59,14 +59,14 @@ vehicles have a fully-decoded VIN.
 | DB column     | Typical API field | Description |
 |---------------|-------------------|-------------|
 | `location_id` | `locationID`      | Unique integer ID for the yard. |
-| `name`        | `name` / `locationName` / `locName` | Human-readable yard name, e.g. `"Indianapolis"`. Field name varies across responses. |
-| `address`     | `address`         | Street address. |
-| `city`        | `city`            | City. |
-| `state`       | `state`           | Two-letter US state code, e.g. `"IN"`. |
-| `zip_code`    | `zip` / `postalCode` | ZIP/postal code. |
+| `name`        | `locationName`    | Human-readable yard name, e.g. `"Indianapolis"`. |
+| `address`     | `address1`, `address2` | Street address (the two lines joined with `, `). |
+| `city`        | `cityName`        | City. |
+| `state`       | `stateName`       | Two-letter US state code, e.g. `"IN"`. |
+| `zip_code`    | `zip`             | First five digits (the API sometimes sends ZIP+4). |
 | `phone`       | `phone`           | Phone number string. |
-| `lat`         | `lat` / `latitude`  | Latitude (decimal degrees). |
-| `lng`         | `lng` / `longitude` | Longitude (decimal degrees). |
+| `lat`         | _(geocoded)_      | From the ZIP, by the resolver; cleared when the ZIP changes. |
+| `lng`         | _(geocoded)_      | As `lat`. |
 | `site_type_id`| `siteTypeID`      | Pull-A-Part internal site classification. `-1` in queries returns all types. |
 | `active`      | _(derived)_       | Set to `False` if the location disappears from the API. |
 | `first_seen`  | _(derived)_       | UTC datetime of first scrape. |

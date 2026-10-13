@@ -13,26 +13,26 @@ scrape-job-manager.
 | `parts-galore/` | `parts_galore` | [x] | [x] | First prod run 2026-10-12: 1,063 vehicles |
 | `pic-n-pull/` | `pic_n_pull` | [x] | [x] | One job loops every location. First prod run 2026-10-12: 12,725 vehicles |
 | `ryans_pic_a_part/` | `ryans_pic_a_part` | [x] | [x] | Recent-arrivals feed: drop check off. First prod run 2026-10-12: 17 vehicles |
-| `pull_a_part_scraper/` | `pull_a_part` | [ ] | [ ] | |
-| `speedwayap/` | `speedway_ap` | [ ] | [ ] | |
-| `arizonaautoparts/` | `arizona_auto_parts` | [ ] | [ ] | |
-| `las-parts/` | `las_parts` | [ ] | [ ] | |
-| `strickerautoparts/` | `stricker_auto_parts` | [ ] | [ ] | |
-| `midwayupull/` | `midway_upull` | [ ] | [ ] | |
-| `centralfloridapickandpay/` | `central_florida_pick_and_pay` | [ ] | [ ] | |
-| `picknpullsa/` | `picknpullsa` | [ ] | [ ] | |
-| `budgetupullit/` | `budget_upullit` | [ ] | [ ] | |
-| `ipullupull/` | `ipullupull` | [ ] | [ ] | |
-| `utpap/` | `utpap` | [ ] | [ ] | |
-| `wrenchapart/` | `wrenchapart` | [ ] | [ ] | |
-| `u-pull-n-save/` | `u_pull_n_save` | [ ] | [ ] | |
-| `fenixupull/` | `fenix_upull` | [ ] | [ ] | |
-| `tearapart/` | `tear_a_part` | [ ] | [ ] | |
-| `pull-n-save/` | `pull_n_save` | [ ] | [ ] | |
-| `wegotused/` | `wegotused` | [ ] | [ ] | |
-| `chesterfieldauto/` | `chesterfield_auto` | [ ] | [ ] | |
-| `pyp/` | `pyp` | [ ] | [ ] | |
-| `usedautopartsfl/` | `used_auto_parts_fl` | [ ] | [ ] | |
+| `pull_a_part_scraper/` | `pull_a_part` | [x] | [ ] | Detail phase stops at `SCRAPE_DEADLINE` (dev verified with a 20 m timeout); prod timeout 4 h. Dev run 2026-10-13: 37,826 vehicles. In prod; first run in progress 2026-10-13 |
+| `speedwayap/` | `speedway_ap` | [x] | [ ] | Incremental (latest-arrivals): drop check off, 3 h for the uncached first crawl. Dev 2026-10-13: 10,246. In prod; first run in progress 2026-10-13 |
+| `arizonaautoparts/` | `arizona_auto_parts` | [x] | [x] | Incremental: drop check off, 3 h timeout. First prod run 2026-10-13: 4,257 |
+| `las-parts/` | `las_parts` | [x] | [x] | Incremental: drop check off, 3 h timeout. First prod run 2026-10-13: 3,619 |
+| `strickerautoparts/` | `stricker_auto_parts` | [x] | [ ] | Incremental: drop check off, 3 h timeout. Dev 2026-10-13: 25,124. In prod; first run in progress 2026-10-13 |
+| `midwayupull/` | `midway_upull` | [ ] | [ ] | Dev runs end in `ReadTimeout` from midwayupull.com (transient, exit 75) |
+| `centralfloridapickandpay/` | `central_florida_pick_and_pay` | [x] | [x] | Needs the honest UA (browser UA without a browser TLS fingerprint → 403). First prod run 2026-10-13: 1,287 |
+| `picknpullsa/` | `picknpullsa` | [x] | [x] | Paged `/inventory?page=N`; stops on a repeated page. First prod run 2026-10-13: 4,222 |
+| `budgetupullit/` | `budget_upullit` | [x] | [x] | Honest UA, as above. Drop check off. First prod run 2026-10-13: 1,547 |
+| `ipullupull/` | `ipullupull` | [x] | [x] | First prod run 2026-10-13: 4,069 |
+| `utpap/` | `utpap` | [x] | [x] | First prod run 2026-10-13: 1,806 |
+| `wrenchapart/` | `wrenchapart` | [x] | [x] | First prod run 2026-10-13: 11,139 |
+| `u-pull-n-save/` | `u_pull_n_save` | [ ] | [ ] | Dev runs end in `ConnectionError` (remote closed the connection; transient, exit 75) |
+| `fenixupull/` | `fenix_upull` | [x] | [x] | Full crawl per location via the `fnx_location` cookie; 4 h timeout. First prod run 2026-10-13: 5,351 |
+| `tearapart/` | `tear_a_part` | [x] | [x] | First prod run 2026-10-13: 1,624 |
+| `pull-n-save/` | `pull_n_save` | [x] | [x] | Honest UA, as above; yard ZIPs set in `_STORE_DEFS`; 3 h timeout. First prod run 2026-10-13: 11,402 |
+| `wegotused/` | `wegotused` | [ ] | [ ] | Parked: Sucuri JS challenge, needs a browser |
+| `chesterfieldauto/` | `chesterfield_auto` | [ ] | [ ] | Parked: site search now requires a model; scraper needs a rework |
+| `pyp/` | `pyp` | [ ] | [ ] | Parked: Cloudflare 403 on the inventory endpoint, needs a browser |
+| `usedautopartsfl/` | `used_auto_parts_fl` | [x] | [x] | First prod run 2026-10-13: 457 |
 
 Recon only, no scraper (see `SCRAPERS.md` § Sites Excluded): `baughmansupullit`, `coloradoautoandparts`,
 `indyupullit`, `jacksusedautoparts`, `jksalvageco`, `mcdonoughautoparts`, `sturtevantauto`.

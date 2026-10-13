@@ -15,22 +15,25 @@ All are unauthenticated JSON REST endpoints — no cookies or tokens required.
 |------------|-------|--------------------------------|
 | siteTypeID | `-1`  | Returns all site types         |
 
-**Sample response (single item):**
+**Sample response (single item, trimmed; fetched 2026-10-13):**
 
 ```json
 {
-  "locationID": 18,
-  "name": "Indianapolis",
-  "address": "123 Junkyard Rd",
-  "city": "Indianapolis",
-  "state": "IN",
-  "zip": "46201",
-  "phone": "317-555-0100",
-  "lat": 39.7684,
-  "lng": -86.1581,
-  "siteTypeID": 1
+  "locationID": 3,
+  "locationName": "Atlanta South",
+  "address1": "1540 Henrico Road",
+  "address2": "",
+  "cityName": "Conley",
+  "stateName": "GA",
+  "zip": "30288",
+  "siteTypeID": 3,
+  "phone": "770-242-8844",
+  "locationShortName": "atl1"
 }
 ```
+
+No coordinates: the resolver geocodes from the ZIP. Some yards send ZIP+4 (`"44306-3735"`); the
+scraper keeps the first five digits.
 
 **DB table:** `locations`
 
