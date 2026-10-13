@@ -111,3 +111,46 @@ scraping:
         limits: {memory: 2Gi}
       jobs:
         ryans-pic-a-part: {pool: junkyard-inventory}
+    # Wrench A Part, 7 Texas yards in one job.
+    wrenchapart:
+      image: dwilson2547/gyopart-scraper-wrenchapart@sha256:dd0e2091e85138366fbdc16d64bdeb458390fd83ab26282d764f8cf1a89eea97
+      timeout: 1h
+      jobs:
+        wrenchapart: {pool: junkyard-inventory}
+    picknpull-sa:
+      image: dwilson2547/gyopart-scraper-picknpull-sa@sha256:910447fb4601118daf2b58002fc116524fceeabac3759dadafd2f5401f6b30c3
+      timeout: 30m
+      jobs:
+        picknpull-sa: {pool: junkyard-inventory}
+    # iPull-uPull, 4 California yards.
+    ipullupull:
+      image: dwilson2547/gyopart-scraper-ipullupull@sha256:f0b6cb32a561e1b8420723a1e06c5661db5f1f030c350f7dbc6513975cd668fa
+      timeout: 1h
+      jobs:
+        ipullupull: {pool: junkyard-inventory}
+    # Lentini, NJ. Incremental after the first crawl (new arrivals only).
+    las-parts:
+      image: dwilson2547/gyopart-scraper-las-parts@sha256:c51fdbb697865601b1e7ae74066f71cc439631900d97af488932687b34818451
+      timeout: 1h
+      # Incremental runs report only new vehicles (often 0): no zero or drop checks.
+      health: {minItems: 0, maxDropPct: 100}
+      jobs:
+        las-parts: {pool: junkyard-inventory}
+    # Skips the full crawl when every new arrival is already known.
+    budget-upullit:
+      image: dwilson2547/gyopart-scraper-budget-upullit@sha256:b10471884400d375ee6fbf550809b3e282b7e1f22965b006e35c3e783fed1713
+      timeout: 1h
+      # Incremental runs report only new vehicles (often 0): no zero or drop checks.
+      health: {minItems: 0, maxDropPct: 100}
+      jobs:
+        budget-upullit: {pool: junkyard-inventory}
+    central-florida-pick-and-pay:
+      image: dwilson2547/gyopart-scraper-central-florida-pick-and-pay@sha256:ed2452deb19a3a18d6c617623884cf75cf80b4ac8c0b539340d2fc49929f053d
+      timeout: 30m
+      jobs:
+        central-florida-pick-and-pay: {pool: junkyard-inventory}
+    used-auto-parts-fl:
+      image: dwilson2547/gyopart-scraper-used-auto-parts-fl@sha256:90bf1639bedee6b95bfca497f094191402be9cbb586da06f493213921a844a67
+      timeout: 1h
+      jobs:
+        used-auto-parts-fl: {pool: junkyard-inventory}
