@@ -131,7 +131,7 @@ scraping:
     # Lentini, NJ. Incremental after the first crawl (new arrivals only).
     las-parts:
       image: dwilson2547/gyopart-scraper-las-parts@sha256:c51fdbb697865601b1e7ae74066f71cc439631900d97af488932687b34818451
-      timeout: 1h
+      timeout: 3h  # first prod crawl is uncached: ~650 pages at prod's request rate
       # Incremental runs report only new vehicles (often 0): no zero or drop checks.
       health: {minItems: 0, maxDropPct: 100}
       jobs:
@@ -157,8 +157,21 @@ scraping:
     # Arizona Auto Parts, Phoenix + Tucson. Incremental after the first crawl (new arrivals only).
     arizona-auto-parts:
       image: dwilson2547/gyopart-scraper-arizona-auto-parts@sha256:102c12d35fefe95933af4dafd9d3a553364622850e043c1fcbf16eb7dde97fec
-      timeout: 1h
+      timeout: 3h  # first prod crawl is uncached: ~650 pages at prod's request rate
       # Incremental runs report only new vehicles (often 0): no zero or drop checks.
       health: {minItems: 0, maxDropPct: 100}
       jobs:
         arizona-auto-parts: {pool: junkyard-inventory}
+    # Pull-N-Save, 8 yards (AZ/UT/CA): one POST per store x make. Riverside has no address yet (not geocoded).
+    pull-n-save:
+      image: dwilson2547/gyopart-scraper-pull-n-save@sha256:461af6d0ecab2688fde6604778f1e53266749a6ae8c81bb89c4877c93129e884
+      timeout: 3h
+      jobs:
+        pull-n-save: {pool: junkyard-inventory}
+    # Fenix U-Pull, 4 yards (NY/GA): location x make x model (~1,940 requests on a full crawl). Skips the
+    # full crawl when every recent arrival is already known, reporting the known total.
+    fenix-upull:
+      image: dwilson2547/gyopart-scraper-fenix-upull@sha256:d87d42fabd5f75dd1743c44e237bfc9f9cce831a6cf7e6a4ad1ae923a795440e
+      timeout: 4h
+      jobs:
+        fenix-upull: {pool: junkyard-inventory}
