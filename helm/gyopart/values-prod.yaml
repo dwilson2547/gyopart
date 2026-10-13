@@ -46,10 +46,11 @@ scraping:
   scrapers:
     # One image for every manufacturer site, one job per site. Runs are capped at 3h (SCRAPE_DEADLINE
     # lands ~10 min before) so 4 at a time rotate through every site with work in the 17h window.
-    # Browser: scrape-stack's browserless (headed); all site traffic goes through the VPN proxy.
+    # Browser: its own browserless sidecar (headed, scraping.browserSidecar); site traffic goes through the VPN proxy.
     parts-direct:
-      image: dwilson2547/gyopart-scraper-parts-direct@sha256:277f316e383862323d5aad0f3ce18431f3f444f4ee0ac43c3d97a10cecfe3a44
+      image: dwilson2547/gyopart-scraper-parts-direct@sha256:23688a3d800cdb4246f8c0fb25055794ba3924a44c0a9c7fd8add96b6802e403
       database: parts-interchange
+      browserSidecar: true
       timeout: 3h
       health: {minItems: 0, maxDropPct: 100}
       policy:
@@ -59,7 +60,7 @@ scraping:
       env:
         - {name: VPN_PROXY_URL, value: "http://nordvpn-proxy-entrypoint.vpn.svc.cluster.local:8118"}
         - {name: NO_PROXY, value: ".svc.cluster.local,.cluster.local,localhost,127.0.0.1"}
-        - {name: BROWSERLESS_URL, value: "ws://browserless.scrape-stack.svc.cluster.local:3000"}
+        - {name: BROWSERLESS_URL, value: "ws://localhost:3000/chromium"}
       resources:
         requests: {cpu: 250m, memory: 512Mi}
         limits: {memory: 1Gi}

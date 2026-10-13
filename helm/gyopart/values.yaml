@@ -43,3 +43,26 @@ llmSuggester:
 # Prod's fleet is in values-prod.yaml; dev's in values-dev.yaml.
 scraping:
   enabled: false
+  # Per-run browser for scrapers that drive a browser for the whole run (`browserSidecar: true`):
+  # a native sidecar on localhost:3000, so each run's Chrome lands on whichever node the scheduler
+  # picks and is bounded by its own memory limit. One shared browserless pod held every session on
+  # one node and a single tab reached 6.8 GB (2026-10-13). Scrapers that only need a browser for a
+  # token keep using scrape-stack's shared browserless.
+  browserSidecar:
+    name: browserless
+    # Browserless 2.57.0 / Chrome 156 — the version Scuderia collection was verified on (2026-10-13).
+    image: ghcr.io/browserless/chromium@sha256:c4fd6493ff97936eb62cb35bbc19a428dda3d30905c3a59a28d9620f29b85db1
+    ports: [{containerPort: 3000}]
+    env:
+      - {name: CONCURRENT, value: "1"}
+      # Session lifetime cap (ms); clients ask for their own with ?timeout= (parts-direct does).
+      - {name: TIMEOUT, value: "64800000"}
+    # The scraper container starts only once this passes.
+    startupProbe:
+      httpGet: {path: /active, port: 3000}
+      periodSeconds: 2
+      failureThreshold: 60
+    resources:
+      requests: {cpu: 500m, memory: 1Gi}
+      # ⚠ unverified sizing: tabs are recycled every 100 navigations now; check peak use on a full run.
+      limits: {memory: 3Gi}

@@ -44,6 +44,11 @@ if TYPE_CHECKING:
 MAX_CONSECUTIVE_FAILURES = 5
 CHALLENGE_WAIT_S = 45
 MAX_RECONNECTS = 3  # browser losses per run before stopping (exit 75)
+# A tab's renderer grows for as long as it lives: one reused for a whole run reached 6.8 GB in 46 min
+# (2026-10-13), slowing every page until navigations timed out, then crashing. A new tab in the same
+# context frees that memory and keeps the context's Cloudflare clearance.
+PAGE_RECYCLE_EVERY = 100  # live navigations per tab
+MAX_PAGE_CRASHES = 5  # renderer crashes per run before stopping (exit 75)
 IMAGE_WORKERS = 8  # background image downloads per run
 PROXY_ERRORS = ("ERR_PROXY_CONNECTION_FAILED", "ERR_TUNNEL_CONNECTION_FAILED", "ERR_PROXY_AUTH",
                 "ERR_NO_SUPPORTED_PROXIES", "ERR_MANDATORY_PROXY_CONFIGURATION_FAILED")
@@ -131,6 +136,10 @@ class RunStopped(Exception):
         self.reason = reason
 
 
+class PageCrashed(Exception):
+    """The tab's renderer died (Playwright "Page crashed" / "Target crashed"); the browser is fine."""
+
+
 class SiteMoved(Exception):
     """The site redirects to another domain (Audi → audi.oempartsonline.com, found 2026-10-11): its
     config and targets need updating, so the run stops as broken (65) instead of misreading pages."""
@@ -202,6 +211,8 @@ class UpdaterV2:
         self._reconnects = 0
         self.last_final_url = ""
         self._page: "Page | None" = None
+        self._page_navigations = 0
+        self._page_crashes = 0
         self._vehicle_seconds: list[float] = []
 
     # ── session ────────────────────────────────────────────────────────────────────────────────
@@ -219,14 +230,17 @@ class UpdaterV2:
             # lasts the whole run here, so ask for one that outlives the deadline.
             left = (self.deadline - datetime.now(timezone.utc).replace(tzinfo=None)).total_seconds() \
                 if self.deadline else 18 * 3600
-            flags = {"headless": "false", "--window-size": "1400,1000",
-                     "--disable-blink-features": "AutomationControlled",
-                     "timeout": int((max(left, 0) + 30 * 60) * 1000)}
+            # Browserless v2: launch options go as one JSON `launch` parameter (v1's per-flag query
+            # parameters are rejected with a 400).
+            launch = {"headless": False,
+                      "args": ["--window-size=1400,1000", "--disable-blink-features=AutomationControlled"]}
             if browser_proxy:
-                flags["--proxy-server"] = browser_proxy
+                launch["args"].append(f"--proxy-server={browser_proxy}")
+            import json
             from urllib.parse import urlencode
+            query = urlencode({"launch": json.dumps(launch), "timeout": int((max(left, 0) + 30 * 60) * 1000)})
             self._browser = self._pw.chromium.connect_over_cdp(
-                browserless + ("&" if "?" in browserless else "?") + urlencode(flags), timeout=60_000)
+                browserless + ("&" if "?" in browserless else "?") + query, timeout=60_000)
         else:
             self._browser = self._pw.chromium.launch(
                 channel="chromium",
@@ -272,15 +286,40 @@ class UpdaterV2:
         # patches; on a current Chromium that mismatch is what got challenged (2026-10-11), while the
         # unmodified headed browser passed.
         self._context = self._browser.new_context(viewport=None, locale="en-US")
-        self._page = self._context.new_page()
+        self._page = None
+        self._new_page()
         # Homepage first: clears Cloudflare once for the whole session.
         self._navigate(self.base_url)
 
+    def _new_page(self) -> None:
+        """Replace the tab, keeping the context (and its cookies). Closing a crashed tab may fail."""
+        if self._page is not None:
+            try:
+                self._page.close()
+            except Exception:  # noqa: BLE001 — already gone
+                pass
+        self._page = self._context.new_page()
+        self._page_navigations = 0
+
     def _navigate(self, url: str):
+        if self._page_navigations >= PAGE_RECYCLE_EVERY:
+            self._new_page()
+        try:
+            return self._navigate_once(url)
+        except PageCrashed as ex:
+            self._page_crashes += 1
+            if self._page_crashes > MAX_PAGE_CRASHES:
+                raise RunStopped(75, f"browser tab crashed {self._page_crashes} times this run") from ex
+            print(f"  tab crashed ({self._page_crashes}/{MAX_PAGE_CRASHES}), retrying in a new tab: {url}", flush=True)
+            self._new_page()
+            return self._navigate_once(url)
+
+    def _navigate_once(self, url: str):
         from playwright.sync_api import Error as PlaywrightError
         from playwright.sync_api import TimeoutError as PlaywrightTimeout
         domain = urlparse(url).netloc
         with self.request_auth.acquire(domain) as permit:
+            self._page_navigations += 1
             try:
                 # "load", not "networkidle": the site's background traffic means the network may never go
                 # quiet, so networkidle waits out the timeout on perfectly good pages.
@@ -299,6 +338,8 @@ class UpdaterV2:
                 raise SiteUnavailableError(f"navigation timed out: {url}") from ex
             except PlaywrightError as ex:
                 permit.set_status(0)
+                if "crashed" in str(ex).lower():
+                    raise PageCrashed(str(ex).splitlines()[0]) from ex
                 if any(code in str(ex) for code in PROXY_ERRORS):
                     # The proxy itself is unreachable: stop the run, don't fail vehicle after vehicle.
                     raise vpn.VpnUnavailable(f"browser can't reach the VPN proxy: {str(ex)[:120]}") from ex
@@ -577,6 +618,12 @@ class UpdaterV2:
                         print(f"  done: car {ws.car_id} {'(new)' if ws.car_created else ''} parts={ws.car_parts} "
                               f"diagrams={ws.diagrams} new_parts={ws.parts_new} | images queued={self.images.pending()} "
                               f"late-saved={late}", flush=True)
+                    except RunStopped:
+                        conn.rollback()
+                        with conn.cursor() as cur:
+                            q.release(cur, t.id)  # stopped mid-vehicle (e.g. repeated tab crashes): it goes again
+                        conn.commit()
+                        raise
                     except NoCatalog:
                         conn.rollback()
                         with conn.cursor() as cur:
