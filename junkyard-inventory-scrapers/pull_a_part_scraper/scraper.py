@@ -16,7 +16,8 @@ import json
 import logging
 import sys
 from pathlib import Path
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+import os
 from urllib.parse import urlparse
 
 import requests
@@ -238,15 +239,30 @@ def _sync_inventory(http, web_cache, request_auth, db, location_ids, make_lookup
     return len(seen_keys)
 
 
+def _deadline() -> datetime | None:
+    """When to stop the detail phase: 5 min before scrape-job-manager's SCRAPE_DEADLINE (RFC 3339, set for
+    every run), so a long backlog ends the run cleanly instead of being killed at the timeout."""
+    raw = os.environ.get("SCRAPE_DEADLINE")
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00")).astimezone(timezone.utc).replace(tzinfo=None) - timedelta(minutes=5)
+    except ValueError:
+        logger.warning("Unparseable SCRAPE_DEADLINE %r — no detail time limit", raw)
+        return None
+
+
 def _fetch_details(http, web_cache, request_auth, db, run) -> None:
-    """Fetch VehicleExtendedInfo for new vehicles (detail_fetched_at IS NULL)."""
+    """Fetch VehicleExtendedInfo for vehicles still missing it (detail_fetched_at IS NULL), newest first.
+    ~1 request/s against ~38k vehicles is longer than any run, so it stops at the deadline and the next run
+    carries on; trim/engine/body are a nice-to-have (the VIN resolver decodes them from NHTSA anyway)."""
     vehicles = (
         db.execute(
             select(Vehicle).where(
                 Vehicle.source == SOURCE,
                 Vehicle.is_active.is_(True),
                 Vehicle.detail_fetched_at.is_(None),
-            )
+            ).order_by(Vehicle.first_seen_at.desc(), Vehicle.id.desc())
         ).scalars().all()
     )
 
@@ -258,7 +274,11 @@ def _fetch_details(http, web_cache, request_auth, db, run) -> None:
     fetched = 0
     now = _utcnow()
 
+    deadline = _deadline()
     for vehicle in vehicles:
+        if deadline and _utcnow() >= deadline:
+            logger.info("Deadline reached — %d details left for the next run.", len(vehicles) - fetched)
+            break
         parts = vehicle.source_key.split(":")
         if len(parts) != 2:
             continue
