@@ -185,11 +185,12 @@ scraping:
       jobs:
         used-auto-parts-fl: {pool: junkyard-inventory, suspend: true}
     # Parts-direct update scraper v2: one image for every manufacturer site, one job per site. Works a
-    # DB queue, so items per run vary with what is due — no zero/drop checks. Browser is scrape-stack's
-    # browserless (headed); all site traffic goes through the VPN proxy.
+    # DB queue, so items per run vary with what is due — no zero/drop checks. Browser is its own browserless
+    # sidecar (headed, scraping.browserSidecar); all site traffic goes through the VPN proxy.
     parts-direct:
       image: dwilson2547/gyopart-scraper-parts-direct@sha256:277f316e383862323d5aad0f3ce18431f3f444f4ee0ac43c3d97a10cecfe3a44
       database: parts-interchange
+      browserSidecar: true
       timeout: 17h
       health: {minItems: 0, maxDropPct: 100}
       policy:
@@ -198,7 +199,7 @@ scraping:
       env:
         - {name: VPN_PROXY_URL, value: "http://nordvpn-proxy-entrypoint.vpn.svc.cluster.local:8118"}
         - {name: NO_PROXY, value: ".svc.cluster.local,.cluster.local,localhost,127.0.0.1"}
-        - {name: BROWSERLESS_URL, value: "ws://browserless.scrapestack-dev.svc.cluster.local:3000"}
+        - {name: BROWSERLESS_URL, value: "ws://localhost:3000/chromium"}
       resources:
         requests: {cpu: 250m, memory: 512Mi}
         limits: {memory: 1Gi}
