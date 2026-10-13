@@ -218,3 +218,17 @@ observations, and image hashes), `scuderia-parts.jsonl` (incremental-output shap
 example), and `scuderia-catalog.png` (browser screenshot). No cookie values or
 browser storage state are included. These session artifacts are local evidence,
 not a repository-hosted dataset.
+
+## Prototype implementation status
+
+A bounded collection-only implementation is now in
+[`scuderia/`](../../scuderia/README.md). Its captured-page parser, lossless JSONL
+journal, cache/robots handling, and permit status reporting have focused tests.
+No gyopart database schema or fleet configuration was changed.
+
+The first independent local Chrome run required repeated operator validation and
+was stopped; the full prototype has not yet demonstrated live collection.
+It now requires an explicit CDP endpoint rather than implicitly opening fresh
+local browsers. See
+[the bootstrap issue](../issues/2026_10_13_scuderia_cold_browser_validation.md).
+Recon success above must not be substituted for standalone runtime verification.
