@@ -18,14 +18,14 @@ scrape-job-manager.
 | `arizonaautoparts/` | `arizona_auto_parts` | [x] | [x] | Incremental: drop check off, 3 h timeout. First prod run 2026-10-13: 4,257 |
 | `las-parts/` | `las_parts` | [x] | [x] | Incremental: drop check off, 3 h timeout. First prod run 2026-10-13: 3,619 |
 | `strickerautoparts/` | `stricker_auto_parts` | [x] | [ ] | Incremental: drop check off, 3 h timeout. Dev 2026-10-13: 25,124. In prod; first run in progress 2026-10-13 |
-| `midwayupull/` | `midway_upull` | [ ] | [ ] | Dev runs end in `ReadTimeout` from midwayupull.com (transient, exit 75) |
+| `midwayupull/` | `midway_upull` | [x] | [ ] | Server stalls on some pages: requests retry (`with_retries`), 3 h timeout. Dev 2026-10-14: 1,870. In prod; first run in progress 2026-10-14. Tulsa yard not yet in `_LOCATION_DEFS` (its cars go to Unknown) |
 | `centralfloridapickandpay/` | `central_florida_pick_and_pay` | [x] | [x] | Needs the honest UA (browser UA without a browser TLS fingerprint → 403). First prod run 2026-10-13: 1,287 |
 | `picknpullsa/` | `picknpullsa` | [x] | [x] | Paged `/inventory?page=N`; stops on a repeated page. First prod run 2026-10-13: 4,222 |
 | `budgetupullit/` | `budget_upullit` | [x] | [x] | Honest UA, as above. Drop check off. First prod run 2026-10-13: 1,547 |
 | `ipullupull/` | `ipullupull` | [x] | [x] | First prod run 2026-10-13: 4,069 |
 | `utpap/` | `utpap` | [x] | [x] | First prod run 2026-10-13: 1,806 |
 | `wrenchapart/` | `wrenchapart` | [x] | [x] | First prod run 2026-10-13: 11,139 |
-| `u-pull-n-save/` | `u_pull_n_save` | [ ] | [ ] | Dev runs end in `ConnectionError` (remote closed the connection; transient, exit 75) |
+| `u-pull-n-save/` | `u_pull_n_save` | [x] | [ ] | Year×make×model matrix (~20k searches); lists and empty results reused for a week, 8 h timeout for the first sweep. Dev 2026-10-14: 1,148. In prod; first run in progress 2026-10-14 |
 | `fenixupull/` | `fenix_upull` | [x] | [x] | Full crawl per location via the `fnx_location` cookie; 4 h timeout. First prod run 2026-10-13: 5,351 |
 | `tearapart/` | `tear_a_part` | [x] | [x] | First prod run 2026-10-13: 1,624 |
 | `pull-n-save/` | `pull_n_save` | [x] | [x] | Honest UA, as above; yard ZIPs set in `_STORE_DEFS`; 3 h timeout. First prod run 2026-10-13: 11,402 |
