@@ -15,6 +15,7 @@ SELECTORS = {
     "marque": 'select[aria-label="Select Marque"]',
     "model": 'select[aria-label="Select Model"]',
     "variant": 'select[aria-label="Select Model Variant"]',
+    "product_type": 'select[aria-label="Select Product Type"]',
     "category": 'select[aria-label="Select Main OE Parts Main Category"]',
     "diagram": 'select[aria-label="Select Sub Category OE Parts"]',
     "table": "#diagtable",
@@ -264,3 +265,76 @@ def parse_catalog(html: str, url: str) -> CatalogPage:
         title=title, image_url=image_url, image_alt=str(image.get("alt", "")),
         hotspots=parse_hotspots(soup, url), parts=parse_rows(soup, url),
     ))
+
+
+# ── part-finder listing levels (discovery, docs/design.md §3) ───────────────────────────────────
+
+@dataclass(frozen=True)
+class Option:
+    name: str
+    url: str
+
+    @property
+    def slug(self) -> str:
+        return self.url.rstrip("/").rsplit("/", 1)[-1]
+
+
+def _listing(html: str, url: str) -> BeautifulSoup:
+    soup = BeautifulSoup(html, "html.parser")
+    if soup.title and "Just a moment" in text(soup.title):
+        raise ScrapeError(f"access_blocked: challenge HTML at {url}")
+    return soup
+
+
+def _options(soup: BeautifulSoup, name: str, url: str, parent: str) -> list[Option]:
+    """The select's real options, each a direct child of `parent` on the site (placeholders skipped)."""
+    out = []
+    for option in soup.select(f"{SELECTORS[name]} option[value]"):
+        value = str(option["value"])
+        if not value:
+            continue
+        child = site_url(value, url)
+        if not child.startswith(parent + "/") or "/" in child[len(parent) + 1:]:
+            continue  # e.g. a tuning-catalogue variant under /aftermarket/
+        if child not in (o.url for o in out):
+            out.append(Option(text(option), child))
+    return out
+
+
+def parse_marques(html: str, url: str) -> list[Option]:
+    """Every marque in the part-finder (any part-finder page carries the full list)."""
+    soup = _listing(html, url)
+    if not soup.select_one(SELECTORS["marque"]):
+        raise ScrapeError(f"selector_drift: missing marque list at {url}")
+    marques = _options(soup, "marque", url, BASE_URL + "/part-finder")
+    if not marques:
+        raise ScrapeError(f"selector_drift: empty marque list at {url}")
+    return marques
+
+
+def parse_models(html: str, url: str) -> list[Option]:
+    """A marque's models. Marques without models redirect home (Alpine, Pagani, Mercedes on 2026-10-13),
+    so a page without the model list is an empty marque, not drift; the marque list must still be there."""
+    soup = _listing(html, url)
+    if not soup.select_one(SELECTORS["marque"]):
+        raise ScrapeError(f"selector_drift: missing marque list at {url}")
+    return _options(soup, "model", url, url)
+
+
+def parse_oe_link(html: str, url: str) -> str | None:
+    """The model's OE catalogue (`Original Parts` product type), or None for tuning-only models."""
+    soup = _listing(html, url)
+    if not soup.select_one(SELECTORS["product_type"]):
+        raise ScrapeError(f"selector_drift: missing product type list at {url}")
+    oe = [o for o in _options(soup, "product_type", url, url) if o.slug == "oe"]
+    return oe[0].url if oe else None
+
+
+def parse_variants(html: str, url: str) -> list[Option]:
+    """An OE catalogue's model variants. A single-variant model shows the list disabled with its one
+    variant pre-selected (Rolls-Royce Cullinan); it is listed the same way."""
+    soup = _listing(html, url)
+    variants = [o for o in _options(soup, "variant", url, url) if CATALOG_PATH.fullmatch(urlsplit(o.url).path)]
+    if not variants:
+        raise ScrapeError(f"selector_drift: no OE variants at {url}")
+    return variants

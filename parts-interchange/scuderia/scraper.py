@@ -340,6 +340,17 @@ class Collector:
         if self.robots is None or not self.robots.can_fetch("*", url):
             raise ScrapeError(f"robots_disallowed: {url}")
 
+    async def listing(self, url: str, parse):
+        """A part-finder listing page (marque / model / OE level) through the same robots, cache and
+        permit path as catalogue pages; cached only once `parse` accepts it."""
+        self.allowed(url)
+        html, cached = await self._html(url)
+        parsed = parse(html, url)
+        if not cached:
+            await self._store(url, html)
+        self.stats["listing_pages"] += 1
+        return parsed
+
     async def page(self, url: str) -> CatalogPage:
         self.allowed(url)
         html, cached = await self._html(url)

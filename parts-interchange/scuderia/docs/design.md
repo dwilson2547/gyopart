@@ -39,7 +39,8 @@ deadline cheap to resume.
 
 - **Queue table: `scrape_target`, unchanged** — `work_queue.py`'s claim/lease/release/mark functions are
   reused as they are. A variant row: `manufacturer_id` (§4), `make` = marque slug, `model` = model slug,
-  `trim` = variant id, `year`/`engine` NULL, `page_url` = the variant URL. Statuses as parts-direct
+  `trim` = variant id, `year` = `''` (the column is NOT NULL; years come from the variant name at write
+  time), `engine` NULL, `page_url` = the variant URL. ✅ built 2026-10-14: `discovery.py`. Statuses as parts-direct
   (`pending`/`done`/`no_catalog`/`failed`).
 - **Discovery** (monthly, `discovery_interval_days`): part-finder → each marque → each model; a model with
   an `/oe` product type → its variant list → upsert each variant. ~230 model pages + variant pages per
@@ -53,17 +54,16 @@ deadline cheap to resume.
 ## 4. Mapping to parts_interchange
 
 - **Manufacturer: one row per marque** (Ferrari, Lamborghini, …), so part numbers stay per brand under
-  `uq_part_manufacturer_number`. ⚠ Decision needed: a Land Rover row may already exist or clash with the
-  parts-direct `jaguar` site (jaguarparts.com lists Jaguar and Land Rover); check the manufacturer table
-  before inserting, and decide whether Scuderia's Land Rover parts share that row or get their own.
+  `uq_part_manufacturer_number`; found by `lower(name)` = the marque's display name. Discovery skips an
+  OE marque that has no manufacturer row and logs it, so a new marque is added deliberately.
+- **Land Rover is out of this set** (user, 2026-10-14): parts-direct's `jaguar` site already covers it.
 - **Car = variant.** make = marque display name, model = model name, trim = variant name, engine NULL.
   - Variant name carries a year range (Rolls-Royce: `Cullinan RR31(2017-2023)`, ✅) → one car per model
     year, all linked to the variant's diagrams through `car_diagrams` (many-to-many, ✅ schema), matching
     gyopart's per-year cars so yard vehicles can resolve against them.
   - No year range (Ferrari: `458 Italia`, ✅) → one car with `year_id` NULL (`uq_car_vehicle` treats NULLs
     as equal, ✅ schema). ⚠ Yard matching needs a year, so these cars serve part lookups but not VIN/YMM
-    resolution until a year source is found (planned follow-up: check whether variant/category pages
-    state years elsewhere).
+    resolution until a year source is found (user, 2026-10-14: fine for now; finding one is a follow-up).
 - **Category / subcategory:** Scuderia category → `category`, diagram title → `subcategory`, both upserted
   by name (existing unique keys).
 - **Parts:** upsert on (manufacturer, part_number); title from the row; `url` = the site part URL.
@@ -104,6 +104,7 @@ deadline cheap to resume.
 
 ## 8. Open
 
-- Land Rover manufacturer row (§4).
 - A year source for variants without a range (§4).
-- Whether the 3 h prod run length suits a multi-day backfill or the job should get a longer window.
+
+Decided 2026-10-14 (user): Land Rover excluded (§4); year-less cars acceptable for now; the job runs in
+the default parts-direct pool and run length, so the backfill spreads over daily runs.
