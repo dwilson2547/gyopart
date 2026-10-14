@@ -48,7 +48,7 @@ scraping:
     # lands ~10 min before) so 4 at a time rotate through every site with work in the 17h window.
     # Browser: its own browserless sidecar (headed, scraping.browserSidecar); site traffic goes through the VPN proxy.
     parts-direct:
-      image: dwilson2547/gyopart-scraper-parts-direct@sha256:0eab6b25feef867b6e5e411517166d09f9f9769bd21ee263422d8d6c7ab83b7d
+      image: dwilson2547/gyopart-scraper-parts-direct@sha256:f35678d0e06fca864313fc8e01235633febde6dca607832ff8ed4086e7b0caa8
       database: parts-interchange
       browserSidecar: true
       timeout: 3h
