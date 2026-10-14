@@ -27,7 +27,9 @@ import json
 import logging
 import os
 import sys
-from typing import Callable
+from typing import Callable, TypeVar
+
+T = TypeVar("T")
 
 EXIT_OK = 0
 EXIT_UNKNOWN = 1
@@ -45,6 +47,28 @@ class Broken(Exception):
 
 class Transient(Exception):
     """A retry later may succeed."""
+
+
+def with_retries(fn: Callable[[], T], what: str, attempts: int = 4, backoff_s: float = 20.0) -> T:
+    """Call fn, retrying network errors (timeout, dropped connection) with a growing pause.
+
+    For slow or flaky small-yard servers: one stalled page should not throw away a long crawl.
+    The last failure propagates, so a site that stays down still exits 75.
+    """
+    import time
+
+    import requests
+
+    for attempt in range(1, attempts + 1):
+        try:
+            return fn()
+        except (requests.ConnectionError, requests.Timeout, requests.exceptions.ChunkedEncodingError) as exc:
+            if attempt == attempts:
+                raise
+            pause = backoff_s * attempt
+            log.warning("%s: %s (attempt %d/%d), retrying in %.0fs", what, type(exc).__name__, attempt, attempts, pause)
+            time.sleep(pause)
+    raise AssertionError("unreachable")
 
 
 def _http_status(exc: BaseException) -> int | None:
