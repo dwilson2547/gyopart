@@ -18,6 +18,7 @@ Backlog imported from the retired todo store, 2026-07-06.
 
 ## Medium
 
+- [ ] **Find a parts source for Alfa Romeo** — Mopar's picker lists it but doesn't flag it as its own: a 2025 Giulia's page has only 4 categories of fit-anything maintenance parts (rotors, belts, air and oil filters), against 664 category links for a Jeep. Off-brand rows were deleted from Mopar's queue 2026-10-13 and discovery skips unflagged makes (`discovery.oem_makes`), so Alfa needs its own site.
 - [ ] **Bring the held-back parts-direct sites back** — audi/acura/porsche moved to oempartsonline.com (picker 403, different vehicle URLs), vw redirects to a dealer site, mazda's Cloudflare never clears from the VPN, suzuki has an expired certificate. Details: update-scraper `docs/design-v2.md` §0.
 - [x] **Move the junkyard scrapers to prod** — done 2026-10-12: us-auto-supply (daily), parts-galore, pic-n-pull, ryans in prod; dev copies suspended. Remaining yards tracked in `junkyard-inventory-scrapers/RELEASES.md`.
 - [ ] **Ryan's Pic-a-Part barely matches** — 1 of 17 vehicles resolves to a catalogue car (prod, 2026-10-12); the other yards are 80–87%. Check what the feed gives (VINs? model names?) and the decodes.
