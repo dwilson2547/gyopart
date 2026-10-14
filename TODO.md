@@ -18,6 +18,7 @@ Backlog imported from the retired todo store, 2026-07-06.
 
 ## Medium
 
+- [ ] **Find a parts source for pre-2017 Alfa Romeo** — parts.alfaonlineparts.com (onboarded 2026-10-13 as parts-direct config `alfa`) has OEM catalogues only from 2017 (Giulia, Stelvio, Tonale, 2019 4C; varies by trim); the 1985–95 cars, the 8C and the 2015 4C redirect to aftermarket. Mopar's picker lists Alfa too but carries only maintenance items.
 - [ ] **Bring the held-back parts-direct sites back** — audi/acura/porsche moved to oempartsonline.com (picker 403, different vehicle URLs), vw redirects to a dealer site, mazda's Cloudflare never clears from the VPN, suzuki has an expired certificate. Details: update-scraper `docs/design-v2.md` §0.
 - [x] **Move the junkyard scrapers to prod** — done 2026-10-12: us-auto-supply (daily), parts-galore, pic-n-pull, ryans in prod; dev copies suspended. Remaining yards tracked in `junkyard-inventory-scrapers/RELEASES.md`.
 - [ ] **Ryan's Pic-a-Part barely matches** — 1 of 17 vehicles resolves to a catalogue car (prod, 2026-10-12); the other yards are 80–87%. Check what the feed gives (VINs? model names?) and the decodes.

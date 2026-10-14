@@ -13,3 +13,8 @@ def test_operator_params_map_onto_the_cli():
 
 def test_refresh_true_is_the_default_and_plain_flags_pass_through():
     assert normalise_args(["--refresh=true", "--max-vehicles", "2"]) == ["--max-vehicles", "2"]
+
+
+def test_discovery_years_param():
+    # A site whose catalogue starts further back than the default 7 years (Alfa: 2017).
+    assert normalise_args(["--discovery_years=10"]) == ["--discovery-years=10"]

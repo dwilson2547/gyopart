@@ -128,11 +128,10 @@ def test_discovery_skips_a_vehicle_whose_lookups_conflict_and_carries_on(monkeyp
     class Builder:
         ALL_MAKES_URL = "https://example.test/ajax/vehicle-picker/makes/all"
         current_year = 2026
-        minimum_year = 2026
         csrf_token = None
 
-        def __init__(self, *_a, **_k):
-            pass
+        def __init__(self, *_a, years_to_refresh, **_k):
+            self.minimum_year = self.current_year - years_to_refresh + 1
 
         def _build_params(self, step, *args):
             return (step, args)
@@ -158,6 +157,7 @@ def test_discovery_skips_a_vehicle_whose_lookups_conflict_and_carries_on(monkeyp
     class Updater:
         base_url = "https://example.test"
         config_name = "nissan"
+        discovery_years = 1
         request_auth = None
         _page = Page()
 
