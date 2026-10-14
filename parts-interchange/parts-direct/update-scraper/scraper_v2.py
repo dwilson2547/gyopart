@@ -49,6 +49,8 @@ MAX_RECONNECTS = 3  # browser losses per run before stopping (exit 75)
 # context frees that memory and keeps the context's Cloudflare clearance.
 PAGE_RECYCLE_EVERY = 100  # live navigations per tab
 MAX_PAGE_CRASHES = 5  # renderer crashes per run before stopping (exit 75)
+CONTENT_ATTEMPTS = 3  # page.content() reads while a self-started navigation settles
+NAV_SETTLE_TIMEOUT_MS = 30_000
 IMAGE_WORKERS = 8  # background image downloads per run
 PROXY_ERRORS = ("ERR_PROXY_CONNECTION_FAILED", "ERR_TUNNEL_CONNECTION_FAILED", "ERR_PROXY_AUTH",
                 "ERR_NO_SUPPORTED_PROXIES", "ERR_MANDATORY_PROXY_CONFIGURATION_FAILED")
@@ -151,6 +153,12 @@ class VehicleMoved(Exception):
 
 class NoCatalog(Exception):
     """The vehicle's page is real but lists no categories."""
+
+
+class NotOem(NoCatalog):
+    """The site sells only aftermarket parts for this vehicle (it redirects to `?brandType=aftermarket`):
+    another brand on a multi-make picker (Mopar lists 78 makes, the Toyota dealer 18; found 2026-10-13).
+    Recorded like no catalogue, never as a failure."""
 
 
 @dataclass
@@ -354,6 +362,23 @@ class UpdaterV2:
 
     # ── pages ──────────────────────────────────────────────────────────────────────────────────
 
+    def _content(self) -> str:
+        """page.content(), riding out a navigation the page starts on its own after load (a script
+        redirect): Playwright refuses with "the page is navigating", which lost a Nissan vehicle
+        (2026-10-13). Waits for the new document and reads it instead."""
+        from playwright.sync_api import Error as PlaywrightError
+        from playwright.sync_api import TimeoutError as PlaywrightTimeout
+        for attempt in range(1, CONTENT_ATTEMPTS + 1):
+            try:
+                return self._page.content()
+            except PlaywrightError as ex:
+                if "is navigating" not in str(ex) or attempt == CONTENT_ATTEMPTS:
+                    raise
+                try:
+                    self._page.wait_for_load_state("load", timeout=NAV_SETTLE_TIMEOUT_MS)
+                except PlaywrightTimeout:
+                    pass
+
     def get_page(self, url: str) -> str:
         """Rendered HTML for url, from webcache when fresh and valid; maintenance/challenge pages raise
         SiteUnavailableError and are never cached."""
@@ -378,7 +403,8 @@ class UpdaterV2:
             self.last_final_url = self._page.url
             if resp is not None and resp.status == 404:
                 raise PageRetrievalError(f"404: {url}")
-            content = self._page.content()
+            content = self._content()
+            self.last_final_url = self._page.url  # a script redirect may have moved it since goto
             try:
                 ok = self.parser.check_page(content)
                 break
@@ -461,6 +487,8 @@ class UpdaterV2:
         page = self.get_page(t.page_url)
         if _path(self.last_final_url) != _path(t.page_url):
             raise VehicleMoved(f"redirected to {self.last_final_url}")
+        if "brandtype=aftermarket" in urlparse(self.last_final_url).query.lower():
+            raise NotOem()
         categories = self.parser.parse_cached_page(page, PageType.CATEGORIES)
         if not categories:
             raise NoCatalog()
@@ -581,7 +609,7 @@ class UpdaterV2:
             try:
                 try:
                     self._open_session()
-                    self.parser.check_page(self._page.content())  # homepage: challenge/block/maintenance?
+                    self.parser.check_page(self._content())  # homepage: challenge/block/maintenance?
                 except (SiteUnavailableError, vpn.VpnUnavailable) as ex:
                     raise RunStopped(75, f"site unavailable at session start: {ex}") from ex
                 except (Browser403Error, Browser429Error) as ex:
@@ -624,14 +652,14 @@ class UpdaterV2:
                             q.release(cur, t.id)  # stopped mid-vehicle (e.g. repeated tab crashes): it goes again
                         conn.commit()
                         raise
-                    except NoCatalog:
+                    except NoCatalog as ex:
                         conn.rollback()
                         with conn.cursor() as cur:
                             q.mark_no_catalog(cur, t.id)
                         conn.commit()
                         self.stats.no_catalog += 1
                         consecutive_failures = 0
-                        print("  no catalogue")
+                        print("  not sold by this site (aftermarket only)" if isinstance(ex, NotOem) else "  no catalogue")
                     except (SiteUnavailableError, InternetDownError, vpn.VpnUnavailable) as ex:
                         conn.rollback()
                         with conn.cursor() as cur:

@@ -17,6 +17,8 @@ import json
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Optional
 
+import psycopg2
+
 from recent_tree_builder import RecentTreeBuilder
 from utils.Constants import Steps
 
@@ -24,6 +26,19 @@ import work_queue as q
 
 DISCOVERY_INTERVAL_DAYS = 90
 DISCOVERY_YEARS = 7  # model years back from the current one (design-v2: years_to_refresh)
+
+# Some pickers list other brands, whose pages only sell aftermarket parts (they redirect to
+# ?brandType=aftermarket). Mopar flags its own makes with `primary_make`; the Toyota dealer site lists 18
+# makes and flags none, so it is named here (checked 2026-10-13). Single-family sites (GM, Ford, Hyundai,
+# Jaguar) list only their own brands and flag none.
+OEM_MAKES = {"toyota": {"toyota", "scion"}}
+
+
+def oem_makes(config: str, makes: list[dict]) -> list[dict]:
+    if config in OEM_MAKES:
+        return [m for m in makes if m["url"] in OEM_MAKES[config]]
+    primary = [m for m in makes if m.get("primary_make")]
+    return primary or makes
 
 
 def utcnow() -> datetime:
@@ -94,7 +109,7 @@ class Discovery:
         self.conn = conn
         self.mfr_id = mfr_id
         self.out_of_time = out_of_time
-        self.found = self.new = 0
+        self.found = self.new = self.skipped = 0
         self.lookups = Lookups()
 
     def run(self, current_year: Optional[int] = None) -> bool:
@@ -105,7 +120,7 @@ class Discovery:
                                     current_year=current_year)
         # Warm-up: a top-level navigation to the makes endpoint (its JSON is the page body).
         self.u._navigate(builder.ALL_MAKES_URL)
-        makes = json.loads(self.u._page.inner_text("body"))
+        makes = oem_makes(self.u.config_name, json.loads(self.u._page.inner_text("body")))
         self.u._navigate(base)
         builder.csrf_token = self.u._page.evaluate(
             "() => document.querySelector('meta[name=\"csrf-token\"]')?.content || null")
@@ -130,9 +145,20 @@ class Discovery:
                             for engine in engines:
                                 url = builder._build_car_url(year, make["url"], model["url"], trim["url"],
                                                              engine["url"])
-                                self.lookups.ensure(cur, str(year), make, model, trim, engine)
-                                is_new = q.upsert_discovered(cur, self.mfr_id, str(year), make["url"],
-                                                             model["url"], trim["url"], engine["url"], url)
+                                # One vehicle whose lookups can't be created must not end the pass: a
+                                # trim name already stored under another slug ("Empower+", uq_trim_name)
+                                # stopped every Nissan discovery at 2026 (2026-10-13).
+                                cur.execute("SAVEPOINT vehicle")
+                                try:
+                                    self.lookups.ensure(cur, str(year), make, model, trim, engine)
+                                    is_new = q.upsert_discovered(cur, self.mfr_id, str(year), make["url"],
+                                                                 model["url"], trim["url"], engine["url"], url)
+                                except psycopg2.IntegrityError as ex:
+                                    cur.execute("ROLLBACK TO SAVEPOINT vehicle")
+                                    self.skipped += 1
+                                    print(f"discovery: skipped {url}: {str(ex).splitlines()[-1].strip()}", flush=True)
+                                    continue
+                                cur.execute("RELEASE SAVEPOINT vehicle")
                                 self.found += 1
                                 self.new += is_new
                                 year_new += is_new
@@ -145,5 +171,5 @@ class Discovery:
         with self.conn.cursor() as cur:
             record(cur, self.u.config_name, started, self.found, self.new)
         self.conn.commit()
-        print(f"discovery complete: {self.found} vehicles listed, {self.new} new", flush=True)
+        print(f"discovery complete: {self.found} vehicles listed, {self.new} new, {self.skipped} skipped", flush=True)
         return True
