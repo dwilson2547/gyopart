@@ -34,6 +34,11 @@ class ScrapeError(Exception):
     """An explicit access, parsing, or persistence failure."""
 
 
+class Redirected(ScrapeError):
+    """The site redirected a request (fetches never follow redirects). A tuning-only model page redirects
+    to its /aftermarket/ catalogue (Aston Martin DB11, 2026-10-14), which discovery reads as "no OE"."""
+
+
 def site_url(value: str, base: str = BASE_URL) -> str:
     url = urljoin(base, value)
     parsed = urlsplit(url)
@@ -313,12 +318,10 @@ def parse_marques(html: str, url: str) -> list[Option]:
 
 
 def parse_models(html: str, url: str) -> list[Option]:
-    """A marque's models. Marques without models redirect home (Alpine, Pagani, Mercedes on 2026-10-13),
-    so a page without the model list is an empty marque, not drift; the marque list must still be there."""
-    soup = _listing(html, url)
-    if not soup.select_one(SELECTORS["marque"]):
-        raise ScrapeError(f"selector_drift: missing marque list at {url}")
-    return _options(soup, "model", url, url)
+    """A marque's models. Marques without models serve a page without the part-finder at all (Alpine,
+    Pagani, Mercedes, 2026-10-14), so no model list means an empty marque. Layout drift is caught at the
+    start page, which must carry the marque list (parse_marques)."""
+    return _options(_listing(html, url), "model", url, url)
 
 
 def parse_oe_link(html: str, url: str) -> str | None:

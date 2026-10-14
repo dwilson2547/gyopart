@@ -82,8 +82,10 @@ def test_walk_yields_oe_variants_and_skips_tuning_models_and_land_rover():
     }
     fetched = []
 
-    async def listing(url, parse):
+    async def listing(url, parse, **kw):
         fetched.append(url)
+        if url == R8:  # tuning-only models redirect
+            assert kw == {"on_redirect": None}
         return pages[(url, parse)]
 
     async def collect():
@@ -143,3 +145,23 @@ def test_queue_upserts_variants_and_reports_marques_without_a_manufacturer():
     assert (queue.found, queue.new, queue.missing_manufacturer) == (1, 1, {"Bentley": 1})
     # one manufacturer lookup per marque
     assert sum("FROM manufacturer" in s for s, _ in cur.sql) == 2
+
+
+def test_listing_maps_a_redirect_only_when_the_caller_says_what_it_means():
+    from unittest.mock import Mock
+
+    from catalog import Redirected
+    from scraper import Collector
+
+    class Transport:
+        async def fetch(self, url):
+            raise Redirected(f"redirected: {url}")
+
+    web_cache = Mock()
+    web_cache.get.return_value = None
+    collector = Collector(web_cache, None, Transport(), bucket="test", max_age=0)
+    collector.robots = Mock(can_fetch=Mock(return_value=True))
+    assert asyncio.run(collector.listing(R8, parse_oe_link, on_redirect=None)) is None
+    with pytest.raises(Redirected):
+        asyncio.run(collector.listing(R8, parse_oe_link))
+    web_cache.store.assert_not_called()

@@ -43,7 +43,7 @@ class Variant:
         return self.variant.slug
 
 
-Listing = Callable[[str, Callable], Awaitable]
+Listing = Callable[..., Awaitable]
 
 
 async def oe_variants(listing: Listing, skip: set[str] = SKIP_MARQUES,
@@ -55,7 +55,8 @@ async def oe_variants(listing: Listing, skip: set[str] = SKIP_MARQUES,
         for model in await listing(marque.url, parse_models):
             if out_of_time():
                 return
-            oe = await listing(model.url, parse_oe_link)
+            # A tuning-only model redirects to its /aftermarket/ catalogue: no OE.
+            oe = await listing(model.url, parse_oe_link, on_redirect=None)
             if oe is None:
                 continue
             for variant in await listing(oe, parse_variants):

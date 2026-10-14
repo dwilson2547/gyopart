@@ -28,7 +28,7 @@ from playwright.async_api import Error as BrowserError
 from playwright.async_api import Request, Route, TimeoutError as BrowserTimeout, async_playwright
 from request_auth_client import RequestAuthClient
 
-from catalog import BASE_URL, DOMAIN, CatalogPage, Diagram, ScrapeError, catalog_url, parse_catalog
+from catalog import BASE_URL, DOMAIN, CatalogPage, Diagram, Redirected, ScrapeError, catalog_url, parse_catalog
 
 LOGGER = logging.getLogger("scuderia")
 CLIENT_NAME = "scuderia_parts"
@@ -250,9 +250,10 @@ class BrowserTransport:
             result = await self.page.evaluate(
                 """async ({url, binary, limit, timeout}) => {
                     const r = await fetch(url, {
-                        cache: 'no-store', redirect: 'error',
+                        cache: 'no-store', redirect: 'manual',
                         signal: AbortSignal.timeout(timeout)
                     });
+                    if (r.type === 'opaqueredirect') return {status: 0, redirected: true};
                     const type = r.headers.get('content-type') || '';
                     if (!binary) return {status: r.status, type, body: await r.text()};
                     const bytes = new Uint8Array(await r.arrayBuffer());
@@ -265,6 +266,8 @@ class BrowserTransport:
                 {"url": url, "binary": binary, "limit": MAX_IMAGE_BYTES, "timeout": self.timeout_ms},
             )
             self._check_failure()
+            if result.get("redirected"):
+                raise Redirected(f"redirected: {url}")
             if result["status"] != 200:
                 raise ScrapeError(f"access_blocked: HTTP {result['status']} at {url}")
             body = base64.b64decode(result["body"], validate=True) if binary else result["body"]
@@ -334,11 +337,18 @@ class Collector:
         if self.robots is None or not self.robots.can_fetch("*", url):
             raise ScrapeError(f"robots_disallowed: {url}")
 
-    async def listing(self, url: str, parse):
+    async def listing(self, url: str, parse, on_redirect=Redirected):
         """A part-finder listing page (marque / model / OE level) through the same robots, cache and
-        permit path as catalogue pages; cached only once `parse` accepts it."""
+        permit path as catalogue pages; cached only once `parse` accepts it. A redirect raises, unless
+        the caller passes the value it stands for (`on_redirect`)."""
         self.allowed(url)
-        html, cached = await self._html(url)
+        try:
+            html, cached = await self._html(url)
+        except Redirected:
+            if on_redirect is Redirected:
+                raise
+            self.stats["listing_redirects"] += 1
+            return on_redirect
         parsed = parse(html, url)
         if not cached:
             await self._store(url, html)
