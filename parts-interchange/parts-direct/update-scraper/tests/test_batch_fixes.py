@@ -170,3 +170,39 @@ def test_discovery_skips_a_vehicle_whose_lookups_conflict_and_carries_on(monkeyp
     assert d.skipped == 2  # empower-plus in 2027 and 2026
     assert d.found == 2    # sv in both years
     assert "ROLLBACK TO SAVEPOINT vehicle" in cur.sql
+
+
+def test_crawl_stops_mid_vehicle_at_the_deadline():
+    from datetime import datetime, timedelta, timezone
+    from scraper_v2 import DeadlineReached, PageType
+
+    u = bare_updater()
+    url = "https://example.test/v-2026-bmw-x5--base--3-0l-l6-gas"
+    u.deadline = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=1)
+    fetched = []
+
+    def get_page(page_url):
+        fetched.append(page_url)
+        u.last_final_url = page_url
+        if len(fetched) == 2:  # the vehicle has started; the clock runs out
+            u.deadline = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(seconds=1)
+        return "<html></html>"
+
+    class Parser:
+        def parse_cached_page(self, _html, page_type, _vars=None):
+            if page_type == PageType.CATEGORIES:
+                return [{"url": url + "/c1"}, {"url": url + "/c2"}]
+            return {"diagrams": []}, {}
+
+    u.get_page = get_page
+    u.parser = Parser()
+    t = Target(1, 1, "2026", "bmw", "x5", "base", "3-0l-l6-gas", url)
+    with pytest.raises(DeadlineReached):
+        u.crawl(t)
+    assert fetched == [url, url + "/c1"]  # stopped before the second category
+
+
+def test_no_deadline_never_stops():
+    u = bare_updater()
+    u.deadline = None
+    u._check_deadline()

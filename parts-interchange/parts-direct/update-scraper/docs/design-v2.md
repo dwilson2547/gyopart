@@ -154,8 +154,11 @@ Scraper's `timeout` (the Job's `activeDeadlineSeconds`), and a kill counts as a 
 one retry → toward suspension). So the updater stops itself: before claiming each vehicle it checks
 `SCRAPE_DEADLINE` (⬜ injected by scrape-job-manager — the earlier of start + timeout − margin and the end
 of the pool's current active-hours window) against a running estimate of time per vehicle, and if the
-next vehicle wouldn't fit it commits, writes its result and exits 0. The `timeout` is then only a
-backstop for a hung browser. A kill mid-vehicle loses that vehicle's work but nothing else (its
+next vehicle wouldn't fit it commits, writes its result and exits 0. The estimate can't see one huge
+vehicle coming (BMW: ~1,000 part pages at ~4.5 s), and a BMW run overran into the kill on 2026-10-13, so
+the crawl also checks `SCRAPE_DEADLINE` before every category and part page: past it, the vehicle is
+released (not failed) and the run exits 0 as `deadline`; its pages are in webcache, so the next run
+re-reads them quickly. The `timeout` is then only a backstop for a hung browser. A kill mid-vehicle loses that vehicle's work but nothing else (its
 transaction rolls back).
 
 ### 3.4 Page validation and failure classes
