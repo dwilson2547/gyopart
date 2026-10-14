@@ -120,10 +120,10 @@ class Discovery:
                                     current_year=current_year)
         # Warm-up: a top-level navigation to the makes endpoint (its JSON is the page body).
         self.u._navigate(builder.ALL_MAKES_URL)
-        makes = oem_makes(self.u.config_name, json.loads(self.u._page.inner_text("body")))
+        makes = oem_makes(self.u.config_name, json.loads(self.u._read(lambda: self.u._page.inner_text("body"))))
         self.u._navigate(base)
-        builder.csrf_token = self.u._page.evaluate(
-            "() => document.querySelector('meta[name=\"csrf-token\"]')?.content || null")
+        builder.csrf_token = self.u._read(lambda: self.u._page.evaluate(
+            "() => document.querySelector('meta[name=\"csrf-token\"]')?.content || null"))
 
         # Next model year too: sites list it months before the calendar catches up.
         top = builder.current_year + 1

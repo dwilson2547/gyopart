@@ -370,22 +370,29 @@ class UpdaterV2:
 
     # ── pages ──────────────────────────────────────────────────────────────────────────────────
 
-    def _content(self) -> str:
-        """page.content(), riding out a navigation the page starts on its own after load (a script
-        redirect): Playwright refuses with "the page is navigating", which lost a Nissan vehicle
-        (2026-10-13). Waits for the new document and reads it instead."""
+    # What Playwright says when the page navigates on its own (a script redirect after load) while it
+    # is being read: content() refuses outright; evaluate() loses its document mid-call.
+    SELF_NAVIGATION = ("is navigating", "Execution context was destroyed")
+
+    def _read(self, fn):
+        """Run a page read, riding out a navigation the page starts on its own after load: wait for the
+        new document and read that instead. Nissan's pages do this; it lost a vehicle (content(),
+        2026-10-13) and then a whole discovery pass (the CSRF-token evaluate(), 2026-10-14)."""
         from playwright.sync_api import Error as PlaywrightError
         from playwright.sync_api import TimeoutError as PlaywrightTimeout
         for attempt in range(1, CONTENT_ATTEMPTS + 1):
             try:
-                return self._page.content()
+                return fn()
             except PlaywrightError as ex:
-                if "is navigating" not in str(ex) or attempt == CONTENT_ATTEMPTS:
+                if not any(m in str(ex) for m in self.SELF_NAVIGATION) or attempt == CONTENT_ATTEMPTS:
                     raise
                 try:
                     self._page.wait_for_load_state("load", timeout=NAV_SETTLE_TIMEOUT_MS)
                 except PlaywrightTimeout:
                     pass
+
+    def _content(self) -> str:
+        return self._read(lambda: self._page.content())
 
     def get_page(self, url: str) -> str:
         """Rendered HTML for url, from webcache when fresh and valid; maintenance/challenge pages raise
@@ -493,10 +500,11 @@ class UpdaterV2:
                 self.images.submit(name, full)  # downloads in the background while the crawl goes on
 
         page = self.get_page(t.page_url)
-        if _path(self.last_final_url) != _path(t.page_url):
-            raise VehicleMoved(f"redirected to {self.last_final_url}")
+        # Before the moved check: the aftermarket redirect also changes the path (…/categories?brandType=…).
         if "brandtype=aftermarket" in urlparse(self.last_final_url).query.lower():
             raise NotOem()
+        if _path(self.last_final_url) != _path(t.page_url):
+            raise VehicleMoved(f"redirected to {self.last_final_url}")
         categories = self.parser.parse_cached_page(page, PageType.CATEGORIES)
         if not categories:
             raise NoCatalog()

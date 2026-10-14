@@ -50,6 +50,20 @@ def test_content_gives_up_after_the_attempt_limit():
         bare_updater(page)._content()
 
 
+def test_read_rides_out_an_evaluate_losing_its_document():
+    # Nissan's homepage redirects itself; the CSRF-token evaluate() lost its context (2026-10-14).
+    page = NavigatingPage(busy_reads=0)
+    calls = []
+
+    def evaluate():
+        calls.append(1)
+        if len(calls) == 1:
+            raise PlaywrightError("Page.evaluate: Execution context was destroyed, most likely because of a navigation")
+        return "csrf-token"
+    assert bare_updater(page)._read(evaluate) == "csrf-token"
+    assert page.waits == 1
+
+
 def test_content_does_not_retry_other_errors():
     class Broken(NavigatingPage):
         def content(self):
@@ -68,7 +82,8 @@ def test_aftermarket_redirect_is_not_oem_not_a_failure():
         u.last_final_url = url + "/categories?brandType=aftermarket"
         return "<html></html>"
     u.get_page = get_page
-    t = Target(1, 1, "2027", "buick", "envision", "avenir", "2-0l-l4-gas", url + "/categories")
+    # Queue URLs have no /categories; the redirect adds it (2026-10-14: this was read as VehicleMoved).
+    t = Target(1, 1, "2027", "buick", "envision", "avenir", "2-0l-l4-gas", url)
     with pytest.raises(NotOem):
         u.crawl(t)
     assert issubclass(NotOem, scraper_v2.NoCatalog)  # the run loop records it as no catalogue
@@ -163,6 +178,9 @@ def test_discovery_skips_a_vehicle_whose_lookups_conflict_and_carries_on(monkeyp
 
         def _navigate(self, _url):
             pass
+
+        def _read(self, fn):
+            return fn()
 
     monkeypatch.setattr(discovery, "RecentTreeBuilder", Builder)
     d = discovery.Discovery(Updater(), Conn(), mfr_id=1, out_of_time=lambda: False)
