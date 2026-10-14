@@ -196,6 +196,7 @@ class UpdaterV2:
         max_vehicles: Optional[int] = None,
         discovery: str = "auto",  # auto (when due) | force | skip
         discovery_interval_days: int = 90,
+        discovery_years: int = 7,  # model years discovery lists, back from the current one
     ):
         cfg = Configs.get(config_name)
         self.config_name = config_name
@@ -208,6 +209,7 @@ class UpdaterV2:
         self.max_vehicles = max_vehicles
         self.discovery = discovery
         self.discovery_interval_days = discovery_interval_days
+        self.discovery_years = discovery_years
         self.stats = RunStats()
 
         self.web_cache = WebCacheClient(os.environ["WEBCACHE_URL"])

@@ -25,7 +25,6 @@ from utils.Constants import Steps
 import work_queue as q
 
 DISCOVERY_INTERVAL_DAYS = 90
-DISCOVERY_YEARS = 7  # model years back from the current one (design-v2: years_to_refresh)
 
 # Some pickers list other brands, whose pages only sell aftermarket parts (they redirect to
 # ?brandType=aftermarket). Mopar flags its own makes with `primary_make`; the Toyota dealer site lists 18
@@ -116,7 +115,8 @@ class Discovery:
         """True if the pass completed. Raises on site/VPN trouble like any page fetch."""
         started = utcnow()
         base = self.u.base_url
-        builder = RecentTreeBuilder(base, years_to_refresh=DISCOVERY_YEARS, request_auth=self.u.request_auth,
+        builder = RecentTreeBuilder(base, years_to_refresh=self.u.discovery_years,
+                                    request_auth=self.u.request_auth,
                                     current_year=current_year)
         # Warm-up: a top-level navigation to the makes endpoint (its JSON is the page body).
         self.u._navigate(builder.ALL_MAKES_URL)

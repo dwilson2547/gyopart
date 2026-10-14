@@ -126,6 +126,11 @@ class Configs:
             'base_url': 'https://www.volvocarsoempartsdirect.com',
             'data_dir': f'{ROOT_PATH}/volvo',
             'port': '9235'
+        },
+        'alfa': {
+            'base_url': 'https://parts.alfaonlineparts.com',
+            'data_dir': f'{ROOT_PATH}/alfa',
+            'port': '9240'
         }
     }
 

@@ -295,7 +295,7 @@ one replica — every concurrent job shares one exit IP).
 
 - `discovery.py`, run at the start of a run when the manufacturer's last complete pass is over 90 days
   old (`--discovery auto|force|skip`, or `discovery` in the ScrapeJob params). Newest model year first,
-  current year + 1 down to 7 years back; commits as it goes, and only a complete pass (a `scrape_run`
+  current year + 1 down to 7 years back (`discovery_years` per site: Alfa's catalogue starts at 2017); commits as it goes, and only a complete pass (a `scrape_run`
   row `<config>:discovery`) resets the clock.
 - Picker warm-up: one top-level navigation to `/ajax/vehicle-picker/makes/all` (its JSON is the page
   body), then the homepage for the CSRF token; picker calls run inside the page.

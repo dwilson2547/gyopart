@@ -1,7 +1,8 @@
 """Entry point for update scraper v2, speaking scrape-job-manager's contract.
 
   python run_v2.py --config fiat [--max-vehicles N] [--max-minutes M] [--refresh-after-days 180]
-                   [--discovery auto|force|skip] [--discovery-interval-days 90] [--no-refresh]
+                   [--discovery auto|force|skip] [--discovery-interval-days 90] [--discovery-years 7]
+                   [--no-refresh]
 
 Exit codes: 0 stopped normally (deadline / queue empty / limit) · 75 transient (site unavailable, VPN
 down) · 65 blocked or repeatedly failing · 1 unexpected. The result payload goes to the pod's
@@ -73,6 +74,8 @@ def main() -> int:
     ap.add_argument("--no-refresh", action="store_true", default=params.get("refresh") is False,
                     help="only new/failed vehicles; never re-scrape stale ones")
     ap.add_argument("--discovery-interval-days", type=int, default=int(params.get("discovery_interval_days", 90)))
+    ap.add_argument("--discovery-years", type=int, default=int(params.get("discovery_years", 7)),
+                    help="model years discovery lists, counting back from the current one")
     ap.add_argument("--discovery", choices=("auto", "force", "skip"), default=params.get("discovery", "auto"),
                     help="list the site's vehicles first: when due (90 days), always, or never")
     args = ap.parse_args(normalise_args(sys.argv[1:]))
@@ -89,6 +92,7 @@ def main() -> int:
         max_vehicles=args.max_vehicles,
         discovery=args.discovery,
         discovery_interval_days=args.discovery_interval_days,
+        discovery_years=args.discovery_years,
     )
     try:
         stats = updater.run()
