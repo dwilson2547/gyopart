@@ -26,7 +26,7 @@ from request_auth_client import RequestAuthClient
 
 # scrape_contract.py lives one level up in the repo and next to scraper.py in the image.
 sys.path.append(str(Path(__file__).resolve().parent.parent))
-from scrape_contract import Broken, run  # noqa: E402
+from scrape_contract import Broken, run, with_retries  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -109,13 +109,19 @@ def _fetch(
         return entry["content"]
 
     logger.info("GET %s", url)
-    with request_auth.acquire(DOMAIN) as permit:
-        resp = http.get(url, headers=HEADERS, timeout=60)
-        permit.set_status(resp.status_code)
-        if resp.status_code == 429:
-            logger.error("429 received — aborting run")
-            raise Broken(f"429 rate limited by {SOURCE}")
-        resp.raise_for_status()
+
+    def get():
+        with request_auth.acquire(DOMAIN) as permit:
+            resp = http.get(url, headers=HEADERS, timeout=120)
+            permit.set_status(resp.status_code)
+            return resp
+
+    # The server sometimes stalls for a minute or more on a page that loads in seconds a moment later.
+    resp = with_retries(get, url)
+    if resp.status_code == 429:
+        logger.error("429 received — aborting run")
+        raise Broken(f"429 rate limited by {SOURCE}")
+    resp.raise_for_status()
 
     web_cache.store(url, resp.text, CLIENT_NAME)
     return resp.text
@@ -128,18 +134,22 @@ def _post_ajax(
     params: dict,
 ) -> dict:
     """POST to admin-ajax.php; returns parsed JSON. Not cached (small, fast responses)."""
-    with request_auth.acquire(DOMAIN) as permit:
-        resp = http.post(
-            AJAX_URL,
-            data={"action": action, **params},
-            headers={**HEADERS, "Content-Type": "application/x-www-form-urlencoded"},
-            timeout=30,
-        )
-        permit.set_status(resp.status_code)
-        if resp.status_code == 429:
-            logger.error("429 received — aborting run")
-            raise Broken(f"429 rate limited by {SOURCE}")
-        resp.raise_for_status()
+    def post():
+        with request_auth.acquire(DOMAIN) as permit:
+            resp = http.post(
+                AJAX_URL,
+                data={"action": action, **params},
+                headers={**HEADERS, "Content-Type": "application/x-www-form-urlencoded"},
+                timeout=60,
+            )
+            permit.set_status(resp.status_code)
+            return resp
+
+    resp = with_retries(post, f"{action} {params}")
+    if resp.status_code == 429:
+        logger.error("429 received — aborting run")
+        raise Broken(f"429 rate limited by {SOURCE}")
+    resp.raise_for_status()
     return resp.json()
 
 

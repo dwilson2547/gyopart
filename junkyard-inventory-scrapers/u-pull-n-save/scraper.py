@@ -22,7 +22,7 @@ from request_auth_client import RequestAuthClient
 
 # scrape_contract.py lives one level up in the repo and next to scraper.py in the image.
 sys.path.append(str(Path(__file__).resolve().parent.parent))
-from scrape_contract import Broken, run  # noqa: E402
+from scrape_contract import Broken, run, with_retries  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -38,6 +38,11 @@ WEBCACHE_URL            = os.environ.get("WEBCACHE_URL", "http://webcache.scrape
 WEBCACHE_TIMEOUT        = float(os.environ.get("WEBCACHE_TIMEOUT", "30.0"))
 REQUEST_AUTH_SERVER_URL = os.environ.get("REQUEST_AUTH_SERVER_URL", "request-auth-server.scrapestack.local:9000")
 CACHE_MAX_AGE_SECONDS   = int(os.environ.get("CACHE_MAX_AGE_SECONDS", str(23 * 3600)))
+# The year/make/model lists are a parts-catalogue matrix (~500 combos a year), and nearly every
+# combo search comes back empty. Re-asking all of them daily is ~20k requests and gets the
+# connection dropped, so the lists and empty results are reused for a week; combos with stock
+# are re-searched daily. A car arriving in a combo that was empty can take up to a week to show.
+WEEKLY_MAX_AGE_SECONDS  = int(os.environ.get("WEEKLY_MAX_AGE_SECONDS", str(7 * 24 * 3600)))
 
 HEADERS = {
     "User-Agent": (
@@ -66,20 +71,32 @@ def _fetch_json(
     web_cache: WebCacheClient,
     request_auth: RequestAuthClient,
     url: str,
+    max_age: int = CACHE_MAX_AGE_SECONDS,
+    reuse_empty: bool = False,
 ) -> list | dict:
-    entry = web_cache.get(url, max_age=CACHE_MAX_AGE_SECONDS)
+    import json
+
+    entry = web_cache.get(url, max_age=max_age)
     if entry:
-        import json
         return json.loads(entry["content"])
+    if reuse_empty:
+        entry = web_cache.get(url, max_age=WEEKLY_MAX_AGE_SECONDS)
+        if entry and json.loads(entry["content"]) == []:
+            return []
 
     logger.debug("GET %s", url)
-    with request_auth.acquire(DOMAIN) as permit:
-        resp = http.get(url, headers=HEADERS, timeout=60)
-        permit.set_status(resp.status_code)
-        if resp.status_code == 429:
-            logger.error("429 received — aborting run")
-            raise Broken(f"429 rate limited by {SOURCE}")
-        resp.raise_for_status()
+
+    def get():
+        with request_auth.acquire(DOMAIN) as permit:
+            resp = http.get(url, headers=HEADERS, timeout=60)
+            permit.set_status(resp.status_code)
+            return resp
+
+    resp = with_retries(get, url)
+    if resp.status_code == 429:
+        logger.error("429 received — aborting run")
+        raise Broken(f"429 rate limited by {SOURCE}")
+    resp.raise_for_status()
 
     web_cache.store(url, resp.text, CLIENT_NAME)
     return resp.json()
@@ -141,12 +158,14 @@ def _collect_all_vehicle_ids(
     total_combos = 0
 
     for year in range(YEAR_MIN, year_max):
-        makes_data = _fetch_json(http, web_cache, request_auth, f"{API_BASE}/api/vehicles/make/{year}")
+        makes_data = _fetch_json(http, web_cache, request_auth, f"{API_BASE}/api/vehicles/make/{year}",
+                                 max_age=WEEKLY_MAX_AGE_SECONDS)
         for make_obj in makes_data:
             make = (make_obj.get("vehicleMake") or "").strip()
             if not make:
                 continue
-            models_data = _fetch_json(http, web_cache, request_auth, f"{API_BASE}/api/vehicles/model/{year}/{make}")
+            models_data = _fetch_json(http, web_cache, request_auth, f"{API_BASE}/api/vehicles/model/{year}/{make}",
+                                      max_age=WEEKLY_MAX_AGE_SECONDS)
             for model_obj in models_data:
                 model = (model_obj.get("trueModel") or "").strip()
                 if not model:
@@ -156,7 +175,7 @@ def _collect_all_vehicle_ids(
                     f"{API_BASE}/api/vehicles/search/"
                     f"?store={STORE_ID}&year={year}&make={make}&model={model}"
                 )
-                results = _fetch_json(http, web_cache, request_auth, url)
+                results = _fetch_json(http, web_cache, request_auth, url, reuse_empty=True)
                 for r in results:
                     vid = r.get("vehicleID")
                     if vid:
