@@ -203,3 +203,13 @@ scraping:
       timeout: 4h
       jobs:
         pull-a-part: {pool: junkyard-inventory}
+    midway-upull:
+      image: dwilson2547/gyopart-scraper-midway-upull@sha256:40db41d24ce049c0156b5df861e94eb5a69f3fa8fd059dddd17e717d45680edd
+      timeout: 3h
+      jobs:
+        midway-upull: {pool: junkyard-inventory}
+    u-pull-n-save:
+      image: dwilson2547/gyopart-scraper-u-pull-n-save@sha256:ec33a3f1649a5a17678d0c827d3667ba91fcb09ab7c4353a2b8df58f5526a319
+      timeout: 8h  # first sweep is ~20k requests; later runs reuse the week's empty combos
+      jobs:
+        u-pull-n-save: {pool: junkyard-inventory}
