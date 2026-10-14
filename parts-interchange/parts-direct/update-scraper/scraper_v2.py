@@ -155,6 +155,12 @@ class NoCatalog(Exception):
     """The vehicle's page is real but lists no categories."""
 
 
+class DeadlineReached(Exception):
+    """SCRAPE_DEADLINE passed mid-vehicle. One vehicle can take over an hour (BMW: ~1,000 part pages at
+    ~4.5 s), and checking only between vehicles let a run overrun into the Job's hard kill (2026-10-13).
+    The vehicle is released, not failed: its pages are in webcache, so the next run re-reads them fast."""
+
+
 class NotOem(NoCatalog):
     """The site sells only aftermarket parts for this vehicle (it redirects to `?brandType=aftermarket`):
     another brand on a multi-make picker (Mopar lists 78 makes, the Toyota dealer 18; found 2026-10-13).
@@ -497,6 +503,7 @@ class UpdaterV2:
 
         diagrams, part_urls = [], {}
         for cat in categories:
+            self._check_deadline()
             src = self.get_page(cat["url"])  # a failed category page fails the whole vehicle
             diag, plist = self.parser.parse_cached_page(
                 src, PageType.DIAGRAMS, {"base_car_url": t.page_url, "category_page_url": cat["url"]})
@@ -512,6 +519,7 @@ class UpdaterV2:
         parts: dict[str, dict] = {}
         t_parts = time.monotonic()
         for i, pn in enumerate(todo, 1):
+            self._check_deadline()
             url = part_urls[pn]
             if i % 25 == 0:
                 rate = (time.monotonic() - t_parts) / i
@@ -564,6 +572,10 @@ class UpdaterV2:
             conn.rollback()
             print(f"discovery failed, working the queue anyway: {type(ex).__name__}: {str(ex)[:300]}", flush=True)
         self._navigate(self.base_url)  # back to a normal page for the crawl
+
+    def _check_deadline(self) -> None:
+        if self.deadline and datetime.now(timezone.utc).replace(tzinfo=None) >= self.deadline:
+            raise DeadlineReached()
 
     def _time_left_for_another(self) -> bool:
         if self.max_vehicles is not None and self.stats.vehicles_done + self.stats.no_catalog + self.stats.failed >= self.max_vehicles:
@@ -654,6 +666,14 @@ class UpdaterV2:
                             q.release(cur, t.id)  # stopped mid-vehicle (e.g. repeated tab crashes): it goes again
                         conn.commit()
                         raise
+                    except DeadlineReached:
+                        conn.rollback()
+                        with conn.cursor() as cur:
+                            q.release(cur, t.id)
+                        conn.commit()
+                        self.stats.stop_reason = "deadline"
+                        print("  deadline reached mid-vehicle: released, it goes again next run", flush=True)
+                        break
                     except NoCatalog as ex:
                         conn.rollback()
                         with conn.cursor() as cur:
