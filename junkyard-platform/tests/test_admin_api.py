@@ -325,11 +325,53 @@ def test_parse_llm_response_low_confidence_filtered():
 
 
 def test_discrepancies_page_renders():
-    with patch("admin_api.main.get_grouped_discrepancies", return_value=[]):
+    with patch("admin_api.main.count_discrepancy_groups", return_value=0), \
+         patch("admin_api.main.get_grouped_discrepancies", return_value=[]):
         with _patched_client() as client:
             resp = client.get("/admin/ui/discrepancies?status=unresolved")
     assert resp.status_code == 200
     assert b"Discrepancies" in resp.content
+
+
+def _ui_group(i):
+    return {
+        "source": "lkq", "raw_make": f"MAKE{i}", "raw_model": "M", "count": 1,
+        "min_year": 2001, "max_year": 2001, "vehicle_ids": [i],
+        "best_make_match": None, "best_make_score": None,
+        "best_model_match": None, "best_model_score": None, "candidate_car_id": None,
+        "nhtsa_make": None, "nhtsa_model": None, "nhtsa_year": None,
+    }
+
+
+def test_discrepancies_page_is_paged():
+    with patch("admin_api.main.count_discrepancy_groups", return_value=120), \
+         patch("admin_api.main.get_grouped_discrepancies", return_value=[_ui_group(1)]) as get:
+        with _patched_client() as client:
+            resp = client.get("/admin/ui/discrepancies?status=unresolved&page=2")
+    assert resp.status_code == 200
+    assert get.call_args.kwargs == {"limit": 50, "offset": 50}
+    assert b"page 2 of 3" in resp.content
+    assert b"page=1" in resp.content and b"page=3" in resp.content
+
+
+def test_discrepancies_page_clamps_out_of_range_page():
+    with patch("admin_api.main.count_discrepancy_groups", return_value=120), \
+         patch("admin_api.main.get_grouped_discrepancies", return_value=[_ui_group(1)]) as get:
+        with _patched_client() as client:
+            resp = client.get("/admin/ui/discrepancies?status=unresolved&page=99")
+    assert get.call_args.kwargs == {"limit": 50, "offset": 100}
+    assert b"page 3 of 3" in resp.content
+
+
+def test_discrepancies_rows_do_not_embed_make_list():
+    with patch("admin_api.main.count_discrepancy_groups", return_value=1), \
+         patch("admin_api.main.get_grouped_discrepancies", return_value=[_ui_group(1)]), \
+         patch("admin_api.main.get_pi_makes", return_value=["Zzmake"]), \
+         patch.object(_admin_main, "_pi_engine", MagicMock()):
+        with _patched_client() as client:
+            resp = client.get("/admin/ui/discrepancies?status=unresolved")
+    # Once in the PI_MAKES script constant, not once per row.
+    assert resp.content.count(b"Zzmake") == 1
 
 
 def test_rules_page_renders():

@@ -12,7 +12,14 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from junkyard_common.models import Base, Vehicle
-from admin_api.discrepancies import VALID_STATUSES, get_grouped_discrepancies, get_pi_makes, get_pi_models_all
+from admin_api.discrepancies import (
+    PAGE_SIZE,
+    VALID_STATUSES,
+    count_discrepancy_groups,
+    get_grouped_discrepancies,
+    get_pi_makes,
+    get_pi_models_all,
+)
 from admin_api.discrepancies import router as discrepancies_router
 from admin_api.discrepancies import admin_router as discrepancies_admin_router
 from admin_api.rules import list_rules
@@ -68,17 +75,23 @@ _ui_router = APIRouter(prefix="/admin/ui", tags=["ui"])
 
 
 @_ui_router.get("/discrepancies", response_class=HTMLResponse, include_in_schema=False)
-async def ui_discrepancies(request: Request, status: str = "unresolved"):
+async def ui_discrepancies(request: Request, status: str = "unresolved", page: int = 1):
+    # Paged: all 1,873 unresolved groups on one page came to 11 MB (2026-10-13).
     if status not in VALID_STATUSES:
         status = "unresolved"
-    groups = get_grouped_discrepancies(_engine, status) if _engine else []
+    total = count_discrepancy_groups(_engine, status) if _engine else 0
+    pages = max(1, -(-total // PAGE_SIZE))
+    page = min(max(page, 1), pages)
+    groups = (
+        get_grouped_discrepancies(_engine, status, limit=PAGE_SIZE, offset=(page - 1) * PAGE_SIZE)
+        if _engine else []
+    )
     pi_makes = get_pi_makes(_pi_engine) if _pi_engine else []
-    pi_models = get_pi_models_all(_pi_engine) if _pi_engine else []
     return _templates.TemplateResponse(request, "discrepancies.html", {
         "groups": groups, "status": status,
         "active": "discrepancies",
         "pi_makes": pi_makes,
-        "pi_models": pi_models,
+        "page": page, "pages": pages, "total": total,
     })
 
 

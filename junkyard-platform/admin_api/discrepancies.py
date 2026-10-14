@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, Response
 from sqlalchemy import func, select
 from sqlalchemy.engine import Engine
@@ -17,9 +17,27 @@ admin_router = APIRouter(prefix="/admin", tags=["admin"])
 VALID_STATUSES = {"unresolved", "pending_rule", "no_match_in_dataset", "ignored"}
 
 
-def get_grouped_discrepancies(engine: Engine, status: str) -> list[dict]:
+PAGE_SIZE = 50
+
+
+def count_discrepancy_groups(engine: Engine, status: str) -> int:
     with Session(engine) as session:
-        rows = session.execute(
+        groups = (
+            select(Vehicle.source, MappingDiscrepancy.raw_make, MappingDiscrepancy.raw_model)
+            .join(Vehicle, MappingDiscrepancy.vehicle_id == Vehicle.id)
+            .where(MappingDiscrepancy.status == status)
+            .group_by(Vehicle.source, MappingDiscrepancy.raw_make, MappingDiscrepancy.raw_model)
+            .subquery()
+        )
+        return session.execute(select(func.count()).select_from(groups)).scalar() or 0
+
+
+def get_grouped_discrepancies(
+    engine: Engine, status: str, limit: int | None = None, offset: int = 0
+) -> list[dict]:
+    """Groups ordered by size, largest first; ``limit``/``offset`` page through them in SQL."""
+    with Session(engine) as session:
+        query = (
             select(
                 Vehicle.source,
                 MappingDiscrepancy.raw_make,
@@ -37,8 +55,13 @@ def get_grouped_discrepancies(engine: Engine, status: str) -> list[dict]:
             .join(Vehicle, MappingDiscrepancy.vehicle_id == Vehicle.id)
             .where(MappingDiscrepancy.status == status)
             .group_by(Vehicle.source, MappingDiscrepancy.raw_make, MappingDiscrepancy.raw_model)
-            .order_by(func.count().desc())
-        ).mappings().all()
+            # Tie-break on the group key so pages don't shuffle between requests.
+            .order_by(func.count().desc(), Vehicle.source, MappingDiscrepancy.raw_make, MappingDiscrepancy.raw_model)
+            .offset(offset)
+        )
+        if limit is not None:
+            query = query.limit(limit)
+        rows = session.execute(query).mappings().all()
 
         result = []
         for r in rows:
@@ -136,14 +159,20 @@ def _get_pi_engine() -> Engine | None:
 
 
 @router.get("")
-def list_discrepancies(status: str, engine: Engine = Depends(_get_engine)):
+def list_discrepancies(
+    status: str,
+    limit: int | None = Query(None, ge=1),
+    offset: int = Query(0, ge=0),
+    engine: Engine = Depends(_get_engine),
+):
     if status not in VALID_STATUSES:
         raise HTTPException(
             status_code=422,
             detail=f"status must be one of: {', '.join(sorted(VALID_STATUSES))}",
         )
-    groups = get_grouped_discrepancies(engine, status)
-    return {"groups": groups, "total": len(groups)}
+    groups = get_grouped_discrepancies(engine, status, limit=limit, offset=offset)
+    total = count_discrepancy_groups(engine, status) if limit is not None else len(groups) + offset
+    return {"groups": groups, "total": total}
 
 
 @router.post("/ignore")
