@@ -182,11 +182,13 @@ retain those details before ingesting them. No migration is generated here.
 ## Network and failure behavior
 
 - Webcache lookup precedes catalog/robots fetches; only validated responses are
-  cached. Cached robots text can establish a new collector tab's origin locally
-  without revisiting the target's robots endpoint.
+  cached. A new collector tab's first request is always a real navigation to the
+  requested page: that is what passes the challenge and earns clearance for the
+  in-page fetches after it (serving cached robots locally to set the origin left
+  every later fetch at 403, 2026-10-14).
 - Intercepted site/challenge requests acquire request-auth permits and report
-  their observed response status. Cache service calls and locally fulfilled
-  cached robots do not acquire target permits. Automatic navigation redirects
+  their observed response status. Cache service calls do not acquire target
+  permits. Automatic navigation redirects
   are not independently intercepted/paced by Playwright; their statuses are
   tracked separately for bootstrap validation and timeout diagnostics.
 - Configure at least the site's observed one-second crawl delay in request-auth.

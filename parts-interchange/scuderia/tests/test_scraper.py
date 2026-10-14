@@ -210,27 +210,30 @@ def test_unrelated_browser_traffic_is_blocked_without_permit():
     auth.acquire.assert_not_called()
 
 
-def test_cached_robots_establishes_origin_without_target_navigation(captured):
+def test_first_request_is_a_real_navigation_even_with_cached_robots(captured):
+    """Clearance comes from a top-level navigation; in-page fetch() can't pass the challenge."""
     auth = Mock()
     transport = BrowserTransport(auth, cdp_url="http://localhost:9222", timeout_ms=1000)
-    transport.cached_robots = ROBOTS
-    routes = []
-    navigations = []
-    fulfilled = []
-
-    async def route(url, handler, **kwargs):
-        routes.append((url, handler, kwargs))
+    navigations, fetched = [], []
 
     async def goto(url, **kwargs):
         navigations.append(url)
         page.url = url
-        local = SimpleNamespace(fulfill=AsyncMock(side_effect=lambda **kwargs: fulfilled.append(kwargs)))
-        await routes[-1][1](local)
+        transport.navigation_responses.append(
+            SimpleNamespace(status=200, headers={"content-type": "text/html"}))
+
+    async def wait_for_function(*_a, **_k):
+        pass
+
+    async def content():
+        return captured["html"]
 
     async def evaluate(code, data):
+        fetched.append(data["url"])
         return {"status": 200, "type": "text/html", "body": captured["html"]}
 
-    page = SimpleNamespace(url="about:blank", route=route, goto=goto, evaluate=evaluate)
+    page = SimpleNamespace(url="about:blank", goto=goto, wait_for_function=wait_for_function,
+                           content=content, evaluate=evaluate)
     transport.page = page
 
     async def exercise():
@@ -239,12 +242,8 @@ def test_cached_robots_establishes_origin_without_target_navigation(captured):
             assert body == captured["html"] and content_type == "text/html"
 
     asyncio.run(exercise())
-    assert navigations == [ROBOTS_URL]
-    assert len(fulfilled) == 1
-    assert fulfilled[0]["body"] == ROBOTS
-    assert routes[0][2] == {"times": 1}
-    auth.acquire.assert_not_called()
-
+    assert navigations == [captured["source_url"]]  # the first request navigates for real
+    assert fetched == [captured["source_url"]]      # the second is an in-page fetch with that clearance
 
 def test_close_preserves_supplied_browser_context_and_other_tabs():
     transport = BrowserTransport(Mock(), cdp_url="http://localhost:9222", timeout_ms=1000)

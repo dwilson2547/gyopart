@@ -162,7 +162,6 @@ class BrowserTransport:
         self.navigation_responses = []
         self.active_permits = set()
         self.robots: RobotFileParser | None = None
-        self.cached_robots: str | None = None
 
     async def _route(self, route: Route, request: Request) -> None:
         host = urlsplit(request.url).hostname
@@ -223,12 +222,9 @@ class BrowserTransport:
         if self.page is None:
             await self._start()
         try:
-            if urlsplit(self.page.url).hostname != DOMAIN and self.cached_robots is not None:
-                async def serve_cached_robots(route):
-                    await route.fulfill(status=200, content_type="text/plain", body=self.cached_robots)
-
-                await self.page.route(ROBOTS_URL, serve_cached_robots, times=1)
-                await self.page.goto(ROBOTS_URL, wait_until="domcontentloaded", timeout=self.timeout_ms)
+            # A fresh tab's first request is always a real top-level navigation: it is what passes the
+            # Cloudflare challenge and earns clearance for the in-page fetches after it. (Serving a cached
+            # robots.txt locally to set the origin skipped that, and every later fetch got 403, 2026-10-14.)
             if urlsplit(self.page.url).hostname != DOMAIN:
                 self.navigation_responses.clear()
                 await self.page.goto(url, wait_until="domcontentloaded", timeout=self.timeout_ms)
@@ -331,8 +327,6 @@ class Collector:
         self.robots = RobotFileParser(ROBOTS_URL)
         self.robots.parse(raw.splitlines())
         self.transport.robots = self.robots
-        if cached:
-            self.transport.cached_robots = raw
         if not cached:
             await self._store(ROBOTS_URL, raw)
 

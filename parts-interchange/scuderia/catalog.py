@@ -322,10 +322,10 @@ def parse_models(html: str, url: str) -> list[Option]:
 
 
 def parse_oe_link(html: str, url: str) -> str | None:
-    """The model's OE catalogue (`Original Parts` product type), or None for tuning-only models."""
+    """The model's OE catalogue (`Original Parts` product type), or None for tuning-only models. Some
+    tuning-only model pages have no product type list at all (Alfa Romeo 4C, BMW 1M, 2026-10-14); a
+    marque losing all its OE models would show in discovery's per-marque counts, not here."""
     soup = _listing(html, url)
-    if not soup.select_one(SELECTORS["product_type"]):
-        raise ScrapeError(f"selector_drift: missing product type list at {url}")
     oe = [o for o in _options(soup, "product_type", url, url) if o.slug == "oe"]
     return oe[0].url if oe else None
 

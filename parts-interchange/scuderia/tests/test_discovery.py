@@ -46,6 +46,8 @@ def test_challenge_page_is_refused():
 def test_oe_product_type():
     assert parse_oe_link(html(F458), F458) == F458 + "/oe"
     assert parse_oe_link(html(R8), R8) is None  # tuning only
+    bare = "<html><head><title>Alfa Romeo 4C Tuning Parts</title></head><body></body></html>"
+    assert parse_oe_link(bare, R8) is None  # tuning-only page without a product type list
 
 
 def test_variants():
