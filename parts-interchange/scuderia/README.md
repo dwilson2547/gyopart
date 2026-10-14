@@ -34,7 +34,12 @@ retry a failed bootstrap. The tested launch configuration reused the existing
 fleet's headed/window-size/`AutomationControlled` settings; no injected
 fingerprinting code, CAPTCHA provider credentials, or managed solving was used.
 
-The shared cluster service still runs Browserless **1.61.1** with Chrome
+**Update 2026-10-13:** the shared cluster service now runs the same pinned 2.57 image,
+and a cluster smoke run through it and the VPN collected all three diagrams / 107 rows.
+Fleet plan: [docs/design.md](docs/design.md). The paragraphs below describe the state
+before that upgrade.
+
+At the time, the shared cluster service ran Browserless **1.61.1** with Chrome
 **121.0.6167.85**. Both its ordinary headed configuration and the existing fleet
 configuration timed out on robots.txt; the latter observed navigation 307 then
 403. **That deployment was not upgraded.** The working comparison is not a
