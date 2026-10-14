@@ -68,7 +68,8 @@ def test_aftermarket_redirect_is_not_oem_not_a_failure():
         u.last_final_url = url + "/categories?brandType=aftermarket"
         return "<html></html>"
     u.get_page = get_page
-    t = Target(1, 1, "2027", "buick", "envision", "avenir", "2-0l-l4-gas", url + "/categories")
+    # Queue URLs have no /categories; the redirect adds it (2026-10-14: this was read as VehicleMoved).
+    t = Target(1, 1, "2027", "buick", "envision", "avenir", "2-0l-l4-gas", url)
     with pytest.raises(NotOem):
         u.crawl(t)
     assert issubclass(NotOem, scraper_v2.NoCatalog)  # the run loop records it as no catalogue

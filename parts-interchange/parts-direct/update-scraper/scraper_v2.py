@@ -493,10 +493,11 @@ class UpdaterV2:
                 self.images.submit(name, full)  # downloads in the background while the crawl goes on
 
         page = self.get_page(t.page_url)
-        if _path(self.last_final_url) != _path(t.page_url):
-            raise VehicleMoved(f"redirected to {self.last_final_url}")
+        # Before the moved check: the aftermarket redirect also changes the path (…/categories?brandType=…).
         if "brandtype=aftermarket" in urlparse(self.last_final_url).query.lower():
             raise NotOem()
+        if _path(self.last_final_url) != _path(t.page_url):
+            raise VehicleMoved(f"redirected to {self.last_final_url}")
         categories = self.parser.parse_cached_page(page, PageType.CATEGORIES)
         if not categories:
             raise NoCatalog()
