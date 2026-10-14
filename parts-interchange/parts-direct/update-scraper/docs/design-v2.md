@@ -228,11 +228,17 @@ Sites seen moved so far: §0.
   with work inside the 17h window.
 - `health.minItems: 0` — a run that only refreshed nothing because the site was down exits 75 instead,
   so zero items on exit 0 means "queue empty", which is fine.
-- Browser (✅ built): scrape-stack's browserless, headed (`?headless=false`), with the VPN proxy as a
-  per-session `--proxy-server` flag and a session `timeout` that outlives the run's deadline (browserless'
-  default `CONNECTION_TIMEOUT` is now 1h, chart value `browserless.connectionTimeoutMs`). The image holds
-  only the Playwright client. A lost browser is reconnected (up to 3 times per run, ~2.5 min of retries
-  each) and the vehicle retried. Locally, without `BROWSERLESS_URL`, the updater launches headed Chromium.
+- Browser (⬜ planned, branch `browserless-sidecar`; deploy 2026-10-13 off-hours): a browserless 2.57
+  **sidecar per run** (`scraping.browserSidecar` in the chart, operator `Scraper.sidecars`) on
+  `ws://localhost:3000/chromium`, headed, launch options as v2's JSON `launch` parameter with the VPN
+  proxy as `--proxy-server`, and a session `timeout` that outlives the deadline. Replaces scrape-stack's
+  shared browserless 1.61 (✅ was built): every session sat in one pod on one node, and one tab reused for
+  the whole run grew to 6.8 GB in 46 min, slowing pages into "navigation timed out" stops and then
+  `Page crashed` ×5 stops (2026-10-13 logs). Tabs are now replaced every `PAGE_RECYCLE_EVERY` (100) live
+  navigations within the same context, which keeps its Cloudflare clearance; a renderer crash is retried
+  once in a new tab and stops the run (exit 75) after `MAX_PAGE_CRASHES`. A lost browser is reconnected
+  (up to 3 times per run, ~2.5 min of retries each) and the vehicle retried. The image holds only the
+  Playwright client. Locally, without `BROWSERLESS_URL`, the updater launches headed Chromium.
 
 ### 3.8 Network: all site traffic through the VPN
 

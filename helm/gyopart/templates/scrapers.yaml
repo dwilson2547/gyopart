@@ -54,6 +54,10 @@ spec:
     {{- end }}
   resources:
     {{- toYaml ($scraper.resources | default $s.defaults.resources) | nindent 4 }}
+  {{- if $scraper.browserSidecar }}
+  sidecars:
+    - {{- toYaml $s.browserSidecar | nindent 6 }}
+  {{- end }}
   policy:
     {{- toYaml (mergeOverwrite (deepCopy $s.defaults.policy) ($scraper.policy | default dict)) | nindent 4 }}
   {{- with $scraper.health }}
