@@ -205,6 +205,8 @@ the cost of a site move, handled when it happens.
 Guards (built 2026-10-11, after Audi's redirect was misread as "no catalogue"): a navigation that lands
 on another domain stops the run as broken (exit 65, "site moved"), so the job degrades and emails; a
 vehicle URL that redirects elsewhere on the site fails that vehicle instead of marking it `no_catalog`.
+The one exception is a redirect to the same page with `?brandType=aftermarket`: the site sells only
+aftermarket parts for that vehicle (another brand), so it is `no_catalog`, not a failure (2026-10-13).
 Sites seen moved so far: §0.
 
 ### 3.7 Running under scrape-job-manager
@@ -297,8 +299,16 @@ one replica — every concurrent job shares one exit IP).
   row `<config>:discovery`) resets the clock.
 - Picker warm-up: one top-level navigation to `/ajax/vehicle-picker/makes/all` (its JSON is the page
   body), then the homepage for the CSRF token; picker calls run inside the page.
+- Only the site's own makes (2026-10-13; checked on all 16 sites' `makes/all`): Mopar's picker lists 78
+  makes and flags its own with `primary_make` (Chrysler, Dodge, Fiat, Jeep, Ram); the Toyota dealer lists
+  18 with no flag, so `discovery.OEM_MAKES` names Toyota and Scion; every other site lists only its own
+  family and flags none. Before this, other brands were queued and every run on those two sites stopped
+  after 5 aftermarket redirects in a row.
 - Creates the year/make/model/trim/engine lookup rows a new vehicle needs (picker display names), under
-  an advisory lock since trims and engines are shared across manufacturers.
+  an advisory lock since trims and engines are shared across manufacturers. A vehicle whose lookup rows
+  can't be created is skipped (savepoint) and logged; the pass goes on. Trims and engines are unique by
+  display name but resolved by slug, so a name already stored under another slug ("Empower+" on Nissan,
+  2026-10-13) can't be added — those vehicles are skipped until that mapping is decided.
 - Mini, 2026-10-11 (✅): 85 vehicles listed, 33 new — 2024–2026 (bulk data ends at 2023) plus 2 a year
   where the site renamed an engine slug (`electric` → `battery-ev-ev-bev`). A renamed vehicle is scraped
   as a new car; the old-name car stays until its refresh finds the old URL gone.
