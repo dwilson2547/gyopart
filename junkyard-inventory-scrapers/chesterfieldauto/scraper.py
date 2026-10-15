@@ -117,9 +117,11 @@ def _fetch_get(
     url: str,
     use_cache: bool = True,
     max_age: int = CACHE_MAX_AGE_SECONDS,
+    cache_key: str | None = None,
 ) -> str:
+    cache_key = cache_key or url
     if use_cache:
-        entry = web_cache.get(url, max_age=max_age)
+        entry = web_cache.get(cache_key, max_age=max_age)
         if entry:
             return entry["content"]
 
@@ -136,7 +138,7 @@ def _fetch_get(
     resp.raise_for_status()
 
     if use_cache:
-        web_cache.store(url, resp.text, CLIENT_NAME)
+        web_cache.store(cache_key, resp.text, CLIENT_NAME)
     return resp.text
 
 
@@ -193,9 +195,13 @@ def _fetch_models(
     make_id: str,
 ) -> list[str]:
     """Model ids for a make: the server renders them into the form for ?SelectedMake.Id=."""
-    html = _fetch_get(http, web_cache, request_auth, f"{SEARCH_URL}?SelectedMake.Id={make_id}",
-                      max_age=WEEKLY_MAX_AGE_SECONDS)
+    url = f"{SEARCH_URL}?SelectedMake.Id={make_id}"
+    # Own cache key: before 2026-10 this URL's key held the per-make search results.
+    html = _fetch_get(http, web_cache, request_auth, url, max_age=WEEKLY_MAX_AGE_SECONDS,
+                      cache_key=f"{url}#models")
     soup = BeautifulSoup(html, "html.parser")
+    if not soup.select_one("select#selected-model"):
+        raise Broken(f"no model select for make {make_id} — layout change?")
     return [
         opt["value"] for opt in soup.select("select#selected-model option")
         if opt.get("value") and opt["value"] != "0"
