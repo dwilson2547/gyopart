@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 # Site:     Chesterfield Auto Parts (https://chesterfieldauto.com)
-# Platform: ASP.NET Core MVC; anti-forgery token + make-enumeration POST
-# Strategy: GET /newest-cars for delta check → GET token + makes → POST per make → parse table + modals
+# Platform: ASP.NET Core MVC; anti-forgery token + make/model search POST
+# Strategy: GET /newest-cars for delta check → GET token + makes → GET models per make → POST per
+#           make+model (the search requires a model since ~2026-10) → parse table + modals
+# Last recon: 2026-10-15
 # Dedup key: VIN (stored as source_key); extras["stock_number"], extras["transmission"], extras["drive"]
 # Source identifier: "chesterfield_auto"
 
@@ -13,7 +15,7 @@ import re
 from datetime import datetime, timezone
 
 import requests
-from bs4 import BeautifulSoup, NavigableString
+from bs4 import BeautifulSoup
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -24,7 +26,7 @@ from request_auth_client import RequestAuthClient
 
 # scrape_contract.py lives one level up in the repo and next to scraper.py in the image.
 sys.path.append(str(Path(__file__).resolve().parent.parent))
-from scrape_contract import Broken, run  # noqa: E402
+from scrape_contract import Broken, run, with_retries  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -40,6 +42,12 @@ WEBCACHE_URL            = os.environ.get("WEBCACHE_URL", "http://webcache.scrape
 WEBCACHE_TIMEOUT        = float(os.environ.get("WEBCACHE_TIMEOUT", "30.0"))
 REQUEST_AUTH_SERVER_URL = os.environ.get("REQUEST_AUTH_SERVER_URL", "request-auth-server.scrapestack.local:9000")
 CACHE_MAX_AGE_SECONDS   = int(os.environ.get("CACHE_MAX_AGE_SECONDS", str(23 * 3600)))
+# Model lists are a catalogue (Chevrolet 129, Ford 150), so a full crawl is ~2,500 searches and most
+# come back empty. Model lists and empty results are reused for a week; models with stock are
+# re-searched daily. A car arriving under a model that was empty can take up to a week to show.
+WEEKLY_MAX_AGE_SECONDS  = int(os.environ.get("WEEKLY_MAX_AGE_SECONDS", str(7 * 24 * 3600)))
+# The form's year range; the site rejects a search with the years left blank.
+YEAR_RANGE              = ("1900", "2100")
 
 HEADERS = {
     "User-Agent": (
@@ -108,19 +116,24 @@ def _fetch_get(
     request_auth: RequestAuthClient,
     url: str,
     use_cache: bool = True,
+    max_age: int = CACHE_MAX_AGE_SECONDS,
 ) -> str:
     if use_cache:
-        entry = web_cache.get(url, max_age=CACHE_MAX_AGE_SECONDS)
+        entry = web_cache.get(url, max_age=max_age)
         if entry:
             return entry["content"]
 
-    with request_auth.acquire(DOMAIN) as permit:
-        resp = http.get(url, headers=HEADERS, timeout=60)
-        permit.set_status(resp.status_code)
-        if resp.status_code == 429:
-            logger.error("429 received — aborting run")
-            raise Broken(f"429 rate limited by {SOURCE}")
-        resp.raise_for_status()
+    def get():
+        with request_auth.acquire(DOMAIN) as permit:
+            resp = http.get(url, headers=HEADERS, timeout=60)
+            permit.set_status(resp.status_code)
+            return resp
+
+    resp = with_retries(get, url)
+    if resp.status_code == 429:
+        logger.error("429 received — aborting run")
+        raise Broken(f"429 rate limited by {SOURCE}")
+    resp.raise_for_status()
 
     if use_cache:
         web_cache.store(url, resp.text, CLIENT_NAME)
@@ -132,57 +145,88 @@ def _fetch_post(
     web_cache: WebCacheClient,
     request_auth: RequestAuthClient,
     make_id: str,
+    model_id: str,
     token: str,
 ) -> str:
-    cache_key = f"{SEARCH_URL}?SelectedMake.Id={make_id}"
+    cache_key = f"{SEARCH_URL}?SelectedMake.Id={make_id}&BasicSearch.ModelId={model_id}"
     entry = web_cache.get(cache_key, max_age=CACHE_MAX_AGE_SECONDS)
     if entry:
         return entry["content"]
+    entry = web_cache.get(cache_key, max_age=WEEKLY_MAX_AGE_SECONDS)
+    if entry and not _extract_vins(entry["content"]):
+        return entry["content"]
 
-    logger.debug("POST make_id=%s", make_id)
+    logger.debug("POST make_id=%s model_id=%s", make_id, model_id)
     payload = {
         "SelectedMake":            make_id,
-        "BasicSearch.ModelId":     "0",
-        "BasicSearch.BeginYear":   "",
-        "BasicSearch.EndYear":     "",
+        "BasicSearch.ModelId":     model_id,
+        "BasicSearch.BeginYear":   YEAR_RANGE[0],
+        "BasicSearch.EndYear":     YEAR_RANGE[1],
         "__RequestVerificationToken": token,
     }
-    with request_auth.acquire(DOMAIN) as permit:
-        resp = http.post(
-            f"{SEARCH_URL}?SelectedMake.Id={make_id}",
-            data=payload,
-            headers={**HEADERS, "Content-Type": "application/x-www-form-urlencoded"},
-            timeout=60,
-        )
-        permit.set_status(resp.status_code)
-        if resp.status_code == 429:
-            logger.error("429 received — aborting run")
-            raise Broken(f"429 rate limited by {SOURCE}")
-        resp.raise_for_status()
+
+    def post():
+        with request_auth.acquire(DOMAIN) as permit:
+            resp = http.post(
+                f"{SEARCH_URL}?SelectedMake.Id={make_id}",
+                data=payload,
+                headers={**HEADERS, "Content-Type": "application/x-www-form-urlencoded"},
+                timeout=90,
+            )
+            permit.set_status(resp.status_code)
+            return resp
+
+    resp = with_retries(post, f"search make={make_id} model={model_id}")
+    if resp.status_code == 429:
+        logger.error("429 received — aborting run")
+        raise Broken(f"429 rate limited by {SOURCE}")
+    resp.raise_for_status()
 
     web_cache.store(cache_key, resp.text, CLIENT_NAME)
     return resp.text
 
 
-def _parse_modal_extras(soup: BeautifulSoup, make_upper: str, vin: str) -> dict:
-    """Extract stock number, transmission, drive from the pre-rendered Bootstrap modal."""
+def _fetch_models(
+    http: requests.Session,
+    web_cache: WebCacheClient,
+    request_auth: RequestAuthClient,
+    make_id: str,
+) -> list[str]:
+    """Model ids for a make: the server renders them into the form for ?SelectedMake.Id=."""
+    html = _fetch_get(http, web_cache, request_auth, f"{SEARCH_URL}?SelectedMake.Id={make_id}",
+                      max_age=WEEKLY_MAX_AGE_SECONDS)
+    soup = BeautifulSoup(html, "html.parser")
+    return [
+        opt["value"] for opt in soup.select("select#selected-model option")
+        if opt.get("value") and opt["value"] != "0"
+    ]
+
+
+def _parse_modal(soup: BeautifulSoup, make_upper: str, vin: str) -> tuple[dict, str | None]:
+    """Stock number, transmission and drive (extras) and the first photo from the row's modal.
+
+    Markup (2026-10): <h5 class="modal-title">Images for Stock# N</h5>, then
+    <h6>Transmission: X</h6> <h6>Drive: Y</h6>, then <img class="yard-veh-img" src=...>.
+    """
     extras: dict = {}
     modal = soup.find("div", id=f"{make_upper}{vin}")
     if not modal:
-        return extras
-    for b_tag in modal.find_all("b"):
-        key = b_tag.get_text(strip=True).rstrip(":")
-        sibling = b_tag.next_sibling
-        val = str(sibling).strip() if isinstance(sibling, NavigableString) else ""
+        return extras, None
+    title = modal.find(class_="modal-title")
+    m = re.search(r"Stock#\s*(\S+)", title.get_text(" ", strip=True)) if title else None
+    if m:
+        extras["stock_number"] = m.group(1)
+    for h6 in modal.find_all("h6"):
+        key, _, val = h6.get_text(" ", strip=True).partition(":")
+        val = val.strip()
         if not val:
             continue
-        if "Stock Number" in key:
-            extras["stock_number"] = val
-        elif "Transmission" in key:
+        if key.strip() == "Transmission":
             extras["transmission"] = val
-        elif "Drive" in key:
+        elif key.strip() == "Drive":
             extras["drive"] = val
-    return extras
+    img = modal.find("img", class_="yard-veh-img")
+    return extras, (img.get("src") if img else None)
 
 
 def _parse_results(html: str, location_ids: dict[str, int]) -> list[dict]:
@@ -218,7 +262,7 @@ def _parse_results(html: str, location_ids: dict[str, int]) -> list[dict]:
             continue
 
         make_upper = cells[2].get_text(strip=True).upper()
-        extras = _parse_modal_extras(soup, make_upper, vin)
+        extras, image_url = _parse_modal(soup, make_upper, vin)
 
         engine = cells[7].get_text(strip=True)
         if engine:
@@ -234,6 +278,7 @@ def _parse_results(html: str, location_ids: dict[str, int]) -> list[dict]:
             "row":          cells[8].get_text(strip=True) or None,
             "arrival_date": _parse_arrival_date(cells[9].get_text(strip=True)),
             "extras":       extras or None,
+            "preview_image_url": image_url,
         })
     return vehicles
 
@@ -251,10 +296,14 @@ def _extract_vins(html: str) -> set[str]:
 
 def _get_token_and_makes(http: requests.Session, request_auth: RequestAuthClient) -> tuple[str, list[dict]]:
     """Always fetches fresh — token is session-scoped, do not cache."""
-    with request_auth.acquire(DOMAIN) as permit:
-        resp = http.get(SEARCH_URL, headers=HEADERS, timeout=60)
-        permit.set_status(resp.status_code)
-        resp.raise_for_status()
+    def get():
+        with request_auth.acquire(DOMAIN) as permit:
+            resp = http.get(SEARCH_URL, headers=HEADERS, timeout=60)
+            permit.set_status(resp.status_code)
+            return resp
+
+    resp = with_retries(get, SEARCH_URL)
+    resp.raise_for_status()
     soup = BeautifulSoup(resp.text, "html.parser")
     token_input = soup.find("input", {"name": "__RequestVerificationToken"})
     if not token_input:
@@ -326,6 +375,7 @@ def _upsert_vehicles(
                 row=data.get("row"),
                 arrival_date=data.get("arrival_date"),
                 extras=data.get("extras"),
+                preview_image_url=data.get("preview_image_url"),
                 is_active=True,
                 first_seen_at=now,
                 last_seen_at=now,
@@ -341,6 +391,7 @@ def _upsert_vehicles(
                     "row":          data.get("row"),
                     "arrival_date": data.get("arrival_date"),
                     "extras":       data.get("extras"),
+                    "preview_image_url": data.get("preview_image_url"),
                     "last_seen_at": now,
                     "is_active":    True,
                 },
@@ -406,17 +457,22 @@ def main() -> dict:
                     run.removed_vehicles = 0
                     run.success = True
                     db.commit()
-                return
+                return {"items": len(known_vins), "new": 0, "updated": 0, "removed": 0}
 
-            # Full crawl: extract token + makes, POST per make
+            # Full crawl: token + makes, then every model of every make (one token serves all POSTs)
             token, makes = _get_token_and_makes(http, request_auth)
 
             vehicles_by_vin: dict[str, dict] = {}
+            searches = 0
             for make in makes:
-                html = _fetch_post(http, web_cache, request_auth, make["id"], token)
-                for v in _parse_results(html, location_ids):
-                    vehicles_by_vin[v["vin"]] = v
-            logger.info("Full crawl: %d makes → %d unique vehicles", len(makes), len(vehicles_by_vin))
+                for model_id in _fetch_models(http, web_cache, request_auth, make["id"]):
+                    searches += 1
+                    html = _fetch_post(http, web_cache, request_auth, make["id"], model_id, token)
+                    for v in _parse_results(html, location_ids):
+                        vehicles_by_vin[v["vin"]] = v
+                logger.info("  %s: %d unique vehicles so far", make["name"], len(vehicles_by_vin))
+            logger.info("Full crawl: %d makes, %d searches → %d unique vehicles",
+                        len(makes), searches, len(vehicles_by_vin))
 
         vehicles = list(vehicles_by_vin.values())
         if not vehicles:
