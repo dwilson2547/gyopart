@@ -1,7 +1,8 @@
 import { useEffect } from 'react'
 import { ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { ZoomImage } from './ZoomImage'
 
-/** Full-screen image viewer with prev/next (arrows keys too) and Esc to close. */
+/** Full-screen image viewer: zoom/pan like a diagram, prev/next (arrow keys too), Esc to close. */
 export function Lightbox({ images, index, onIndex, onClose, label }: {
   images: string[]; index: number; onIndex: (i: number) => void; onClose: () => void; label: string
 }) {
@@ -18,8 +19,9 @@ export function Lightbox({ images, index, onIndex, onClose, label }: {
   return (
     <div role="dialog" aria-modal="true" aria-label={label} className="fixed inset-0 z-50 flex items-center justify-center bg-black/90"
       onClick={onClose}>
-      <img src={images[index]} alt={`${label} ${index + 1}`} onClick={e => e.stopPropagation()}
-        className="max-h-[85vh] max-w-[92vw] rounded-lg bg-white object-contain p-2" />
+      <div onClick={e => e.stopPropagation()} className="w-[min(92vw,80rem)]">
+        <ZoomImage key={images[index]} src={images[index]} alt={`${label} ${index + 1}`} boxClass="h-[85dvh] w-full rounded-lg" kind="picture" />
+      </div>
       <button aria-label="Close" onClick={onClose} className="absolute top-3 right-3 rounded-full p-2 text-white hover:bg-white/10">
         <X className="size-6" />
       </button>
