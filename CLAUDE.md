@@ -94,6 +94,7 @@ Never committed. Pre-provisioned with kubectl. Example templates in `helm/gyopar
 ## Ingresses
 
 - `gyopart.local` → gyopart-ui:80
+- `gyopart.danwils.com` → gyopart-ui:80, **public** (prod only, `publicIngress` in `values-prod.yaml`; anonymous, read-only; `/v1/vin/` rate-limited). admin-api stays LAN-only until its rewrite (`junkyard-platform/docs/admin-rewrite-design.md`).
 - `api.gyopart.local` → gyopart-api:8200
 - `admin.gyopart.local` → admin-api:8300
 - `inventory.gyopart.local` → inventory-api:8100

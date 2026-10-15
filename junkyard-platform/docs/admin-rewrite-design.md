@@ -1,0 +1,176 @@
+# Junkyard admin rewrite — design
+
+Status: **proposed** (2026-10-15). Nothing here is built yet. The "Today" section and the numbers are
+verified against the code on `dev` (fd3f7af) and read-only queries against prod on 2026-10-15; the
+rest is planned.
+
+The admin app exists to get yard vehicles matched to catalogue cars. It should show *why* a vehicle
+didn't match and let an admin fix the cause by **picking** the right catalogue value, never by typing
+it, then see the fix take effect within seconds. Later it goes public behind authentik.
+
+## 1. Today
+
+### 1.1 How a vehicle gets matched (`pipeline/resolution_pipeline.py`, run by the vin-resolver worker)
+
+1. **VIN decode** (NHTSA, cached in `vin_cache`) → `car_matcher.match_decoded`: catalogue cars with
+   the decode's year + make + model (model compared by a loose key, plus NHTSA `Series` for Ram-style
+   names), narrowed by engine/fuel/trim. Any candidates → matched (`vin_exact` / `vin_candidates`).
+2. Otherwise **rules** (`mapping_rules`) rewrite the *yard's own* make/model/trim strings, then
+   **fuzzy YMMT match** on those strings (`ymmt_match` / `rule_applied`).
+3. Otherwise a `mapping_discrepancies` row (status `unresolved`).
+
+The worker uses `vehicles` as its queue: a vehicle with `car_id_resolved = false AND
+resolve_attempted_at IS NULL` is picked up within seconds. Clearing those fields re-resolves it.
+
+### 1.2 Prod numbers (2026-10-15, read-only queries)
+
+121,054 active vehicles; 102,987 matched (vin_candidates 48,952, vin_exact 47,997, ymmt_match 4,796,
+rule_applied 1,242). **18,067 unmatched.** Of those:
+
+| Why it didn't match | Vehicles | Fixable by an admin? |
+|---|---|---|
+| No VIN / VIN never decoded / decode error | 512 / 104 / 30 | Partly (yard-string rules) |
+| Clean decode, **year not in the catalogue for that make** | 11,522 | No: catalogue coverage |
+| — of which Dodge / Jeep / Chrysler (catalogue has only 2001–2009 so far) | ~9,450 | No: fills as the Mopar catalogue scrape runs |
+| Clean decode, **model name not in the catalogue** for that make | 2,973 (136 distinct make/model pairs) | **Yes: name mapping** |
+| Clean decode, model exists in the catalogue but **not for that year** | 2,337 | Mostly no (coverage); some naming |
+| Clean decode, **make not in the catalogue** (Saab, Isuzu, Geo, …) | 589 | Sometimes (Geo → Chevrolet) |
+
+Top name mismatches: MERCEDES-BENZ C-Class (431), E-Class (147), M-Class (133); CHEVROLET Silverado
+with NHTSA series like "1500 (1/2 Ton)" / "1/2 Ton" (~500 across variants), GMT-400 (153); GMC
+Sierra "1/2 Ton Nominal" (88).
+
+**96% of unmatched vehicles have a clean NHTSA decode**, and the decode path never consults rules.
+There is one rule in the system (a global exact make rule, applied 2,984 times).
+
+### 1.3 Problems with the current app
+
+- **Rules fix the wrong thing.** They rewrite yard strings for the fuzzy step; the 96% that fail on
+  the NHTSA decode can't be fixed by any rule.
+- **Typed values.** Raw value, make context, source and trim canonical value are free text; only
+  make/model canonical values are dropdowns (full model list, unfiltered unless make context was
+  typed first).
+- **The create-rule form exposes engine internals**: field, rule type (exact/prefix/regex), scope,
+  priority, make context — eight inputs to say "this means that".
+- **Editing a rule can silently break it**: the edit row offers scope `source` but has no source
+  input, and `update_rule` never sets `source`, so the rule then never matches.
+- **Grouping by yard strings, decode from an arbitrary vehicle.** Groups are
+  (source, raw make, raw model); the NHTSA column shows the first vehicle in the group that has a
+  decode, though vehicles in one group can decode differently.
+- **No reason shown.** Catalogue gaps (two thirds of the list) look the same as fixable mismatches.
+- **Dead statuses.** `pending_rule` is only set by the LLM suggester and never reprocessed;
+  `no_match_in_dataset` is never set; every prod row is `unresolved`.
+- **Counts include gone vehicles**: 146 discrepancy rows belong to vehicles no longer in the yard.
+- **"Run Pipeline" reprocesses everything in a web-process background task**; creating a manual rule
+  doesn't trigger any reprocessing.
+- **LLM suggester** calls a paid API and is disabled (`llmSuggester.enabled: false`).
+- `Base.metadata.create_all` at startup in a service whose schema is owned by Alembic.
+- No sign-in.
+
+## 2. Design
+
+### 2.1 Discrepancies carry a reason and the decode
+
+When the worker records a discrepancy it also stores **why** and **what NHTSA said**, so grouping is
+plain SQL in one database (the catalogue lives in another):
+
+- New columns on `mapping_discrepancies`: `reason`, `nhtsa_year`, `nhtsa_make`, `nhtsa_model`,
+  `nhtsa_series`.
+- `reason` ∈ `no_vin`, `decode_failed`, `make_not_in_catalogue`, `year_not_in_catalogue`,
+  `model_not_in_catalogue`, `model_year_gap`. Computed in `match_decoded`'s failure path from the
+  same catalogue rows it already loads.
+- The worker **deletes** the discrepancy row when the vehicle later matches, and the list only counts
+  active vehicles.
+- Statuses collapse to `open` / `ignored`. `pending_rule` / `no_match_in_dataset` go away.
+
+### 2.2 Name mappings replace rules
+
+A mapping says: *this NHTSA (make, model[, series]) is that catalogue make/model*. Exact match on the
+loose name key only; no prefix/regex, no priority, no scope in the UI.
+
+- Table `decode_mappings`: `nhtsa_make`, `nhtsa_model`, `nhtsa_series` (nullable = any),
+  `year_from` / `year_to` (nullable = all years), `catalogue_make`, `catalogue_model`,
+  `created_by`, `created_at`.
+- **Targets are only ever chosen from catalogue lists**, and the API rejects a target that isn't in
+  the catalogue. Catalogue names, not ids, so a catalogue reload can't orphan a mapping; a mapping
+  whose target disappears is flagged in the list.
+- Applied in `match_decoded` before the model filter: a matching mapping adds its target to the model
+  keys (and swaps the make for cross-make cases like Geo → Chevrolet).
+- The existing yard-string rule engine stays only for vehicles without a usable decode
+  (~650, 3.6%), with the same pick-from-list UI. It can be cut entirely if that's not worth keeping.
+
+### 2.3 The fix workflow
+
+Discrepancies page, grouped by **(reason, NHTSA make, model, series)** with year range, vehicle count
+and yards:
+
+- **Fixable groups first** (`model_not_in_catalogue`, `make_not_in_catalogue`). Catalogue-gap
+  groups sit in a separate tab with the catalogue's year coverage shown, since no admin action
+  helps them.
+- Each fixable group shows the **closest catalogue models for that make in that year range**
+  (similarity-ranked) as one-click choices, plus a search box limited to that make's catalogue
+  models. A "different make" toggle opens the make list for cross-make cases.
+- Choosing a target shows a **preview**: "maps N vehicles; M of them get a match", computed by
+  running the matcher with the proposed mapping against the group's vehicles (decodes are cached,
+  so no NHTSA calls).
+- **Confirm** creates the mapping and requeues exactly the affected vehicles. The worker resolves
+  them within seconds and the group leaves the list.
+- **Ignore** marks the group ignored. It reopens if new vehicles arrive with a different decode.
+
+**Catalogue gaps resolve themselves**: a nightly job requeues `year_not_in_catalogue` /
+`model_year_gap` vehicles. That's ~14k vehicles with cached decodes, so it costs catalogue queries
+only.
+
+### 2.4 Vehicle page
+
+Reached from a group or by search (VIN, stock number, yard):
+
+- Shows the yard's fields, the raw NHTSA decode, the candidates and match method, and the
+  discrepancy reason.
+- **Re-resolve**: requeue this vehicle (clears `car_id_*` and `resolve_attempted_at`).
+- **Manual match**: cascading year → make → model → trim → engine pickers over the catalogue; stores
+  catalogue car ids (as `apply_manual_override` does today).
+- **Re-scrape yard**: the yard scrapers fetch whole inventories (most are one request), so
+  "re-scrape this vehicle" is a Run now of that yard's ScrapeJob through scrape-job-manager's run-now
+  annotation, then the vehicle re-resolves. The source → ScrapeJob link is an explicit label on each
+  ScrapeJob (`gyopart.danwils.com/source: <vehicles.source>`) set in `templates/scrapers.yaml`.
+  Names don't map mechanically: `picknpullsa` vs `picknpull-sa`. A true single-vehicle refetch is
+  only possible for scrapers with per-vehicle detail endpoints (u-pull-n-save, pull-a-part); out of
+  scope for v1.
+
+### 2.5 Mappings page
+
+The table of mappings with affected-vehicle counts, creator and date. Delete requeues the affected
+vehicles. Edit is delete + create, so a change always goes through the preview.
+
+### 2.6 Shape of the app
+
+- Same stack as the scrape-job-manager UI: FastAPI JSON API + React SPA in one image, served behind
+  Traefik.
+- Sign-in through authentik in the app, with access limited to an authentik group (it writes).
+  Public host only once that's in.
+- The web process never does bulk work: actions write rows (mappings, requeues, annotations) and the
+  worker does the rest.
+- All list endpoints paged and filtered in SQL.
+- No `create_all`; schema changes go through the Alembic root in `junkyard-inventory-scrapers/`.
+- LLM suggester removed.
+- Tests: reason classification and mapping application in `car_matcher` (table-driven from real
+  decodes), API tests over a fixture catalogue, Playwright for the group → pick → confirm flow.
+
+## 3. Phases
+
+1. **Worker**: reason + decode columns, discrepancy cleanup on match, `decode_mappings` applied in
+   `match_decoded`. Backfill reasons by requeueing current discrepancies. No UI change yet; measure
+   the buckets again. The schema change is a `dwilson-junkyard-common` release (PyPI, the schema
+   authority) plus an Alembic migration.
+2. **API + SPA discrepancy workflow** (§2.3) and mappings page (§2.5), LAN-only.
+3. **Vehicle page** (§2.4), including ScrapeJob labels and run-now.
+4. **authentik + public host.**
+5. Remove the old templates, rule engine (if dropped), LLM suggester and `create_all`.
+
+## 4. Open questions
+
+- Keep yard-string rules for the ~650 vehicles without a usable decode, or drop them?
+- Are cross-make mappings wanted (Geo Prizm → Chevrolet Prizm, Geo Metro → Chevrolet Metro)?
+- Should the catalogue-gap tab be visible at all, or reduced to a summary line per make?
+- Which authentik group gets access (new `gyopart-admins`, or reuse `sjm-admins`)?
