@@ -8,9 +8,9 @@ imagePullPolicy: Always
 
 # Admin rewrite phases 1-2 (junkyard-platform/docs/admin-rewrite-design.md) under test in dev; prod stays on
 # values.yaml's images until it's promoted. Dev DB is migrated to 0005.
-# gyopart-ui 3.0.6 likewise under test in dev (moves to values.yaml once proven).
+# gyopart-ui 3.0.7 likewise under test in dev (moves to values.yaml once proven).
 images:
-  gyopartUi: dwilson2547/gyopart-ui:3.0.6
+  gyopartUi: dwilson2547/gyopart-ui:3.0.7
   adminApi: dwilson2547/admin-api:sha-1cb8a6f4f1bc
   vinResolver: dwilson2547/vin-resolver:sha-1cb8a6f4f1bc
 
