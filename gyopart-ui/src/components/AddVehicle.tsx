@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { AlertTriangle, CheckCircle2, CircleSlash, Loader2, ScanLine, XCircle } from 'lucide-react'
 import { api, errorMessage } from '../api'
 import { useAsync } from '../lib/useAsync'
@@ -15,7 +15,9 @@ const LEVELS = ['year', 'make', 'model', 'trim', 'engine'] as const
 const nameOf = (opts: Named[] | null, id: number | null) => opts?.find(o => o.id === id)?.name ?? null
 
 /** Year → make → model → trim → engine pickers, with an optional VIN checked against NHTSA. */
-export function AddVehicle({ onSaved, onCancel }: { onSaved: (v: GarageVehicle) => void; onCancel?: () => void }) {
+export function AddVehicle({ onSaved, onCancel, submitLabel = 'Save to garage', extra }: {
+  onSaved: (v: GarageVehicle) => void; onCancel?: () => void; submitLabel?: string; extra?: ReactNode
+}) {
   const [pick, setPick] = useState<Choices>(EMPTY)
   const [vin, setVin] = useState('')
   const [vinTouched, setVinTouched] = useState(false)
@@ -175,20 +177,21 @@ export function AddVehicle({ onSaved, onCancel }: { onSaved: (v: GarageVehicle) 
           onUse={() => applyDecoded(decode.candidates)} />
       )}
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <button
           type="submit"
           disabled={carId === null}
           className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-40"
         >
-          Save to garage
+          {submitLabel}
         </button>
+        {extra}
         {onCancel && (
           <button type="button" onClick={onCancel} className="rounded-lg px-3 py-2 text-sm text-muted hover:bg-hover">
             Cancel
           </button>
         )}
-        {carId === null && <span className="text-xs text-muted">Pick year through engine to save.</span>}
+        {carId === null && <span className="text-xs text-muted">Pick year through engine.</span>}
       </div>
     </form>
   )

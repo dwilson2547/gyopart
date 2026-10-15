@@ -75,7 +75,8 @@ export function Combobox({
         e.preventDefault()
         pick(filtered[cursor])
       }
-    } else if (e.key === 'Escape') {
+    } else if (e.key === 'Escape' && open) {
+      e.preventDefault() // handled: an enclosing modal shouldn't close too
       setOpen(false)
     }
   }

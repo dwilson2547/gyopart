@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router'
-import { ChevronLeft, ChevronRight, FolderTree, ImageOff, LayoutGrid, PackageSearch, X } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight, FolderTree, ImageOff, LayoutGrid, PackageSearch, X } from 'lucide-react'
 import { api } from '../api'
 import { CatalogueTree } from '../components/CatalogueTree'
 import { Empty, ErrorLine, Loading } from '../components/States'
@@ -8,13 +8,21 @@ import { ZoomImage } from '../components/ZoomImage'
 import { useAsync } from '../lib/useAsync'
 import { useMediaQuery } from '../lib/useMediaQuery'
 import { useGarage, vehicleSubtitle, vehicleTitle } from '../state/garageContext'
+import { useVehiclePicker } from '../state/vehiclePickerContext'
 import type { CarDiagram, DiagramPart, PartHit, TreeCategory } from '../types'
 
 const num = (v: string | null) => (v && /^\d+$/.test(v) ? Number(v) : null)
 
 /** Workflow 2: browse a car's catalogue — tree on the left (always visible), diagrams on the right. */
 export function CarPage() {
+  // Keyed by car, so switching cars starts clean (filter text, open categories) without a reload.
+  const { carId } = useParams()
+  return <CarCatalogue key={carId} />
+}
+
+function CarCatalogue() {
   const carId = Number(useParams().carId)
+  const picker = useVehiclePicker()
   const [params, setParams] = useSearchParams()
   const subId = num(params.get('sub'))
   const diagramId = num(params.get('diagram'))
@@ -92,10 +100,14 @@ export function CarPage() {
             className="inline-flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1 text-sm hover:bg-hover lg:hidden">
             <FolderTree className="size-4" /> Categories
           </button>
-          <div className="min-w-0">
-            <h1 className="truncate font-semibold">{car ? vehicleTitle(car) : 'Vehicle'}</h1>
-            {car && <p className="truncate text-xs text-muted">{vehicleSubtitle(car)}</p>}
-          </div>
+          <button onClick={picker.open} aria-label="Change vehicle" title="Change vehicle"
+            className="-mx-2 flex min-w-0 items-center gap-1.5 rounded-lg px-2 py-0.5 text-left hover:bg-hover">
+            <span className="min-w-0">
+              <h1 className="truncate font-semibold">{car ? vehicleTitle(car) : 'Vehicle'}</h1>
+              {car && <p className="truncate text-xs text-muted">{vehicleSubtitle(car)}</p>}
+            </span>
+            <ChevronDown className="size-4 shrink-0 text-muted" />
+          </button>
           {crumbs && (
             <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1 text-sm text-muted sm:ml-auto">
               <span className="truncate">{crumbs.cat.label}</span>
