@@ -6,6 +6,7 @@ import { CatalogueTree } from '../components/CatalogueTree'
 import { Empty, ErrorLine, Loading } from '../components/States'
 import { ZoomImage } from '../components/ZoomImage'
 import { useAsync } from '../lib/useAsync'
+import { useMediaQuery } from '../lib/useMediaQuery'
 import { useGarage, vehicleSubtitle, vehicleTitle } from '../state/garageContext'
 import type { CarDiagram, DiagramPart, PartHit, TreeCategory } from '../types'
 
@@ -20,6 +21,9 @@ export function CarPage() {
   const partId = num(params.get('part'))
   const query = params.get('q') ?? ''
   const [drawer, setDrawer] = useState(false)
+  // Tailwind's lg breakpoint. Only one tree may be mounted: each syncs its filter text into ?q=, so a
+  // hidden second copy would keep writing its stale text back (the mobile search loop).
+  const wide = useMediaQuery('(min-width: 1024px)')
 
   const { vehicles } = useGarage()
   const inGarage = vehicles.find(v => v.car_id === carId) ?? null
@@ -62,11 +66,13 @@ export function CarPage() {
   return (
     <div className="flex h-full">
       {/* Tree: a fixed column on wide screens, a drawer on narrow ones. */}
-      <aside className="hidden w-80 shrink-0 border-r border-line bg-surface lg:block" aria-label="Catalogue">
-        {treePanel}
-      </aside>
-      {drawer && (
-        <div className="fixed inset-0 z-40 lg:hidden">
+      {wide && (
+        <aside className="w-80 shrink-0 border-r border-line bg-surface" aria-label="Catalogue">
+          {treePanel}
+        </aside>
+      )}
+      {drawer && !wide && (
+        <div className="fixed inset-0 z-40">
           <div className="absolute inset-0 bg-black/50" onClick={() => setDrawer(false)} />
           <aside className="absolute inset-y-0 left-0 flex w-full max-w-sm flex-col bg-surface shadow-xl" aria-label="Catalogue">
             <div className="flex items-center justify-between border-b border-line py-1 pr-2 pl-4 font-semibold">
