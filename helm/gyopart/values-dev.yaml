@@ -166,7 +166,7 @@ scraping:
       jobs:
         wegotused: {pool: junkyard-inventory, suspend: true}
     chesterfield-auto:
-      image: dwilson2547/gyopart-scraper-chesterfield-auto@sha256:da2c8e54a1bc289e70e2b07ef984dc6f52fc3e932e6155a456b6e4ebee67517c
+      image: dwilson2547/gyopart-scraper-chesterfield-auto@sha256:83d396afba4ab1e572bd0047a38ae65d2116bbea0119e1aa4954700dd109dcb1
       timeout: 4h  # first sweep is ~2,500 searches; later runs reuse the week's empty models
       jobs:
         chesterfield-auto: {pool: junkyard-inventory, suspend: true}
