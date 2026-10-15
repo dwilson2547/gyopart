@@ -60,9 +60,10 @@ _LOCATION_DEFS = {
     "ALLENTOWN": {
         "source_location_id": "allentown",
         "name":     "Harry's U-Pull It — Allentown, PA",
-        "address":  "1510 East Jonathan Street, Allentown, PA",
+        "address":  "1510 East Jonathan Street, Allentown, PA 18109",
         "city":     "Allentown",
         "state":    "PA",
+        "zip_code": "18109",  # from the site's homepage yard list, 2026-10-15
         "phone":    "(610) 433-9901",
     },
     "PENNSBURG": {
@@ -228,6 +229,11 @@ def _ensure_locations(db: Session, now: datetime) -> dict[str, int]:
             db.add(obj)
             db.commit()
             db.refresh(obj)
+        elif obj.zip_code != defn.get("zip_code") or obj.address != defn.get("address"):
+            if obj.zip_code != defn.get("zip_code"):
+                obj.lat = obj.lng = None  # the resolver re-geocodes from the new ZIP
+            obj.address, obj.zip_code = defn.get("address"), defn.get("zip_code")
+            db.commit()
         location_ids[yard_city] = obj.id
     return location_ids
 

@@ -17,7 +17,7 @@
 
 | Yard | Address | Phone |
 |------|---------|-------|
-| Allentown | 1510 East Jonathan Street, Allentown, PA | (610) 433-9901 |
+| Allentown | 1510 East Jonathan Street, Allentown, PA 18109 | (610) 433-9901 |
 | Pennsburg | 2557 Geryville Pike, Pennsburg, PA 18073 | (215) 541-9950 |
 | Hazle Township | 1010 Winters Avenue, Hazle Township, PA 18202 | (570) 459-9901 / 1-888-514-9901 |
 
