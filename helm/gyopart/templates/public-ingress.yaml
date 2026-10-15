@@ -1,0 +1,87 @@
+{{- with .Values.publicIngress }}
+{{- if .host }}
+# The public site: the UI only, on Traefik's pubsecure entrypoint (Cloudflare in
+# front; cluster-wide origin lockdown and per-visitor limits apply automatically).
+# The UI's nginx proxies /v1/ to gyopart-api, so the API needs no host of its
+# own. admin-api and the api./admin. LAN hosts stay on ingress.yaml, LAN-only.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: gyopart-public
+  namespace: {{ include "gyopart.namespace" $ }}
+  labels:
+    {{- include "gyopart.labels" $ | nindent 4 }}
+    dns.danwils.com/public: "true"
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    traefik.ingress.kubernetes.io/router.entrypoints: pubsecure
+    external-dns.kubernetes.io/target: danwils.com
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - {{ .host }}
+      secretName: {{ .tlsSecretName }}
+  rules:
+    - host: {{ .host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: gyopart-ui
+                port:
+                  number: 80
+{{- with .vinRateLimit }}
+---
+# VIN decode calls NHTSA on every request (uncached): a stricter per-visitor
+# limit so anonymous traffic can't turn the site into an NHTSA relay. Keyed
+# like the cluster limits: depth 1 = the visitor Cloudflare appended.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: gyopart-vin
+  namespace: {{ include "gyopart.namespace" $ }}
+spec:
+  rateLimit:
+    average: {{ .average }}
+    period: {{ .period }}
+    burst: {{ .burst }}
+    sourceCriterion:
+      ipStrategy:
+        depth: 1
+        ipv6Subnet: 64
+---
+# Same host, longer path: Traefik prefers this rule. No cert-manager or
+# external-dns markers; gyopart-public owns the cert and DNS.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: gyopart-public-vin
+  namespace: {{ include "gyopart.namespace" $ }}
+  labels:
+    {{- include "gyopart.labels" $ | nindent 4 }}
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: pubsecure
+    traefik.ingress.kubernetes.io/router.middlewares: {{ include "gyopart.namespace" $ }}-gyopart-vin@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - {{ $.Values.publicIngress.host }}
+      secretName: {{ $.Values.publicIngress.tlsSecretName }}
+  rules:
+    - host: {{ $.Values.publicIngress.host }}
+      http:
+        paths:
+          - path: /v1/vin/
+            pathType: Prefix
+            backend:
+              service:
+                name: gyopart-ui
+                port:
+                  number: 80
+{{- end }}
+{{- end }}
+{{- end }}

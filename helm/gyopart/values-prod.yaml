@@ -1,5 +1,11 @@
 # gyopart prod (Argo app `gyopart`: main, values.yaml + this file). Only what differs from values.yaml.
 
+# Public at https://gyopart.danwils.com, anonymous and read-only (every gyopart-api route is a GET).
+# The LAN hosts (gyopart.local, api./admin.gyopart.local) stay as they are; admin-api is never public.
+publicIngress:
+  host: gyopart.danwils.com
+  tlsSecretName: gyopart-danwils-com-tls
+
 # Scraper fleet run by scrape-job-manager (templates/scrapers.yaml): the parts-direct updater.
 scraping:
   enabled: true
