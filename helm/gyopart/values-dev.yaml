@@ -161,7 +161,7 @@ scraping:
       jobs:
         pull-n-save: {pool: junkyard-inventory, suspend: true}
     wegotused:
-      image: dwilson2547/gyopart-scraper-wegotused@sha256:b42c80033b00ae2cf4696f27dc0462a58c5a29f086d4eaf1b619fd367a28f100
+      image: dwilson2547/gyopart-scraper-wegotused@sha256:2910b3f376ab990851e616391c84ef4a0e30fa242e2e4a0d4829f5289a94090a
       timeout: 1h
       resources:  # headless Chromium, once per run, for the Sucuri challenge
         requests: {cpu: 250m, memory: 512Mi}
