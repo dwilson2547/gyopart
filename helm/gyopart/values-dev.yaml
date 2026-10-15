@@ -6,11 +6,11 @@ domain: gyopart-dev.local
 
 imagePullPolicy: Always
 
-# Admin rewrite phase 1 (junkyard-platform/docs/admin-rewrite-design.md) under test in dev; prod stays on
+# Admin rewrite phases 1-2 (junkyard-platform/docs/admin-rewrite-design.md) under test in dev; prod stays on
 # values.yaml's images until it's promoted. Dev DB is migrated to 0005.
 images:
-  adminApi: dwilson2547/admin-api:sha-23296baa0d08
-  vinResolver: dwilson2547/vin-resolver:sha-23296baa0d08
+  adminApi: dwilson2547/admin-api:sha-1cb8a6f4f1bc
+  vinResolver: dwilson2547/vin-resolver:sha-1cb8a6f4f1bc
 
 postgres:
   host: postgres-dev.postgres.svc.cluster.local
