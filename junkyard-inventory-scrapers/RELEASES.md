@@ -29,9 +29,9 @@ scrape-job-manager.
 | `fenixupull/` | `fenix_upull` | [x] | [x] | Full crawl per location via the `fnx_location` cookie; 4 h timeout. First prod run 2026-10-13: 5,351 |
 | `tearapart/` | `tear_a_part` | [x] | [x] | First prod run 2026-10-13: 1,624 |
 | `pull-n-save/` | `pull_n_save` | [x] | [x] | Honest UA, as above; yard ZIPs set in `_STORE_DEFS`; 3 h timeout. First prod run 2026-10-13: 11,402 |
-| `wegotused/` | `wegotused` | [ ] | [ ] | Parked: Sucuri JS challenge, needs a browser |
-| `chesterfieldauto/` | `chesterfield_auto` | [ ] | [ ] | Parked: site search now requires a model; scraper needs a rework |
-| `pyp/` | `pyp` | [ ] | [ ] | Parked: Cloudflare 403 on the inventory endpoint, needs a browser |
+| `wegotused/` | `wegotused` | [x] | [x] | Sucuri JS challenge passed once per run in headless Chromium (Playwright image), then requests with its cookie + User-Agent. Incremental: drop check off. First prod run 2026-10-15: 4,092 |
+| `chesterfieldauto/` | `chesterfield_auto` | [x] | [ ] | Search needs make + model since 2026-10 (~2,100 searches); model lists and empty results reused for a week. Dev 2026-10-15: 2,214. In prod; first run in progress 2026-10-15 |
+| `pyp/` | `pyp` | [ ] | [ ] | Parked: Cloudflare serves headless Chromium one page, then challenges every request after it (inventory endpoint and `?page=N` alike). No route without disguising the browser; not pursued |
 | `usedautopartsfl/` | `used_auto_parts_fl` | [x] | [x] | First prod run 2026-10-13: 457 |
 
 Recon only, no scraper (see `SCRAPERS.md` § Sites Excluded): `baughmansupullit`, `coloradoautoandparts`,
