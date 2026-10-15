@@ -1,6 +1,6 @@
 # Junkyard admin rewrite — design
 
-Status: **proposed** (2026-10-15). Nothing here is built yet. The "Today" section and the numbers are
+Status: **agreed** (2026-10-15, decisions in §4). Nothing here is built yet. The "Today" section and the numbers are
 verified against the code on `dev` (fd3f7af) and read-only queries against prod on 2026-10-15; the
 rest is planned.
 
@@ -96,8 +96,10 @@ loose name key only; no prefix/regex, no priority, no scope in the UI.
   whose target disappears is flagged in the list.
 - Applied in `match_decoded` before the model filter: a matching mapping adds its target to the model
   keys (and swaps the make for cross-make cases like Geo → Chevrolet).
-- The existing yard-string rule engine stays only for vehicles without a usable decode
-  (~650, 3.6%), with the same pick-from-list UI. It can be cut entirely if that's not worth keeping.
+- The existing yard-string rule engine stays for vehicles without a usable decode (~650, 3.6%),
+  rebuilt with the same pick-from-list UI: the raw side is the exact yard string from the
+  discrepancy group, the target picked from the catalogue. Scope is global or one yard (picked, not
+  typed); prefix/regex and priority go.
 
 ### 2.3 The fix workflow
 
@@ -105,8 +107,9 @@ Discrepancies page, grouped by **(reason, NHTSA make, model, series)** with year
 and yards:
 
 - **Fixable groups first** (`model_not_in_catalogue`, `make_not_in_catalogue`). Catalogue-gap
-  groups sit in a separate tab with the catalogue's year coverage shown, since no admin action
-  helps them.
+  groups sit in their own tab with the catalogue's year coverage shown. No admin action resolves
+  them, but they show yard trends (which yards stock which makes and years) and suggest per-yard
+  rules, so each gap group breaks down by yard and the tab can be filtered by yard.
 - Each fixable group shows the **closest catalogue models for that make in that year range**
   (similarity-ranked) as one-click choices, plus a search box limited to that make's catalogue
   models. A "different make" toggle opens the make list for cross-make cases.
@@ -147,7 +150,8 @@ vehicles. Edit is delete + create, so a change always goes through the preview.
 
 - Same stack as the scrape-job-manager UI: FastAPI JSON API + React SPA in one image, served behind
   Traefik.
-- Sign-in through authentik in the app, with access limited to an authentik group (it writes).
+- Sign-in through authentik in the app, with access limited to a new authentik group,
+  `gyopart-admin` (it writes).
   Public host only once that's in.
 - The web process never does bulk work: actions write rows (mappings, requeues, annotations) and the
   worker does the rest.
@@ -168,9 +172,11 @@ vehicles. Edit is delete + create, so a change always goes through the preview.
 4. **authentik + public host.**
 5. Remove the old templates, rule engine (if dropped), LLM suggester and `create_all`.
 
-## 4. Open questions
+## 4. Decisions (user, 2026-10-15)
 
-- Keep yard-string rules for the ~650 vehicles without a usable decode, or drop them?
-- Are cross-make mappings wanted (Geo Prizm → Chevrolet Prizm, Geo Metro → Chevrolet Metro)?
-- Should the catalogue-gap tab be visible at all, or reduced to a summary line per make?
-- Which authentik group gets access (new `gyopart-admins`, or reuse `sjm-admins`)?
+- **Yard-string rules stay** for vehicles without a usable decode (cheap to keep), rebuilt with the
+  pick-from-list UI (§2.2).
+- **Cross-make mappings are allowed** (Geo Prizm → Chevrolet Prizm, Geo Metro → Chevrolet Metro).
+- **Catalogue-gap groups stay visible**, broken down by yard: they show yard trends and suggest
+  per-yard rules (§2.3).
+- **Access: a new authentik group, `gyopart-admin`** (§2.6).
