@@ -441,6 +441,7 @@ def test_resolve_vehicle_unresolved():
     from pipeline.resolution_pipeline import resolve_vehicle
     vehicle = _make_vehicle(vin=None)
     session = MagicMock()
+    session.execute.return_value.scalar_one_or_none.return_value = None  # no discrepancy row yet
     pi_engine = MagicMock()
 
     with patch("pipeline.resolution_pipeline.decode_vin", return_value=None), \
@@ -450,8 +451,62 @@ def test_resolve_vehicle_unresolved():
         result = resolve_vehicle(vehicle, session, pi_engine, rules=[], dry_run=False)
 
     assert result == "discrepancy"
-    session.merge.assert_called_once()
+    added = session.add.call_args.args[0]
+    assert (added.status, added.reason, added.nhtsa_make) == ("unresolved", "no_vin", None)
     session.commit.assert_called()
+
+
+def _unmatched(session, existing=None):
+    """resolve_vehicle with a decode no catalogue car fits; returns the discrepancy it wrote."""
+    from pipeline.car_matcher import CarMatch
+    from pipeline.resolution_pipeline import resolve_vehicle
+    session.execute.return_value.scalar_one_or_none.return_value = existing
+    raw = dict(HONDA_RAW, Series="EX-L")
+    with patch("pipeline.resolution_pipeline.match_decoded",
+               return_value=CarMatch(reason="model_not_in_catalogue")), \
+         patch("pipeline.resolution_pipeline.apply_rules", return_value=({"make": "", "model": "", "trim": ""}, [])), \
+         patch("pipeline.resolution_pipeline.match_car", return_value=None):
+        assert resolve_vehicle(_make_vehicle(vin="1HGCM82633A004352"), session, MagicMock(), rules=[],
+                               decoded={"raw": raw}, commit=False) == "discrepancy"
+    return existing or session.add.call_args.args[0]
+
+
+def test_discrepancy_records_reason_and_decode():
+    d = _unmatched(MagicMock())
+    assert d.reason == "model_not_in_catalogue"
+    assert (d.nhtsa_year, d.nhtsa_make, d.nhtsa_model, d.nhtsa_series) == (
+        HONDA_RAW["ModelYear"], HONDA_RAW["Make"], HONDA_RAW["Model"], "EX-L")
+
+
+def test_discrepancy_refresh_keeps_ignored_status():
+    from types import SimpleNamespace
+    existing = SimpleNamespace(status="ignored", reason=None)
+    session = MagicMock()
+    d = _unmatched(session, existing)
+    assert (d.status, d.reason) == ("ignored", "model_not_in_catalogue")
+    session.add.assert_not_called()
+
+
+def test_undecodable_vin_is_decode_failed():
+    from pipeline.resolution_pipeline import resolve_vehicle
+    session = MagicMock()
+    session.execute.return_value.scalar_one_or_none.return_value = None
+    with patch("pipeline.resolution_pipeline.decode_vin", return_value=None), \
+         patch("pipeline.resolution_pipeline.apply_rules", return_value=({"make": "", "model": "", "trim": ""}, [])), \
+         patch("pipeline.resolution_pipeline.match_car", return_value=None):
+        resolve_vehicle(_make_vehicle(vin="1HGCM82633A004352"), session, MagicMock(), rules=[])
+    assert session.add.call_args.args[0].reason == "decode_failed"
+
+
+def test_a_match_deletes_the_vehicles_discrepancy():
+    from pipeline.car_matcher import CarMatch
+    from pipeline.resolution_pipeline import resolve_vehicle
+    session = MagicMock()
+    with patch("pipeline.resolution_pipeline.match_decoded", return_value=CarMatch(candidates=[42])):
+        resolve_vehicle(_make_vehicle(vin="1HGCM82633A004352"), session, MagicMock(), rules=[],
+                        decoded={"raw": HONDA_RAW}, commit=False)
+    stmt = session.execute.call_args.args[0]
+    assert stmt.is_delete and stmt.table.name == "mapping_discrepancies"
 
 
 def test_resolve_vehicle_dry_run_does_not_commit():
@@ -511,7 +566,7 @@ def test_reprocess_resets_car_id_before_resolving():
     # car_id_resolved must be reset to False before calling resolve_vehicle
     assert vehicle.car_id_resolved is False
     assert vehicle.car_id is None
-    mock_resolve.assert_called_once_with(vehicle, session, pi_engine, [], False)
+    mock_resolve.assert_called_once_with(vehicle, session, pi_engine, [], False, mappings=())
     session.commit.assert_not_called()
 
 

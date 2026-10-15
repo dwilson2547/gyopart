@@ -30,7 +30,7 @@ from sqlalchemy.orm import Session
 
 from junkyard_common.db import get_engine
 from junkyard_common.models import MappingRule, Vehicle
-from pipeline.resolution_pipeline import geocode_locations, resolve_vehicle
+from pipeline.resolution_pipeline import geocode_locations, load_mappings, resolve_vehicle
 from pipeline.vin_decoder import fetch_into_cache
 
 logger = logging.getLogger("vin_resolver")
@@ -68,13 +68,14 @@ def process_batch(ji_engine, pi_engine) -> dict[str, int]:
             select(MappingRule).where(MappingRule.is_active == True)  # noqa: E712
             .order_by(MappingRule.scope, MappingRule.priority)
         ).scalars().all()
+        mappings = load_mappings(session)
         decoded = fetch_into_cache([v.vin for v in vehicles if v.vin], session)
         for vehicle in vehicles:
             vin = (vehicle.vin or "").strip().upper()
             try:
                 with session.begin_nested():
                     result = resolve_vehicle(vehicle, session, pi_engine, rules,
-                                             decoded=decoded.get(vin), commit=False)
+                                             decoded=decoded.get(vin), commit=False, mappings=mappings)
             except Exception:
                 logger.exception("vehicle %s (%s): resolve failed; marking attempted", vehicle.id, vin or "no vin")
                 vehicle.resolve_attempted_at = time_now()

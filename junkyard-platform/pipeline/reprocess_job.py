@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from junkyard_common.db import get_engine, get_session
 from junkyard_common.models import MappingDiscrepancy, MappingRule, Vehicle
-from pipeline.resolution_pipeline import resolve_vehicle
+from pipeline.resolution_pipeline import load_mappings, resolve_vehicle
 
 REPROCESS_STATUSES = ("unresolved", "rule_applied", "no_match_in_dataset")
 
@@ -36,13 +36,14 @@ def reprocess_vehicle(
     pi_engine,
     rules: list[MappingRule],
     dry_run: bool,
+    mappings=(),
 ) -> str:
     """Reset car_id fields and re-run resolution pipeline."""
     vehicle.car_id = None
     vehicle.car_id_resolved = False
     vehicle.car_id_method = None
     vehicle.car_id_confidence = None
-    return resolve_vehicle(vehicle, session, pi_engine, rules, dry_run)
+    return resolve_vehicle(vehicle, session, pi_engine, rules, dry_run, mappings=mappings)
 
 
 def run_reprocess(dry_run: bool = False) -> None:
@@ -56,6 +57,7 @@ def run_reprocess(dry_run: bool = False) -> None:
             .where(MappingRule.is_active == True)  # noqa: E712
             .order_by(MappingRule.scope, MappingRule.priority)
         ).scalars().all()
+        mappings = load_mappings(session)
 
     print(f"Reprocessing {len(vehicle_ids)} vehicles...")
     counts: dict[str, int] = {}
@@ -65,7 +67,7 @@ def run_reprocess(dry_run: bool = False) -> None:
             vehicle = session.get(Vehicle, vid)
             if vehicle is None:
                 continue
-            result = reprocess_vehicle(vehicle, session, pi_engine, rules, dry_run)
+            result = reprocess_vehicle(vehicle, session, pi_engine, rules, dry_run, mappings)
             counts[result] = counts.get(result, 0) + 1
 
         processed = sum(counts.values())
