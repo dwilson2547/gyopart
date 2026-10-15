@@ -184,7 +184,13 @@ vehicles. Edit is delete + create, so a change always goes through the preview.
    Finding for phase 1: NHTSA series like "1500 (1/2 Ton)" never form the catalogue's "Suburban 1500" /
    "Silverado 1500", so big Chevrolet/GMC groups read as gaps; stripping the bracketed part in
    `decoded_model_keys` would likely fix them without mappings (proposed, not done).
-3. **Vehicle page** (§2.4), including ScrapeJob labels and run-now.
+3. **Vehicle page** (§2.4) — built 2026-10-15, in dev. Search (VIN / stock / id), match state with
+   candidates as catalogue cars, re-match, manual match (year → make → model → car), and yard re-scrape
+   via the ScrapeJob's run-now annotation (admin-api ServiceAccount: get/list/patch scrapejobs in its own
+   namespace; job found by label `gyopart.danwils.com/source`, else source with _ → -). Verified with a
+   real parts-galore run in dev. Admin image runs Python 3.12 (microk8s CA vs 3.13's strict X.509).
+   Series fix from phase 2's finding landed with it: ~810 more dev vehicles matched (Silverado 1500 all
+   729, Avalanche 182, Suburban 1500 408/486 — the rest are 1997/1999, catalogued as C1500/K1500).
 4. **authentik + public host.**
 5. Remove the old templates, rule engine (if dropped), LLM suggester and `create_all`.
 
