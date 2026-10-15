@@ -59,3 +59,32 @@ export const REASON_LABEL: Record<string, string> = {
   no_vin: "no VIN",
   decode_failed: "VIN didn't decode",
 };
+
+// ── phase 3: vehicles ─────────────────────────────────────────────────────────────────────────
+
+export type VehicleHit = {
+  id: number; source: string; stock: string; location: string | null; year: number | null; make: string | null;
+  model: string | null; trim: string | null; vin: string | null; matched: boolean; active: boolean;
+};
+export type CatCar = { id: number; year?: string; make?: string; model?: string; trim?: string | null;
+  engine?: string | null; missing?: boolean };
+export type VehicleDetail = VehicleHit & {
+  yard: Record<string, string | number>;
+  extras: Record<string, unknown>;
+  match: { resolved: boolean; method: string | null; confidence: number | null; carId: number | null;
+    attemptedAt: string | null; candidates: CatCar[]; candidateCount: number };
+  discrepancy: { reason: string | null; status: string; nhtsaYear: string | null; nhtsaMake: string | null;
+    nhtsaModel: string | null; nhtsaSeries: string | null } | null;
+  decode: { error: string | null; fetchedAt: string; raw: Record<string, string | null> } | null;
+};
+export type ScrapeJobInfo = {
+  available: boolean; reason?: string; source: string;
+  job?: { name: string; namespace: string; phase: string; suspended: boolean; running: boolean;
+    lastRun: { result: string; reason: string | null; items: number | null; finishedAt: string | null; trigger: string } | null;
+    lastSuccessAt: string | null; nextRunAt: string | null; runNowRequested: boolean };
+};
+
+export const METHOD_LABEL: Record<string, string> = {
+  vin_exact: "VIN decode → exactly one car", vin_candidates: "VIN decode → several possible cars",
+  ymmt_match: "yard make/model (fuzzy)", rule_applied: "yard rule + make/model", manual: "picked by hand",
+};

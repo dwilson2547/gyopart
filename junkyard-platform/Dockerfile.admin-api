@@ -6,7 +6,9 @@ RUN npm ci --no-audit --no-fund
 COPY admin_ui/ ./
 RUN npm run build
 
-FROM python:3.13-slim
+# 3.12, not 3.13: the admin calls the cluster API (ScrapeJob run-now), and Python 3.13's strict X.509 check
+# rejects the microk8s CA (web-scrapers/scrape-job-manager/docs/issues/2026_10_10_microk8s_ca_rejected_by_python_313.md).
+FROM python:3.12-slim
 WORKDIR /app
 # junkyard_common from this tree (not PyPI), so the image always has the schema the migrations describe.
 COPY pyproject.toml ./

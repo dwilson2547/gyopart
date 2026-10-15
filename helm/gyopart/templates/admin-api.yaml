@@ -1,3 +1,41 @@
+# The admin can request a yard re-scrape: Run now on the yard's ScrapeJob (scrape-job-manager's run-now
+# annotation). Read + annotate ScrapeJobs in this namespace only.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: admin-api
+  namespace: {{ include "gyopart.namespace" . }}
+  labels:
+    {{- include "gyopart.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: admin-api
+  namespace: {{ include "gyopart.namespace" . }}
+  labels:
+    {{- include "gyopart.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [scrape.danwils.com]
+    resources: [scrapejobs]
+    verbs: [get, list, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: admin-api
+  namespace: {{ include "gyopart.namespace" . }}
+  labels:
+    {{- include "gyopart.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: admin-api
+subjects:
+  - kind: ServiceAccount
+    name: admin-api
+    namespace: {{ include "gyopart.namespace" . }}
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -17,6 +55,7 @@ spec:
         app: admin-api
         {{- include "gyopart.labels" . | nindent 8 }}
     spec:
+      serviceAccountName: admin-api
       containers:
         - name: admin-api
           image: {{ .Values.images.adminApi }}
@@ -24,6 +63,10 @@ spec:
           ports:
             - containerPort: 8300
           env:
+            - name: SCRAPEJOB_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
             - name: JUNKYARD_USER
               valueFrom:
                 secretKeyRef:

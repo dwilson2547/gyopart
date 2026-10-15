@@ -3,6 +3,7 @@ import { post } from "./api.ts";
 import type { Count, GroupDetail, GroupKey, Tab } from "./types.ts";
 import { REASON_LABEL } from "./types.ts";
 import { MapPanel } from "./MapPanel.tsx";
+import { Link } from "./router.tsx";
 import { RulePanel } from "./RulePanel.tsx";
 import { Empty, ErrorBanner, Loading, fmtInt, keyLabel, useLoad, years } from "./util.tsx";
 
@@ -148,7 +149,7 @@ function Samples({ d }: { d: GroupDetail }) {
         <tbody>
           {d.samples.map((s) => (
             <tr key={s.id}>
-              <td>{s.location}<div className="muted">{s.source}</div></td>
+              <td><Link to={`/vehicles/${s.id}`}>{s.location}</Link><div className="muted">{s.source}</div></td>
               <td>{s.year ?? "—"}</td>
               <td>{[s.make, s.model, s.trim].filter(Boolean).join(" ")}</td>
               <td className="mono">{s.vin ?? <span className="muted">none</span>}</td>

@@ -124,7 +124,7 @@ scraping:
       image: dwilson2547/gyopart-scraper-picknpull-sa@sha256:910447fb4601118daf2b58002fc116524fceeabac3759dadafd2f5401f6b30c3
       timeout: 30m
       jobs:
-        picknpull-sa: {pool: junkyard-inventory, suspend: true}
+        picknpull-sa: {source: picknpullsa, pool: junkyard-inventory, suspend: true}
     budget-upullit:
       image: dwilson2547/gyopart-scraper-budget-upullit@sha256:b10471884400d375ee6fbf550809b3e282b7e1f22965b006e35c3e783fed1713
       timeout: 1h

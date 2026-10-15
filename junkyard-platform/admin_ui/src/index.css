@@ -120,3 +120,8 @@ details summary { cursor: pointer; color: var(--muted); }
 .bar.cov-none { background: var(--danger); }
 .legend { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 6px; }
 .legend i.bar { display: inline-block; width: 14px; height: 8px; vertical-align: middle; margin-right: 4px; }
+.vsearch { position: relative; display: flex; align-items: center; gap: 6px; }
+.vsearch input { width: 230px; }
+.vsearch .combo-list { top: 100%; left: auto; right: 0; width: 420px; }
+.tag.ok-tag { color: var(--ok); border-color: var(--ok); }
+.tag.err-tag { color: var(--danger); border-color: var(--danger); }

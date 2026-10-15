@@ -71,3 +71,36 @@ def test_database_down_is_a_503():
          patch("admin_api.api.discrepancies.summary", side_effect=down):
         r = TestClient(m.app).get("/api/discrepancies/summary")
     assert r.status_code == 503
+
+
+# ── phase 3: vehicles ──────────────────────────────────────────────────────────────────────────────
+
+def test_scrapejob_found_by_label_then_by_name(monkeypatch):
+    from admin_api.api import scrapejobs
+    api = MagicMock()
+    api.list_namespaced_custom_object.return_value = {"items": []}
+    api.get_namespaced_custom_object.return_value = {"metadata": {"name": "pull-a-part", "namespace": "ns"}}
+    monkeypatch.setattr(scrapejobs, "_api", lambda: api)
+    monkeypatch.setenv("SCRAPEJOB_NAMESPACE", "ns")
+    assert scrapejobs.find("pull_a_part")["metadata"]["name"] == "pull-a-part"
+    assert api.get_namespaced_custom_object.call_args.args[-1] == "pull-a-part"   # source _ -> -
+    api.list_namespaced_custom_object.return_value = {"items": [{"metadata": {"name": "picknpull-sa"}}]}
+    assert scrapejobs.find("picknpullsa")["metadata"]["name"] == "picknpull-sa"
+    assert "gyopart.danwils.com/source=picknpullsa" in str(api.list_namespaced_custom_object.call_args)
+
+
+def test_scrapejob_summary_reads_operator_status():
+    from admin_api.api.scrapejobs import ANNOTATION_RUN_NOW, summarize
+    cr = {"metadata": {"name": "j", "namespace": "ns", "annotations": {ANNOTATION_RUN_NOW: "1"}},
+          "spec": {"suspend": True},
+          "status": {"phase": "Healthy", "currentRun": {"k8sJob": "j-123"}, "nextRunAt": "2026-10-16T09:00:00Z",
+                     "lastRun": {"result": "Succeeded", "items": 812, "finishedAt": "2026-10-15T09:00:00Z"}}}
+    s = summarize(cr)
+    assert (s["suspended"], s["running"], s["runNowRequested"], s["lastRun"]["items"]) == (True, True, True, 812)
+
+
+def test_manual_match_refuses_a_car_not_in_the_catalogue():
+    import admin_api.main as m
+    with patch.object(m, "_engine", MagicMock()), patch.object(m, "_pi_engine", _catalogue(CATALOGUE)):
+        r = TestClient(m.app).post("/api/vehicles/1/manual", json={"car_id": 999})
+    assert r.status_code == 422 and r.json()["detail"]["field"] == "car_id"
