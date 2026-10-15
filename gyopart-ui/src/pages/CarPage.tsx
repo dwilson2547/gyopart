@@ -126,9 +126,12 @@ function CarCatalogue() {
             <Empty icon={ImageOff} title="No diagrams for this vehicle yet."
               hint="The catalogue is still being scraped for some makes and years — check back later." />
           ) : !subId ? (
-            <Empty icon={FolderTree} title="Pick a category"
-              hint={<>Browse the categories{' '}<span className="lg:hidden">(the Categories button)</span>
-                <span className="hidden lg:inline">on the left</span>, or filter by part name or number.</>} />
+            <>
+              <Blurb />
+              <Empty icon={FolderTree} title="Pick a category"
+                hint={<>Browse the categories{' '}<span className="lg:hidden">(the Categories button)</span>
+                  <span className="hidden lg:inline">on the left</span>, or filter by part name or number.</>} />
+            </>
           ) : diagramId ? (
             <DiagramView carId={carId} subId={subId} diagramId={diagramId} partId={partId}
               onDiagram={id => set({ diagram: id, part: null })} onPart={id => navigateToPart(id, diagramId)} />
@@ -138,6 +141,17 @@ function CarCatalogue() {
           )}
         </div>
       </section>
+    </div>
+  )
+}
+
+/** What the name stands for, with the letters that spell it picked out. */
+function Blurb() {
+  const a = (t: string) => <span className="text-accent">{t}</span>
+  return (
+    <div className="mx-auto mt-6 max-w-md text-center">
+      <p className="text-2xl font-semibold tracking-tight">{a('G')}et {a('Y')}our {a('O')}wn {a('Part')}</p>
+      <p className="mt-1 text-sm text-muted">Part compatibility search and recycled auto parts inventory lookup</p>
     </div>
   )
 }
