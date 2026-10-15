@@ -5,10 +5,10 @@ namespace:
 domain: gyopart.local
 
 images:
-  # Released versions (git tags v3.0.2; gyopart-ui v3.0.3): built from a clean clone with GYOPART_TAG=<v> docker compose build/push.
+  # Released versions (git tags v3.0.2; gyopart-ui v3.0.7): built from a clean clone with GYOPART_TAG=<v> docker compose build/push.
   # A new release goes into values-dev.yaml first and moves here once proven in dev.
   gyopartApi: dwilson2547/gyopart-api:3.0.2
-  gyopartUi: dwilson2547/gyopart-ui:3.0.3
+  gyopartUi: dwilson2547/gyopart-ui:3.0.7
   inventoryApi: dwilson2547/inventory-api:3.0.2
   adminApi: dwilson2547/admin-api:latest
   vinResolver: dwilson2547/vin-resolver:latest
