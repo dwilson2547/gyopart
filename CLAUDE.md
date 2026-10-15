@@ -8,7 +8,9 @@ Monorepo at `workspace/gyopart/`. Services:
 - `gyopart-api/` — FastAPI BFF, port 8200. Reads parts_interchange DB, proxies inventory_api.
 - `gyopart-ui/` — React/Vite/Tailwind, port 5173/80. nginx proxy: `/v1/` → gyopart-api:8200.
 - `junkyard-platform/` — Contains `inventory_api/` (port 8100), `admin_api/` (port 8300), `junkyard_common/`, `pipeline/`.
-- `junkyard-inventory-scrapers/` — Scrapers. Alembic migrations root is here.
+- `junkyard-inventory-scrapers/` — Scrapers.
+- Junkyard schema migrations: `junkyard-platform/db/` (Alembic). Nothing applies them automatically: run
+  `alembic upgrade head` from `/app/db` in the vin-resolver pod (dev first), before deploying code that needs them.
 - `parts-interchange/` — Parts catalog data, loader, docs. Schema authority: `dwilson-parts-interchange-common` on PyPI.
 - `helm/gyopart/` — Helm chart. `values.yaml` = shared defaults + prod (`gyopart.local`), `values-prod.yaml` = prod-only
   (the scraper fleet), `values-dev.yaml` = dev (`gyopart-dev.local`, namespace `gyopart-dev`). Helm merges
