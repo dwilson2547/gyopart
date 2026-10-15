@@ -94,8 +94,12 @@ loose name key only; no prefix/regex, no priority, no scope in the UI.
 - **Targets are only ever chosen from catalogue lists**, and the API rejects a target that isn't in
   the catalogue. Catalogue names, not ids, so a catalogue reload can't orphan a mapping; a mapping
   whose target disappears is flagged in the list.
-- Applied in `match_decoded` before the model filter: a matching mapping adds its target to the model
-  keys (and swaps the make for cross-make cases like Geo → Chevrolet).
+- Applied in `match_decoded` before the model filter: each matching mapping adds its catalogue
+  (make, model) to the names the decode may mean, so cross-make works (Geo → Chevrolet).
+- **One decode can need several targets.** Mercedes "C-Class" is C 220 / C 230 / C 240 / C 280 /
+  C 300 … in the catalogue, split by year and engine (dev catalogue, 2026-10-15). Several mappings
+  for one decode each add a name; the existing year filter and engine narrowing pick among them.
+  The UI offers multi-select targets for this.
 - The existing yard-string rule engine stays for vehicles without a usable decode (~650, 3.6%),
   rebuilt with the same pick-from-list UI: the raw side is the exact yard string from the
   discrepancy group, the target picked from the catalogue. Scope is global or one yard (picked, not
@@ -111,8 +115,9 @@ and yards:
   them, but they show yard trends (which yards stock which makes and years) and suggest per-yard
   rules, so each gap group breaks down by yard and the tab can be filtered by yard.
 - Each fixable group shows the **closest catalogue models for that make in that year range**
-  (similarity-ranked) as one-click choices, plus a search box limited to that make's catalogue
-  models. A "different make" toggle opens the make list for cross-make cases.
+  (similarity-ranked) as one-click choices (several can be chosen, see §2.2), plus a search box
+  limited to that make's catalogue models. A "different make" toggle opens the make list for
+  cross-make cases.
 - Choosing a target shows a **preview**: "maps N vehicles; M of them get a match", computed by
   running the matcher with the proposed mapping against the group's vehicles (decodes are cached,
   so no NHTSA calls).
@@ -163,10 +168,16 @@ vehicles. Edit is delete + create, so a change always goes through the preview.
 
 ## 3. Phases
 
-1. **Worker**: reason + decode columns, discrepancy cleanup on match, `decode_mappings` applied in
-   `match_decoded`. Backfill reasons by requeueing current discrepancies. No UI change yet; measure
-   the buckets again. The schema change is a `dwilson-junkyard-common` release (PyPI, the schema
-   authority) plus an Alembic migration.
+1. **Worker** — built 2026-10-15 (gyopart 23296ba), running in dev, not yet in prod. Reason +
+   decode columns, discrepancy cleanup on match, `decode_mappings` applied in `match_decoded`,
+   migration `0005` (in `junkyard-platform/db/`; nothing applies migrations automatically). The
+   worker and admin images install `junkyard_common` from source, so no PyPI release is needed for
+   them; the scrapers pin 0.1.0 and don't touch these tables.
+   Dev after the backfill (2026-10-15): year_not_in_catalogue 13,561 · model_year_gap 3,116 ·
+   make_not_in_catalogue 3,037 · model_not_in_catalogue 2,909 (136 distinct make/model pairs) ·
+   no_vin 510 · decode_failed 232. A test mapping (Chevrolet Silverado HD / series 2500 → Silverado
+   2500 HD) matched 66 of 126 vehicles; the other 60 are 2024–2026, beyond the catalogue's
+   2019–2023, and were re-classified accordingly.
 2. **API + SPA discrepancy workflow** (§2.3) and mappings page (§2.5), LAN-only.
 3. **Vehicle page** (§2.4), including ScrapeJob labels and run-now.
 4. **authentik + public host.**
