@@ -24,6 +24,17 @@ ingress:
   enabled: true
   className: nginx
 
+# Public site (templates/public-ingress.yaml): the UI on a *.danwils.com host via
+# Traefik pubsecure. Empty host = LAN only. Set per environment (values-prod.yaml).
+publicIngress:
+  host: ""
+  tlsSecretName: ""
+  # Stricter per-visitor limit on /v1/vin/ (each decode is an NHTSA call).
+  vinRateLimit:
+    average: 12
+    period: 1m
+    burst: 10
+
 monitoring:
   otelCollector:
     httpEndpoint: "http://otel-collector.monitoring.svc.cluster.local:4318"
