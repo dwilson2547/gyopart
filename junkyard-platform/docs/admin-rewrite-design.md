@@ -178,7 +178,12 @@ vehicles. Edit is delete + create, so a change always goes through the preview.
    no_vin 510 · decode_failed 232. A test mapping (Chevrolet Silverado HD / series 2500 → Silverado
    2500 HD) matched 66 of 126 vehicles; the other 60 are 2024–2026, beyond the catalogue's
    2019–2023, and were re-classified accordingly.
-2. **API + SPA discrepancy workflow** (§2.3) and mappings page (§2.5), LAN-only.
+2. **API + SPA discrepancy workflow** (§2.3) and mappings page (§2.5), LAN-only — built 2026-10-15, running
+   in dev at `http://admin.gyopart-dev.local` (old pages still at `/admin/ui`). Six workflows verified against
+   the dev data (`admin_ui/.ui_dev_state.md`); dev has the C-Class mappings (458 cars matched).
+   Finding for phase 1: NHTSA series like "1500 (1/2 Ton)" never form the catalogue's "Suburban 1500" /
+   "Silverado 1500", so big Chevrolet/GMC groups read as gaps; stripping the bracketed part in
+   `decoded_model_keys` would likely fix them without mappings (proposed, not done).
 3. **Vehicle page** (§2.4), including ScrapeJob labels and run-now.
 4. **authentik + public host.**
 5. Remove the old templates, rule engine (if dropped), LLM suggester and `create_all`.
