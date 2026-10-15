@@ -6,10 +6,6 @@ domain: gyopart-dev.local
 
 imagePullPolicy: Always
 
-# Release under test in dev (moves to values.yaml once proven).
-images:
-  gyopartUi: dwilson2547/gyopart-ui:3.0.3
-
 postgres:
   host: postgres-dev.postgres.svc.cluster.local
   junkyardSecret: junkyard-credentials
