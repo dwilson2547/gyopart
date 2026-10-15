@@ -99,6 +99,10 @@ def test_name_keys_are_loose():
     assert name_key("F-150") == name_key("F150")
     assert decoded_model_keys({"Model": "Caravan/Grand Caravan"}) == {"caravangrandcaravan", "caravan", "grandcaravan"}
     assert name_key("Ram 1500") in decoded_model_keys({"Model": "Ram", "Series": "1500"})
+    assert name_key("Suburban 1500") in decoded_model_keys({"Model": "Suburban", "Series": "1500 (1/2 Ton)"})
+    assert name_key("Silverado 2500") in decoded_model_keys({"Model": "Silverado", "Series": "2500 (3/4 Ton)"})
+    # A series that is all bracket adds nothing new, and the plain model name is always kept.
+    assert decoded_model_keys({"Model": "Suburban", "Series": "(1/2 Ton)"}) == {"suburban", "suburban12ton"}
 
 
 def test_match_picks_the_model_among_the_makes_cars():

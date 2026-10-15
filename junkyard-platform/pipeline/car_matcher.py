@@ -128,14 +128,19 @@ def name_key(name: str | None) -> str:
     return _NON_ALNUM.sub("", (name or "").lower().replace("&", "and"))
 
 
+_BRACKETED = re.compile(r"\s*\([^)]*\)")
+
+
 def decoded_model_keys(raw: dict) -> set[str]:
     """Catalogue model names the decode may mean: NHTSA lists some as 'Caravan/Grand Caravan', and gives
-    Ram pickups as Model 'Ram' + Series '1500' where the catalogue says 'Ram 1500'."""
+    Ram pickups as Model 'Ram' + Series '1500' where the catalogue says 'Ram 1500'. GM trucks come as
+    Series '1500 (1/2 Ton)', so the series is also tried without its bracketed part ('Suburban 1500')."""
     model = (raw.get("Model") or "").strip()
     series = (raw.get("Series") or "").strip()
     names = {model, *model.split("/")}
     if series:
-        names |= {f"{n} {series}" for n in list(names)}
+        variants = {series, _BRACKETED.sub("", series).strip()} - {""}
+        names |= {f"{n} {v}" for n in list(names) for v in variants}
     return {name_key(n) for n in names if n.strip()}
 
 
