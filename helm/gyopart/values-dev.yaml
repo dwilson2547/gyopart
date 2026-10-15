@@ -161,8 +161,11 @@ scraping:
       jobs:
         pull-n-save: {pool: junkyard-inventory, suspend: true}
     wegotused:
-      image: dwilson2547/gyopart-scraper-wegotused@sha256:3ac58a74a7268d29564795915424fe61963dce79bf3eb6e2280e429322109d09
+      image: dwilson2547/gyopart-scraper-wegotused@sha256:b42c80033b00ae2cf4696f27dc0462a58c5a29f086d4eaf1b619fd367a28f100
       timeout: 1h
+      resources:  # headless Chromium, once per run, for the Sucuri challenge
+        requests: {cpu: 250m, memory: 512Mi}
+        limits: {memory: 1Gi}
       jobs:
         wegotused: {pool: junkyard-inventory, suspend: true}
     chesterfield-auto:
