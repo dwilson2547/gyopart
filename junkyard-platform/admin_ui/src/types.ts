@@ -32,6 +32,7 @@ export type GroupDetail = {
   catalogueMake: string | null;
   // decode groups
   makeYears?: MakeOption | null; suggestions?: ModelOption[]; mappings?: ExistingMapping[];
+  catalogueYears?: number[]; modelYears?: number[];
   // yard groups
   makeSuggestions?: { name: string; score: number }[]; modelSuggestions?: ModelOption[];
   modelSuggestionsMake?: string | null;

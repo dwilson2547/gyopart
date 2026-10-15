@@ -6,7 +6,7 @@ import re
 from difflib import SequenceMatcher
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import distinct, func, select
+from sqlalchemy import func, select
 from sqlalchemy.engine import Engine
 
 from pipeline.car_matcher import name_key
@@ -43,14 +43,16 @@ def models(pi: Engine, make: str) -> list[dict]:
     """Models of a make with the catalogue years each exists in."""
     with pi.connect() as conn:
         rows = conn.execute(
-            select(pi_model_table.c.name, func.array_agg(distinct(_YEAR)))
+            select(pi_model_table.c.name, _YEAR).distinct()
             .join(pi_make_table, pi_make_table.c.id == pi_model_table.c.make_id)
             .join(pi_car_table, pi_car_table.c.model_id == pi_model_table.c.id)
             .join(pi_year_table, pi_year_table.c.id == pi_car_table.c.year_id)
             .where(func.lower(pi_make_table.c.name) == make.strip().lower())
-            .group_by(pi_model_table.c.name).order_by(pi_model_table.c.name)
         ).all()
-    return [{"name": n, "years": sorted(y)} for n, y in rows]
+    years: dict[str, set[int]] = {}
+    for name, year in rows:
+        years.setdefault(name, set()).add(year)
+    return [{"name": n, "years": sorted(years[n])} for n in sorted(years)]
 
 
 def model_exists(pi: Engine, make: str, model: str) -> bool:

@@ -11,7 +11,7 @@ from sqlalchemy import and_, distinct, func, select, update
 from sqlalchemy.orm import Session
 
 from junkyard_common.models import DecodeMapping, Location, MappingDiscrepancy, Vehicle
-from pipeline.car_matcher import name_key
+from pipeline.car_matcher import decoded_model_keys, name_key
 
 from . import catalogue
 from .common import BUCKETS, IGNORED, YARD_REASONS, engines, open_discrepancies, sql_year
@@ -88,29 +88,16 @@ def groups(session: Session, tab: str, yard=None, make=None, search=None, page: 
     rows.sort(key=lambda g: (-g["vehicles"], str(g["key"])))
     pages = max(1, -(-len(rows) // PAGE))
     page = min(max(page, 1), pages)
-    return {"groups": rows[(page - 1) * PAGE: page * PAGE], "total": len(rows), "page": page, "pages": pages}
+    return {"groups": rows[(page - 1) * PAGE: page * PAGE], "total": len(rows), "page": page, "pages": pages,
+            "vehicles": sum(g["vehicles"] for g in rows)}
 
 
 def summary(session: Session, yard=None, search=None) -> dict:
-    """Vehicles and groups per tab."""
+    """Groups and vehicles per tab, under the same filters as the lists."""
     out = {}
     for tab in [*BUCKETS, IGNORED]:
         g = groups(session, tab, yard=yard, search=search)
-        out[tab] = {"groups": g["total"], "vehicles": None}
-    q = (select(D.reason, D.status == IGNORED, func.count()).join(V, V.id == D.vehicle_id)
-         .where(V.is_active.is_(True), V.car_id_resolved.is_(False)).group_by(D.reason, D.status == IGNORED))
-    if yard:
-        q = q.where(V.source == yard)
-    counts = {tab: 0 for tab in out}
-    for reason, ignored, n in session.execute(q):
-        if ignored:
-            counts[IGNORED] += n
-        else:
-            for tab, reasons in BUCKETS.items():
-                if reason in reasons:
-                    counts[tab] += n
-    for tab in out:
-        out[tab]["vehicles"] = counts[tab]
+        out[tab] = {"groups": g["total"], "vehicles": g["vehicles"]}
     return out
 
 
@@ -152,6 +139,15 @@ def detail(session: Session, pi, key: GroupKey, status: str = "open") -> dict:
         out["catalogueMake"] = cat_make
         out["makeYears"] = next((m for m in catalogue.makes(pi) if m["name"] == cat_make), None)
         out["suggestions"] = catalogue.suggest(pi, cat_make, names, lo, hi) if cat_make else []
+        # Which of the yards' years the catalogue covers: for the make, and for this model (its own names plus
+        # any mapped catalogue models), so a gap reads as "make yes, model no" or "make no" per year.
+        make_models = catalogue.models(pi, cat_make) if cat_make else []
+        mapped = {name_key(m.catalogue_model) for m in session.execute(select(DecodeMapping).where(
+            DecodeMapping.make_key == name_key(key.make), DecodeMapping.model_key == name_key(key.model),
+            func.lower(DecodeMapping.catalogue_make) == (cat_make or "").lower())).scalars()}
+        model_keys = decoded_model_keys({"Model": key.model or "", "Series": key.series or ""}) | mapped
+        out["catalogueYears"] = sorted({y for m in make_models for y in m["years"]})
+        out["modelYears"] = sorted({y for m in make_models if name_key(m["name"]) in model_keys for y in m["years"]})
         out["mappings"] = [
             {"id": m.id, "series": m.nhtsa_series, "yearFrom": m.year_from, "yearTo": m.year_to,
              "make": m.catalogue_make, "model": m.catalogue_model}

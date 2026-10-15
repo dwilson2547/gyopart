@@ -97,7 +97,7 @@ export function MapPanel({ d, onResolved }: { d: GroupDetail; onResolved: Resolv
       {otherMake && (
         <div className="field">
           <label>Catalogue make</label>
-          <Combobox label="Catalogue make" placeholder="Pick a make…" value={make} autoFocus={noModels}
+          <Combobox label="Catalogue make" placeholder="Pick a make…" value={make}
                     options={(makes.data ?? []).map((m) => ({ value: m.name, label: m.name, hint: `${m.yearMin}–${m.yearMax}` }))}
                     onChange={(v) => { setMake(v); setPreview(null); }} />
           {noModels && <span className="small muted">The catalogue has no {k.make} cars, so pick the make it lists them under.</span>}

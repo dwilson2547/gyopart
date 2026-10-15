@@ -1,4 +1,5 @@
 from sqlalchemy import create_engine, insert
+from sqlalchemy.pool import StaticPool
 
 from pipeline.car_matcher import (
     DECODE_FAILED, MAKE_NOT_IN_CATALOGUE, MODEL_NOT_IN_CATALOGUE, MODEL_YEAR_GAP, YEAR_NOT_IN_CATALOGUE,
@@ -17,7 +18,8 @@ SEBRING = {"VIN": "1C3CC4FBXAN197479", "Make": "CHRYSLER", "Model": "Sebring", "
 
 def _catalogue(cars):
     """A real (SQLite) catalogue from (car id, year, make, model, trim, engine) tuples."""
-    engine = create_engine("sqlite://")
+    # One shared connection: an in-memory SQLite DB is per connection, and API tests use other threads.
+    engine = create_engine("sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
     pi_metadata.create_all(engine)
     ids: dict[tuple, int] = {}
 

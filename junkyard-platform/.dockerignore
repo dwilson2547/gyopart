@@ -1,0 +1,9 @@
+# Build context for the junkyard-platform images; the Dockerfiles copy named directories only.
+**/__pycache__
+**/*.pyc
+.venv
+dist
+*.egg-info
+admin_ui/node_modules
+admin_ui/dist
+admin_ui/.ui_dev_*.md

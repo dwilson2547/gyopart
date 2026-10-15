@@ -1,3 +1,11 @@
+# The admin SPA (admin_ui/), built here and served by the API from STATIC_DIR.
+FROM node:22-slim AS ui
+WORKDIR /ui
+COPY admin_ui/package.json admin_ui/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY admin_ui/ ./
+RUN npm run build
+
 FROM python:3.13-slim
 WORKDIR /app
 # junkyard_common from this tree (not PyPI), so the image always has the schema the migrations describe.
@@ -10,5 +18,7 @@ RUN pip install --no-cache-dir . \
  && pip install --no-cache-dir -r reqs.txt "sqlalchemy>=2.0,<2.1"
 COPY admin_api/ ./admin_api/
 COPY pipeline/ ./pipeline/
+COPY --from=ui /ui/dist/ ./static/
+ENV STATIC_DIR=/app/static
 EXPOSE 8300
 CMD ["uvicorn", "admin_api.main:app", "--host", "0.0.0.0", "--port", "8300"]

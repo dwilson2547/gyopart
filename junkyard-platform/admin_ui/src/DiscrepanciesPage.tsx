@@ -130,7 +130,7 @@ export function DiscrepanciesPage() {
         </section>
 
         <section className="panel detail-pane" aria-label="Group detail">
-          {key ? <GroupPanel key={JSON.stringify(key) + status} groupKey={key} status={status} tab={tab}
+          {key ? <GroupPanel key={JSON.stringify(key) + status} groupKey={key} status={status} tab={tab} yard={yard}
                              onResolved={onResolved} />
                : <Empty>Pick a group on the left. The biggest ones are at the top.</Empty>}
         </section>

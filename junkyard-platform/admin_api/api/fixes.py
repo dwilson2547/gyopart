@@ -158,9 +158,13 @@ def _mapping_decode_vehicles(session: Session, m: DecodeMapping):
 def list_mappings(eng=Depends(engines)):
     with Session(eng[0]) as s:
         out = []
+        counted: dict[tuple, list] = {}  # one vehicle count per distinct decode, however many targets it has
         for m in s.execute(select(DecodeMapping).order_by(DecodeMapping.nhtsa_make, DecodeMapping.nhtsa_model,
                                                            DecodeMapping.id)).scalars():
-            rows = s.execute(_mapping_decode_vehicles(s, m)).all()
+            decode = (m.make_key, m.model_key, m.series_key, m.year_from, m.year_to)
+            if decode not in counted:
+                counted[decode] = s.execute(_mapping_decode_vehicles(s, m)).all()
+            rows = counted[decode]
             out.append({"id": m.id, "nhtsaMake": m.nhtsa_make, "nhtsaModel": m.nhtsa_model,
                         "nhtsaSeries": m.nhtsa_series, "yearFrom": m.year_from, "yearTo": m.year_to,
                         "make": m.catalogue_make, "model": m.catalogue_model, "createdBy": m.created_by,
