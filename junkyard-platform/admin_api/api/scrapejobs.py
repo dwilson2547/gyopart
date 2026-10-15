@@ -59,7 +59,9 @@ def summarize(cr: dict) -> dict:
         "lastRun": {k: last.get(k) for k in ("result", "reason", "items", "finishedAt", "trigger")} if last else None,
         "lastSuccessAt": (st.get("lastSuccess") or {}).get("at"),
         "nextRunAt": st.get("nextRunAt"),
-        "runNowRequested": ANNOTATION_RUN_NOW in ((cr["metadata"].get("annotations")) or {}),
+        # The annotation stays after a run; it's pending only until the operator records its value as handled.
+        "runNowRequested": bool(asked := ((cr["metadata"].get("annotations")) or {}).get(ANNOTATION_RUN_NOW))
+                           and asked != (st.get("handled") or {}).get("runNow"),
     }
 
 

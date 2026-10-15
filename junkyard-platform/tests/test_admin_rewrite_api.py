@@ -97,6 +97,8 @@ def test_scrapejob_summary_reads_operator_status():
                      "lastRun": {"result": "Succeeded", "items": 812, "finishedAt": "2026-10-15T09:00:00Z"}}}
     s = summarize(cr)
     assert (s["suspended"], s["running"], s["runNowRequested"], s["lastRun"]["items"]) == (True, True, True, 812)
+    cr["status"]["handled"] = {"runNow": "1"}      # the operator picked that request up
+    assert summarize(cr)["runNowRequested"] is False
 
 
 def test_manual_match_refuses_a_car_not_in_the_catalogue():
