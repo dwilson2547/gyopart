@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ImageOff, Maximize2, ZoomIn, ZoomOut } from 'lucide-react'
 
 const MIN = 1
@@ -23,7 +23,21 @@ export function ZoomImage({ src, alt }: { src: string | null; alt: string }) {
     return [e.clientX - r.left - r.width / 2, e.clientY - r.top - r.height / 2] as const
   }
 
-  if (!src || failed === src) {
+  // Native listener: React's onWheel is passive, so it can't stop the page scrolling while zooming.
+  const showing = !!src && failed !== src
+  useEffect(() => {
+    const el = box.current
+    if (!el) return
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const [cx, cy] = fromCentre(e)
+      zoomAt(e.deltaY < 0 ? 1.2 : 1 / 1.2, cx, cy)
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [showing])
+
+  if (!showing) {
     return (
       <div className="flex aspect-[4/3] max-h-[min(65vh,38rem)] w-full flex-col items-center justify-center gap-1 rounded-lg border border-line bg-bg text-sm text-muted">
         <ImageOff className="size-7" />
@@ -40,7 +54,6 @@ export function ZoomImage({ src, alt }: { src: string | null; alt: string }) {
         className={`relative aspect-[4/3] max-h-[min(65vh,38rem)] w-full touch-none overflow-hidden rounded-lg border border-line bg-white ${
           view.scale > 1 ? 'cursor-grab active:cursor-grabbing' : 'cursor-zoom-in'
         }`}
-        onWheel={e => { const [cx, cy] = fromCentre(e); zoomAt(e.deltaY < 0 ? 1.2 : 1 / 1.2, cx, cy) }}
         onDoubleClick={e => { const [cx, cy] = fromCentre(e); zoomAt(view.scale >= MAX ? 0 : 2, cx, cy) }}
         onPointerDown={e => {
           if (view.scale === 1) return
