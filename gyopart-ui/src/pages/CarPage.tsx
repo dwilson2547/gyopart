@@ -147,7 +147,7 @@ function CarCatalogue() {
 
 /** What the name stands for, with the letters that spell it picked out. */
 function Blurb() {
-  const a = (t: string) => <span className="text-[#9db0cd]">{t}</span>
+  const a = (t: string) => <span className="text-brand">{t}</span>
   return (
     <div className="mx-auto mt-6 max-w-md text-center">
       <p className="text-2xl font-semibold tracking-tight">{a('G')}et {a('Y')}our {a('O')}wn {a('Part')}</p>
