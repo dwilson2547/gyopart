@@ -45,7 +45,10 @@ Backlog imported from the retired todo store, 2026-07-06.
 
 ## Low
 
-- [ ] **Catalogue discrepancies: 2010 Chevrolet Impala shows no parts** — the car has many diagrams but no parts render in the UI (seen 2026-10-12, prod). Likely one of a class of catalogue gaps (diagrams without diagram_parts, or car_parts missing); survey once the scraper fleet is in prod.
+- [ ] **Catalogue gaps: check the requeued cars landed (check 2026-10-16)** — the 2010 Impala had diagrams but no parts because the original 2023–24 scrape marked it `done` with an empty parts list (`has_parts: 0` in `gm/tree.json`), not a CSV/load fault. Seeding `scrape_target` from `car` then marked every car `done`, so nothing re-checked them. On 2026-10-15 these were set to `pending` in prod:
+  - 52 partial scrapes: car ids 21846–21895 (2010 Chevrolet Camaro → Malibu, 49 with zero parts plus the Camaro LS at 131) and 38080–38081 (2022 Subaru BRZ, ~1.2 parts/diagram vs ~7 normal).
+  - 2,629 cars with neither diagrams nor parts, all model years ≤2024, across every manufacturer but Fiat (1,068 are 2023–24, likely too new at scrape time; 844 are ≤2020).
+  Check: the 2010 Impala (car 21889) shows parts; count of `pending` targets left per manufacturer; how many came back `no_catalog` vs `done` with parts; `failed` targets and their `last_error`.
 
 - [ ] **Index `diagram_parts.part_id`** — the PK is (diagram_id, part_id), so "which diagrams is this part on" scans ~135M rows (~8 s). gyopart-api works around it by going through car_parts → car_diagrams (0.7–1.5 s without a car). Needs the index in `parts_interchange_common` (new PyPI version) and `CREATE INDEX CONCURRENTLY` on dev + prod.
 
