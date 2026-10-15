@@ -5,9 +5,11 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import APIRouter, FastAPI, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import create_engine, func, select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
@@ -22,6 +24,7 @@ from admin_api.discrepancies import (
 )
 from admin_api.discrepancies import router as discrepancies_router
 from admin_api.discrepancies import admin_router as discrepancies_admin_router
+from admin_api.api import router as api_router
 from admin_api.rules import list_rules
 from admin_api.rules import router as rules_router
 from admin_api.rules import vehicles_router
@@ -134,13 +137,37 @@ async def ui_llm_queue(request: Request):
     })
 
 
-@app.get("/", include_in_schema=False)
-async def root():
-    return RedirectResponse(url="/admin/ui/discrepancies?status=unresolved")
+@app.exception_handler(OperationalError)
+async def _db_unreachable(request: Request, exc: OperationalError):
+    # A dropped/unreachable database is the common failure; say so instead of a bare 500.
+    from fastapi.responses import JSONResponse
+    return JSONResponse({"detail": "database unreachable; try again shortly"}, status_code=503)
 
 
+app.include_router(api_router)
 app.include_router(discrepancies_router)
 app.include_router(discrepancies_admin_router)
 app.include_router(rules_router)
 app.include_router(vehicles_router)
 app.include_router(_ui_router)
+
+# The new admin SPA (admin_ui/, built into STATIC_DIR in the image). Without a build, / keeps sending
+# people to the old pages.
+_static = Path(os.environ.get("STATIC_DIR", "")) if os.environ.get("STATIC_DIR") else None
+if _static and _static.is_dir():
+    if (_static / "assets").is_dir():
+        app.mount("/assets", StaticFiles(directory=_static / "assets"), name="assets")
+
+    @app.get("/{path:path}", include_in_schema=False)
+    async def spa(path: str):
+        if path.startswith(("api/", "admin/")):
+            from fastapi import HTTPException
+            raise HTTPException(404)
+        file = (_static / path).resolve()
+        if path and file.is_file() and _static.resolve() in file.parents:
+            return FileResponse(file)
+        return FileResponse(_static / "index.html")
+else:
+    @app.get("/", include_in_schema=False)
+    async def root():
+        return RedirectResponse(url="/admin/ui/discrepancies?status=unresolved")
