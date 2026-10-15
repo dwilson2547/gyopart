@@ -54,7 +54,12 @@ NAV_SETTLE_TIMEOUT_MS = 30_000
 IMAGE_WORKERS = 8  # background image downloads per run
 PROXY_ERRORS = ("ERR_PROXY_CONNECTION_FAILED", "ERR_TUNNEL_CONNECTION_FAILED", "ERR_PROXY_AUTH",
                 "ERR_NO_SUPPORTED_PROXIES", "ERR_MANDATORY_PROXY_CONFIGURATION_FAILED")
-INITIAL_VEHICLE_ESTIMATE_S = 30 * 60  # until this run has timed a vehicle itself
+DISCOVERY_RESERVE_S = 30 * 60  # discovery stops listing with less than this left, so the queue gets worked
+# Vehicles keep starting until this close to the deadline (no average-vehicle estimate): one cut off by
+# the deadline is released and its next run re-reads the fetched pages from webcache, whereas waiting
+# for "time for an average vehicle" left 30-45% of the 3 h window idle where one new vehicle takes
+# 1.5-2 h (Honda 58 min, Mercedes 83 min on 2026-10-15).
+MIN_START_S = 5 * 60
 
 
 def canonical_part_url(url: str) -> str:
@@ -229,7 +234,6 @@ class UpdaterV2:
         self._page: "Page | None" = None
         self._page_navigations = 0
         self._page_crashes = 0
-        self._vehicle_seconds: list[float] = []
 
     # ── session ────────────────────────────────────────────────────────────────────────────────
 
@@ -570,7 +574,7 @@ class UpdaterV2:
         print(f"discovery: listing {self.config_name} vehicles ({'forced' if self.discovery == 'force' else 'due'})",
               flush=True)
         out_of_time = lambda: bool(self.deadline) and \
-            datetime.now(timezone.utc).replace(tzinfo=None) + _seconds(INITIAL_VEHICLE_ESTIMATE_S) > self.deadline
+            datetime.now(timezone.utc).replace(tzinfo=None) + _seconds(DISCOVERY_RESERVE_S) > self.deadline
         try:
             Discovery(self, conn, mfr_id, out_of_time).run()
         except (SiteUnavailableError, InternetDownError, vpn.VpnUnavailable) as ex:
@@ -591,8 +595,7 @@ class UpdaterV2:
             return False
         if not self.deadline:
             return True
-        est = (sum(self._vehicle_seconds) / len(self._vehicle_seconds)) if self._vehicle_seconds else INITIAL_VEHICLE_ESTIMATE_S
-        if datetime.now(timezone.utc).replace(tzinfo=None) + _seconds(est) > self.deadline:
+        if datetime.now(timezone.utc).replace(tzinfo=None) + _seconds(MIN_START_S) > self.deadline:
             self.stats.stop_reason = "deadline"
             return False
         return True
@@ -652,7 +655,6 @@ class UpdaterV2:
                         self.stats.stop_reason = "queue_empty"
                         break
                     print(f"vehicle {t.id}: {t.year} {t.make} {t.model} {t.trim} {t.engine}")
-                    t0 = time.monotonic()
                     try:
                         scraped = self.crawl(t)
                         for name, meta in scraped.images.items():
@@ -726,7 +728,6 @@ class UpdaterV2:
                         print(f"  failed: {type(ex).__name__}: {ex}")
                         if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
                             raise RunStopped(65, f"{consecutive_failures} vehicles failed in a row; last: {ex}")
-                    self._vehicle_seconds.append(time.monotonic() - t0)
                     pause = random.uniform(*self.spacing_s)
                     time.sleep(pause)
                 # Let queued images finish (within the deadline) and record them.
