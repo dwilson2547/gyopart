@@ -213,3 +213,12 @@ scraping:
       timeout: 8h  # first sweep is ~20k requests; later runs reuse the week's empty combos
       jobs:
         u-pull-n-save: {pool: junkyard-inventory}
+    wegotused:
+      image: dwilson2547/gyopart-scraper-wegotused@sha256:2910b3f376ab990851e616391c84ef4a0e30fa242e2e4a0d4829f5289a94090a
+      timeout: 1h
+      health: {minItems: 0, maxDropPct: 100}  # incremental: stops at the first known VIN
+      resources:  # headless Chromium, once per run, for the Sucuri challenge
+        requests: {cpu: 250m, memory: 512Mi}
+        limits: {memory: 1Gi}
+      jobs:
+        wegotused: {pool: junkyard-inventory}
