@@ -4,3 +4,4 @@ sqlalchemy>=2.0,<2.1  # 2.1 defaults postgresql:// to psycopg 3; junkyard-common
 dwilson-junkyard-common==0.1.0
 dwilson-cache-client==0.1.1
 dwilson-request-auth-client==0.1.3
+playwright==1.48.0

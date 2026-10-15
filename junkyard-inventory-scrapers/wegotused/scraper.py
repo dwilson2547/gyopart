@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 # Site:     WeGotUsed / Harry's U-Pull It (https://wegotused.com)
-# Platform: WordPress + inventory-7lt plugin (AngularJS frontend, SSR data)
+# Platform: WordPress + inventory-7lt plugin (AngularJS frontend, SSR data), behind Sucuri CloudProxy
+# Access:   Sucuri answers every request with a JS challenge (307) that sets a sucuri_cloudproxy_uuid_*
+#           cookie, valid 24 h and tied to the User-Agent. Headless Chromium loads one page to earn it;
+#           the crawl itself is plain requests carrying that cookie and the browser's User-Agent.
 # Strategy: paginated GET newest-first → stop on first known VIN (incremental)
 #           First run (no known VINs): paginate all pages, then deactivate missing
 # Dedup key: VIN (stored as source_key)
@@ -26,7 +29,7 @@ from request_auth_client import RequestAuthClient
 
 # scrape_contract.py lives one level up in the repo and next to scraper.py in the image.
 sys.path.append(str(Path(__file__).resolve().parent.parent))
-from scrape_contract import Broken, run  # noqa: E402
+from scrape_contract import Broken, run, with_retries  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -48,6 +51,8 @@ HEADERS = {
     ),
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 }
+
+_RESULTS_MARKER = 'id="_results"'
 
 _TOTAL_RE = re.compile(r"of\s+([\d,]+)\s+records", re.IGNORECASE)
 
@@ -94,29 +99,68 @@ def _parse_arrival_date(raw: str) -> datetime | None:
         return None
 
 
+def _page_url(page: int) -> str:
+    return (
+        f"{INVENTORY_URL}"
+        f"?inv%5Byard%5D=all&inv%5Bmake%5D=&inv%5Bmodel%5D=&inv%5Bmanufacturer%5D="
+        f"&inv%5Byear%5D=&inv%5Bpart%5D=&inv%5Bpage%5D={page}&inv%5Bsort%5D%5Byard_date%5D=0"
+    )
+
+
+def _pass_challenge(http: requests.Session, request_auth: RequestAuthClient) -> None:
+    """Load one inventory page in headless Chromium and copy its Sucuri cookie + User-Agent to http."""
+    from playwright.sync_api import sync_playwright
+
+    with request_auth.acquire(DOMAIN) as permit, sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        try:
+            ctx = browser.new_context()
+            page = ctx.new_page()
+            resp = page.goto(_page_url(0), wait_until="domcontentloaded", timeout=60_000)
+            page.wait_for_selector("#_results", timeout=60_000)
+            permit.set_status(resp.status if resp else 200)
+            user_agent = page.evaluate("navigator.userAgent")
+            cookies = [c for c in ctx.cookies() if c["name"].startswith("sucuri_cloudproxy")]
+        finally:
+            browser.close()
+    if not cookies:
+        raise Broken("Sucuri challenge passed but no sucuri_cloudproxy cookie was set")
+    http.headers["User-Agent"] = user_agent
+    for c in cookies:
+        http.cookies.set(c["name"], c["value"], domain=c["domain"], path=c["path"])
+    logger.info("Sucuri challenge passed (%s)", ", ".join(c["name"] for c in cookies))
+
+
 def _fetch_page(
     http: requests.Session,
     web_cache: WebCacheClient,
     request_auth: RequestAuthClient,
     page: int,
 ) -> str:
-    url = (
-        f"{INVENTORY_URL}"
-        f"?inv%5Byard%5D=all&inv%5Bmake%5D=&inv%5Bmodel%5D=&inv%5Bmanufacturer%5D="
-        f"&inv%5Byear%5D=&inv%5Bpart%5D=&inv%5Bpage%5D={page}&inv%5Bsort%5D%5Byard_date%5D=0"
-    )
+    url = _page_url(page)
     entry = web_cache.get(url, max_age=CACHE_MAX_AGE_SECONDS)
-    if entry:
+    if entry and _RESULTS_MARKER in entry["content"]:
         return entry["content"]
 
     logger.debug("GET page %d", page)
-    with request_auth.acquire(DOMAIN) as permit:
-        resp = http.get(url, headers=HEADERS, timeout=60)
-        permit.set_status(resp.status_code)
-        if resp.status_code == 429:
-            logger.error("429 received — aborting run")
-            raise Broken(f"429 rate limited by {SOURCE}")
-        resp.raise_for_status()
+
+    def get():
+        with request_auth.acquire(DOMAIN) as permit:
+            resp = http.get(url, timeout=60, allow_redirects=False)
+            permit.set_status(resp.status_code)
+            return resp
+
+    resp = with_retries(get, url)
+    if resp.status_code == 307 or (resp.ok and _RESULTS_MARKER not in resp.text):
+        # The cookie expired or was never earned: pass the challenge (again) and retry once.
+        _pass_challenge(http, request_auth)
+        resp = with_retries(get, url)
+        if resp.status_code == 307 or (resp.ok and _RESULTS_MARKER not in resp.text):
+            raise Broken("Sucuri challenge still served after passing it in a browser")
+    if resp.status_code == 429:
+        logger.error("429 received — aborting run")
+        raise Broken(f"429 rate limited by {SOURCE}")
+    resp.raise_for_status()
 
     web_cache.store(url, resp.text, CLIENT_NAME)
     return resp.text
@@ -290,6 +334,7 @@ def main() -> dict:
     try:
         with WebCacheClient(WEBCACHE_URL, timeout=WEBCACHE_TIMEOUT) as web_cache:
             http = requests.Session()
+            http.headers.update(HEADERS)
 
             # Page 0 gives us total count and first batch
             html0 = _fetch_page(http, web_cache, request_auth, 0)
