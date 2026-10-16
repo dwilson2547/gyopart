@@ -191,7 +191,12 @@ vehicles. Edit is delete + create, so a change always goes through the preview.
    real parts-galore run in dev. Admin image runs Python 3.12 (microk8s CA vs 3.13's strict X.509).
    Series fix from phase 2's finding landed with it: ~810 more dev vehicles matched (Silverado 1500 all
    729, Avalanche 182, Suburban 1500 408/486 — the rest are 1997/1999, catalogued as C1500/K1500).
-4. **authentik + public host.**
+4. **authentik + public host** — built 2026-10-15, on in dev at https://gyopart-admin-dev.danwils.com (prod will
+   be gyopart-admin.danwils.com: one level under danwils.com, which Cloudflare's free certificate covers).
+   authentik app `gyopart-admin`, access = group `gyopart-admin`; one client for both environments.
+   `admin_api/auth` (ported from the sjm UI with its fixes) guards the SPA, `/api` and the old pages: page
+   loads → sign-in and back, API → 401, writes need `X-Admin` / `HX-Request`, LAN host → public host.
+   Mappings and rules record the signed-in user.
 5. Remove the old templates, rule engine (if dropped), LLM suggester and `create_all`.
 
 ## 4. Decisions (user, 2026-10-15)
