@@ -1,4 +1,4 @@
-"""JSON API for the admin SPA (admin_ui/). The Jinja pages under /admin/ui stay until phase 5."""
+"""JSON API for the admin SPA (admin_ui/)."""
 from fastapi import APIRouter
 
 from . import catalogue, discrepancies, fixes, vehicles

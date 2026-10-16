@@ -104,17 +104,18 @@ spec:
             # OIDC_CLIENT_ID / OIDC_CLIENT_SECRET: the authentik client, hand-applied.
             - secretRef: {name: {{ . }}}
           {{- end }}
-          # TCP, not HTTP: `/` redirects to the unresolved-discrepancies page, which renders ~11 MB in ~2.7 s
-          # (2026-10-14) — past the probes' 1 s timeout, so the pod was never Ready and was restarted 34
-          # times in 45 h. The probes only need to know uvicorn is accepting connections.
+          # /api/config: public (no sign-in), no database, instant. (The old pages took 2.7 s to render `/`,
+          # which is why these were TCP until the rewrite.)
           readinessProbe:
-            tcpSocket:
+            httpGet:
+              path: /api/config
               port: 8300
             initialDelaySeconds: 5
             periodSeconds: 5
             failureThreshold: 10
           livenessProbe:
-            tcpSocket:
+            httpGet:
+              path: /api/config
               port: 8300
             initialDelaySeconds: 15
             periodSeconds: 10

@@ -197,7 +197,9 @@ vehicles. Edit is delete + create, so a change always goes through the preview.
    `admin_api/auth` (ported from the sjm UI with its fixes) guards the SPA, `/api` and the old pages: page
    loads → sign-in and back, API → 401, writes need `X-Admin` / `HX-Request`, LAN host → public host.
    Mappings and rules record the signed-in user.
-5. Remove the old templates, rule engine (if dropped), LLM suggester and `create_all`.
+5. **Cleanup** — done 2026-10-15 (dev): old Jinja pages and their routes, the old rule UI, the LLM suggester
+   (+ its cron job) and `create_all` removed; the rule engine stays for yard rules (§4). `/admin/...` URLs
+   redirect to the SPA; probes are HTTP on `/api/config`; the app starts with a database down.
 
 ## 4. Decisions (user, 2026-10-15)
 

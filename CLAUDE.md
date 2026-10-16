@@ -90,13 +90,17 @@ Infrastructure (DNS, monitoring, postgres, ArgoCD, ai-services, etc.) lives at `
 ## Secrets
 
 Never committed. Pre-provisioned with kubectl. Example templates in `helm/gyopart/example-secrets/`.
-- `junkyard-credentials` — JUNKYARD_USER, JUNKYARD_PASSWORD, ADMIN_API_KEY
+- `junkyard-credentials` — JUNKYARD_USER, JUNKYARD_PASSWORD (ADMIN_API_KEY is unused: the admin signs in through authentik)
+- `gyopart-admin-oidc` — OIDC_CLIENT_ID, OIDC_CLIENT_SECRET (admin sign-in; same value as `authentik-gyopart-admin-oidc` in the authentik namespace)
 - `parts-interchange-credentials` — PARTS_USER, PARTS_PASSWORD
 
 ## Ingresses
 
 - `gyopart.local` → gyopart-ui:80
-- `gyopart.danwils.com` → gyopart-ui:80, **public** (prod only, `publicIngress` in `values-prod.yaml`; anonymous, read-only; `/v1/vin/` rate-limited). admin-api stays LAN-only until its rewrite (`junkyard-platform/docs/admin-rewrite-design.md`).
+- `gyopart.danwils.com` → gyopart-ui:80, **public** (prod only, `publicIngress` in `values-prod.yaml`; anonymous, read-only; `/v1/vin/` rate-limited).
+- `gyopart-admin-dev.danwils.com` → admin-api:8300 (dev), **public behind authentik sign-in** (group `gyopart-admin`;
+  `adminAuth` + `adminPublicIngress` in values). Prod: `gyopart-admin.danwils.com` once promoted. With sign-in on,
+  the LAN `admin.*` host redirects page loads to the public host.
 - `api.gyopart.local` → gyopart-api:8200
 - `admin.gyopart.local` → admin-api:8300
 - `inventory.gyopart.local` → inventory-api:8100

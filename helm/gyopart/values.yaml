@@ -56,10 +56,6 @@ monitoring:
 vinResolver:
   enabled: true
 
-llmSuggester:
-  enabled: false
-  schedule: "0 2 * * *"
-  anthropicSecret: anthropic-credentials
 
 # Scraper fleet run by scrape-job-manager (templates/scrapers.yaml). Off by default: Helm layers every
 # environment's values file over this one and merges maps, so jobs defined here would also run in dev.

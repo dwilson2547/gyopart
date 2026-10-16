@@ -69,7 +69,7 @@ def test_signed_in_reads_and_writes_record_who(client):
 def test_writes_need_the_csrf_header(client):
     signed_in(client)
     assert client.post("/api/thing").status_code == 403
-    assert client.post("/api/thing", headers={"HX-Request": "true"}).status_code == 200   # old htmx pages
+    assert client.post("/api/thing", headers={"HX-Request": "true"}).status_code == 403   # the htmx pages are gone
 
 
 def test_other_hosts_are_sent_to_the_public_host():

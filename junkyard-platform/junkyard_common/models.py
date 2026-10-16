@@ -148,7 +148,8 @@ class MappingDiscrepancy(Base):
     fuzzy_model_score = Column(Float,       nullable=True)
     candidate_car_id  = Column(Integer,     nullable=True)
 
-    # unresolved | pending_rule | rule_applied | manual | ignored | no_match_in_dataset
+    # unresolved (open) | ignored. Rows from before the rewrite may still say pending_rule/no_match_in_dataset;
+    # nothing writes those any more, and a matched vehicle's row is deleted.
     status = Column(String(30), nullable=False, default="unresolved")
 
     # Why the vehicle didn't match, and what NHTSA said (null for rows recorded before 0005).

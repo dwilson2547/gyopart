@@ -33,14 +33,14 @@ Backlog imported from the retired todo store, 2026-07-06.
 - [ ] **Decide refresh for brand-new models** — with refresh off, sparse new models (2026 Mini Cooper: accessories only) aren't revisited; refresh current/next model year sooner? design-v2 §6.
 
 - [x] **Deploy gyopart production stack** — Bring up the production gyopart deployment using the existing Helm and cluster patterns from the gyopart stack. — done 2026-10-11: Argo app `gyopart` (main, values.yaml + values-prod.yaml), gyopart.local.
-- [ ] **Expose VinCache data in the gyopart admin experience** — Extend the admin-facing experience to make VinCache data inspectable, either in the current admin interface or wherever it fits best.
+- [x] **Expose VinCache data in the gyopart admin experience** (done 2026-10-15: the admin's vehicle page shows the full NHTSA record) — Extend the admin-facing experience to make VinCache data inspectable, either in the current admin interface or wherever it fits best.
 - [ ] **Extend gyopart API and UI functionality** — Review the current gyopart API and UI end-to-end and add the next round of missing functionality and quality-of-life improvements.
 - [ ] **Explore a standalone parts-interchange interface on gyopart data** — Consider building a separate parts-interchange API/UI that uses the same underlying data as gyopart so workflows can be compared and potentially swapped later.
 - [x] **Deploy update-scraper to Helm after DB-write stabilization** — Once update-scraper bugs are fixed and it writes directly to the database reliably, add Helm deployments for each make. — done 2026-10-11: one ScrapeJob per site under scrape-job-manager (16 sites, design-v2 §0).
 - [ ] **Clean up junk code in the gyopart repo** — Go through the gyopart repository and remove stale or junk code paths so the tree is easier to reason about.
 - [ ] **Run motorcycle scrapers in Kubernetes with admin services** — Update the motorcycle scrapers to run in Kubernetes and add the associated admin/API-style services needed to operate them.
 - [ ] **Build a framework for general document scrapers** — Create a reusable scraper system for document-centric scrapers such as the Ducati owners manual scraper.
-- [ ] **Explore local LLM rule generation for gyopart admin-api** — Experiment with a local LLM connected to the gyopart admin-api to automatically create rules that resolve mapping discrepancies.
+- [ ] **Explore local LLM rule generation for gyopart admin-api** — Experiment with a local LLM connected to the gyopart admin-api to automatically create rules that resolve mapping discrepancies. (The old Anthropic-based suggester was removed in the admin rewrite, phase 5; a new one would propose decode mappings through `/api/mappings/preview`.)
 - [ ] **Evaluate RockAuto-style external parts reference scraping** — Consider scraping an external parts reference such as RockAuto to find parts interchangeable across manufacturers, but first collapse vehicles into distinct canonical car configurations so equivalent generations/configs are only scraped once instead of re-querying every model year.
 
 ## Low
@@ -53,11 +53,9 @@ Backlog imported from the retired todo store, 2026-07-06.
 
 - [ ] **Indexes into `parts_interchange_common`** — `ix_diagram_parts_part_id` and `ix_car_diagrams_diagram_id` were created by hand on prod 2026-10-15 (CONCURRENTLY); add them to the schema package (new PyPI version) and to dev. Was: **Index `diagram_parts.part_id`** — the PK is (diagram_id, part_id), so "which diagrams is this part on" scans ~135M rows (~8 s). gyopart-api works around it by going through car_parts → car_diagrams (0.7–1.5 s without a car). Needs the index in `parts_interchange_common` (new PyPI version) and `CREATE INDEX CONCURRENTLY` on dev + prod.
 
-- [ ] **Pre-existing admin-api test failure** — `test_list_discrepancies_requires_auth` fails (seen 2026-10-12, unrelated to the VIN resolver work).
 
 ## Unprioritized (imported from workman drafts, 2026-07-06)
 
-- [ ] **Migrating LLM suggester from Anthropic to HuggingFace** — admin_api/llm_suggester.py currently uses Anthropic SDK. Swap for HuggingFace at implementation time. Two options: HF Inference API (cloud, free tier, no infra) or Ollama on cluster (Llama 3.1 8B / Mistral 7B, air-gapped). Prompt structure stays the same (expects JSON output). Both DBs queried to build context before calling LLM.
 - [ ] **Adding Nominatim/OSM address-level geocoding** — Current geocoding uses uszipcode (zip centroid). Add Nominatim/OSM as fallback for address-level precision if zip centroid proves too coarse for radius search. Location.address field already stored by scrapers.
 - [ ] **Implementing cluster GitOps repo** — Extract CoreDNS and monitoring concerns from scrape-stack Helm chart into a separate cluster-gitops repo. Structure: bootstrap/, infrastructure/coredns/, infrastructure/monitoring/, apps/. SealedSecrets for committing encrypted secrets. ArgoCD manages itself (app-of-apps). Zero-disruption migration: validate with argocd app diff before enabling auto-sync on infra apps.
 - [ ] **Set up Aistor bucket and IAM credentials for gyopart** — Create a dedicated bucket (e.g. gyopart-images) on the Aistor S3-compatible instance. Create an IAM user/key pair with read-write access for the migration script, and a separate read-only key for gyopart-api. Store the read-only credentials as a Kubernetes secret in the gyopart-dev namespace.

@@ -22,7 +22,6 @@ export default function App() {
         <div className="grow" />
         <VehicleSearch />
         <Account />
-        <a href="/admin/ui/discrepancies" className="muted" title="The old pages, until the rewrite replaces them">old admin</a>
       </header>
       <main className="page">{page}</main>
     </ToastHost>

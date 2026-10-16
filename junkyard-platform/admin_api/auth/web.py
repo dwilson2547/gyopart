@@ -1,10 +1,10 @@
-"""Sign-in routes and the guard in front of everything (new SPA, its /api, the old /admin pages).
+"""Sign-in routes and the guard in front of everything (the SPA and its /api).
 
 Off unless OIDC_ISSUER is set (local dev, tests). With it on:
   - a signed-out page load (any GET outside /api) goes to authentik and comes back to the same page;
   - a signed-out API call or write gets 401 (the SPA then sends the browser to sign in);
-  - every write needs the X-Admin header (the SPA sends it) or htmx's HX-Request (the old pages): a custom
-    header a cross-site form can't add, so a signed-in browser can't be made to write by another site.
+  - every write needs the X-Admin header (the SPA sends it): a custom header a cross-site form can't add,
+    so a signed-in browser can't be made to write by another site.
 """
 from __future__ import annotations
 
@@ -101,7 +101,7 @@ def install(app: FastAPI, env: dict | None = None) -> bool:
                 return RedirectResponse(f"{LOGIN}?next={quote(target, safe='')}")
             if path != "/api/me":
                 return JSONResponse({"detail": "sign-in required"}, status_code=401)
-        if request.method in WRITES and not (request.headers.get("X-Admin") == "1" or request.headers.get("HX-Request")):
+        if request.method in WRITES and request.headers.get("X-Admin") != "1":
             return JSONResponse({"detail": "missing X-Admin header"}, status_code=403)
         return await call_next(request)
 

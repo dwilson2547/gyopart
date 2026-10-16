@@ -72,10 +72,7 @@ Nominatim/OSM is a future option if address-level precision becomes necessary.
 
 ## Admin API LLM
 
-`llm_suggester.py` currently uses the Anthropic SDK. Swap for HuggingFace at implementation time.
-Two options (decide then):
-- **HF Inference API** (cloud): `huggingface_hub.InferenceClient`, free tier, no infra
-- **Ollama on cluster**: local model (Llama 3.1 8B / Mistral 7B), fully air-gapped
+The LLM suggester (`llm_suggester.py`, Anthropic SDK) was removed in the admin rewrite (phase 5, 2026-10-15).
 
 Both work with the existing prompt structure (expects JSON output). No tool-calling needed —
 the suggester already queries both DBs to build context before calling the LLM.

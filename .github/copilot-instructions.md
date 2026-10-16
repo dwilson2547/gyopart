@@ -81,7 +81,8 @@ Infrastructure (DNS, monitoring, postgres, ArgoCD, ai-services, etc.) lives at `
 ## Secrets
 
 Never committed. Pre-provisioned with kubectl. Example templates in `helm/gyopart/example-secrets/`.
-- `junkyard-credentials` — JUNKYARD_USER, JUNKYARD_PASSWORD, ADMIN_API_KEY
+- `junkyard-credentials` — JUNKYARD_USER, JUNKYARD_PASSWORD (ADMIN_API_KEY is unused: the admin signs in through authentik)
+- `gyopart-admin-oidc` — OIDC_CLIENT_ID, OIDC_CLIENT_SECRET (admin sign-in; same value as `authentik-gyopart-admin-oidc` in the authentik namespace)
 - `parts-interchange-credentials` — PARTS_USER, PARTS_PASSWORD
 
 ## Ingresses

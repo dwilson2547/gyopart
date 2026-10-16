@@ -1,11 +1,9 @@
 # Notes index
 
-- [Admin API — no auth by design](admin-api-no-auth-by-design.md) — admin_api has no authentication middleware. `admin-api,security,traefik`
 - [arizonaautoparts scraper — multi-location via stock suffix](arizonaautoparts-scraper-multi-location-via-stock-suffix.md) — scraper.py at junkyard-inventory-scrapers/arizonaautoparts/scraper.py. `urg,iis-pro-v2,arizonaautoparts,multi-location`
 - [budgetupullit — per-make enumeration, all-known incremental skip](budgetupullit-per-make-enumeration-all-known-incremental-ski.md) — scraper.py at junkyard-inventory-scrapers/budgetupullit/scraper.py. `budgetupullit,ssr,incremental`
 - [chesterfieldauto: ASP.NET anti-forgery token is session-scoped, never cache token page](chesterfieldauto-asp-net-anti-forgery-token-is-session-scope.md) — chesterfieldauto.com uses __RequestVerificationToken (ASP.NET Core anti-forgery). `aspnet,chesterfieldauto,token`
 - [dwilson-junkyard-common — Published to PyPI](dwilson-junkyard-common-published-to-pypi.md) — Package name: dwilson-junkyard-common. `parts-interchange,junkyard-common,pypi,package`
-- [Gyopart admin_api LLM: swap Anthropic for HuggingFace](gyopart-admin-api-llm-swap-anthropic-for-huggingface.md) — llm_suggester.py uses anthropic SDK — no API key available. `admin-api,llm,huggingface`
 - [gyopart — Canonical Schema & Key Paths](gyopart-canonical-schema-key-paths.md) — Schemas: junkyard_inventory (scraper data) and parts_interchange (parts catalog) on separate k8s postgres ins… `parts-interchange,schema,file-paths`
 - [Gyopart DB init: Alembic for junkyard, schema.sql for parts](gyopart-db-init-alembic-for-junkyard-schema-sql-for-parts.md) — Both DBs use Base.metadata.create_all() in FastAPI lifespan hooks — idempotent, no separate init Job needed. `k8s,postgres,schema,fastapi`
 - [Gyopart — Docker images and Helm/ArgoCD deployment](gyopart-docker-images-and-helm-argocd-deployment.md) — Four images on Docker Hub: dwilson2547/gyopart-api:latest (port 8200), dwilson2547/gyopart-ui:latest (port 80… `k8s,helm,argocd,docker`
@@ -24,7 +22,6 @@
 - [parts_interchange_common — Shared Schema Library](parts-interchange-common-shared-schema-library.md) — Published to PyPI as dwilson-parts-interchange-common. `parts-interchange,schema,pypi`
 - [Parts Interchange — Scraper Docker & Browserless Strategy](parts-interchange-scraper-docker-browserless-strategy.md) — Single omnibus Docker image for all scrapers (junkyard-scrapers:x.y.z). `parts-interchange,docker,scrapers,browserless,infrastructure`
 - [parts-loader-v2 — Bulk Load Gotchas](parts-loader-v2-bulk-load-gotchas.md) — SET session_replication_role = replica requires superuser — gyopart_dev is not a superuser, so this call must… `parts-interchange,parts-loader,postgres,gotcha`
-- [Phase 5 — Admin Panel: Key Patterns & Gotchas](phase-5-admin-panel-key-patterns-gotchas.md) — Admin API lives in gyopart/junkyard-platform/admin_api/. `parts-interchange,admin-api,fastapi,htmx,phase-5`
 - [Phase 6 — gyopart-api: Key Patterns & Gotchas](phase-6-gyopart-api-key-patterns-gotchas.md) — gyopart-api lives at gyopart/gyopart-api/. `gyopart-api,fastapi,phase-6`
 - [Phase 6 — gyopart-ui React Patterns & Gotchas](phase-6-gyopart-ui-react-patterns-gotchas.md) — gyopart-ui lives at gyopart/gyopart-ui/. `gyopart-ui,react,typescript,tailwind,phase-6`
 - [picknpullsa — pre-1981 short VIN handling](picknpullsa-pre-1981-short-vin-handling.md) — scraper.py at junkyard-inventory-scrapers/picknpullsa/scraper.py. `picknpullsa,ssr,vin`
