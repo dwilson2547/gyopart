@@ -32,7 +32,7 @@ Replace the JSON state files with database writes and a work queue; add outage h
 
 | Site | Finding (2026-10-11) |
 |---|---|
-| audi, acura, porsche | moved to `<make>.oempartsonline.com` — a different platform: vehicle URLs redirect to a model page, the picker AJAX answers 403 even after the warm-up |
+| audi, acura, porsche | moved to `<make>.oempartsonline.com`. 2026-10-11: vehicle URLs redirected to a model page and the picker AJAX answered 403 even after the warm-up. **Rechecked 2026-10-16** from a local browser: it is the same RevolutionParts webstore (`cdn-resources.revolutionparts.io`), vehicle pages load without redirecting, and every picker step answers 200 with the scraper's query + CSRF header. Configs now point there; dev jobs `parts-direct-{audi,acura,porsche}` test the VPN path |
 | vw | `volkswagenpartsdirect.com` redirects to a dealer site, `hewlettvw.com`. **Candidate (2026-10-16):** `www.vwdirectparts.com` |
 | mazda | Cloudflare interstitial never cleared from the VPN (> 45 s, twice) on `mazdapartsdirect.com` (the config's domain). **Candidate (2026-10-16):** `www.mazdapartdirect.com` (no s); `mazda.oempartsonline.com` also exists but is the oempartsonline platform (see audi) |
 | suzuki | `suzukicarparts.com` serves an expired TLS certificate, and is no longer a parts site (user, 2026-10-16). **Candidate (2026-10-16):** `www.suzukiautomotiveparts.com` — Suzuki left the US car market after 2013, so its job needs `discovery_years` reaching back past 7 years |
