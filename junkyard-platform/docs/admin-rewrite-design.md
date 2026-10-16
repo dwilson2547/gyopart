@@ -1,6 +1,6 @@
 # Junkyard admin rewrite — design
 
-Status: **agreed** (2026-10-15, decisions in §4). Nothing here is built yet. The "Today" section and the numbers are
+Status: **live in prod** (2026-10-15; decisions in §4, phases in §3). Nothing here is built yet. The "Today" section and the numbers are
 verified against the code on `dev` (fd3f7af) and read-only queries against prod on 2026-10-15; the
 rest is planned.
 
@@ -125,7 +125,8 @@ and yards:
   them within seconds and the group leaves the list.
 - **Ignore** marks the group ignored. It reopens if new vehicles arrive with a different decode.
 
-**Catalogue gaps resolve themselves**: a nightly job requeues `year_not_in_catalogue` /
+**Catalogue gaps resolve themselves** (built 2026-10-16: CronJob `catalogue-gap-recheck`, 03:30 New York,
+`pipeline.worker --requeue-reasons`; first prod run requeued 11,516): a nightly job requeues `year_not_in_catalogue` /
 `model_year_gap` vehicles. That's ~14k vehicles with cached decodes, so it costs catalogue queries
 only.
 
@@ -166,6 +167,30 @@ vehicles. Edit is delete + create, so a change always goes through the preview.
 - Tests: reason classification and mapping application in `car_matcher` (table-driven from real
   decodes), API tests over a fixture catalogue, Playwright for the group → pick → confirm flow.
 
+### 2.7 Discrepancy-fix MCP (phase 7)
+
+An agent works the discrepancy queue the way the UI does, from any MCP client: the user pastes
+`https://gyopart-admin.danwils.com/mcp` into the harness, signs in through the browser, and the agent
+can start. Same pattern as nodewright and webdoc (`apps/webdoc/api/webdoc/oauth.py`, copied):
+
+- **OAuth**: the admin is the authorization server for its MCP clients (the MCP SDK's
+  `mcp.server.auth` routes: metadata, dynamic registration, `/authorize`, `/token`, `/revoke`).
+  `/authorize` hands over to a consent page that needs the normal admin session, so who may connect
+  is decided by authentik's `gyopart-admin` binding, as for the UI. Tokens are random, stored
+  hashed, in four `mcp_oauth_*` tables (migration `0006`); access 1 h, refresh rotated.
+- **Scope = the existing fixes, nothing else**: read discrepancies, vehicles, cached decodes and the
+  catalogue; preview and create decode mappings and yard rules; ignore/un-ignore a group; delete a
+  mapping an agent made. No manual matches, no re-scrapes, no deleting the user's own mappings.
+  Every write goes through the same functions as the API, so targets must exist in the catalogue and
+  the affected vehicles are requeued the same way. `created_by` reads `agent:<client> (<user>)`.
+- **Queries**: an overview (counts by tab, reason and yard), groups in priority order (most open
+  vehicles first, filterable by tab/yard/make/text), a group's detail (years, yards, catalogue
+  coverage, suggestions, existing mappings), the vehicles in a group (filter by year/yard, optional
+  decodes), one vehicle (by id, VIN or stock number) with its decode, one cached decode by VIN, and
+  catalogue lookups down to car records (year, make, model, trim, engine).
+- Decodes come back with the empty NHTSA fields dropped (most of the ~140 are empty).
+- **Disconnect**: an Agents list in the SPA shows connected clients and revokes them.
+
 ## 3. Phases
 
 1. **Worker** — built 2026-10-15 (gyopart 23296ba), running in dev, not yet in prod. Reason +
@@ -200,6 +225,16 @@ vehicles. Edit is delete + create, so a change always goes through the preview.
 5. **Cleanup** — done 2026-10-15 (dev): old Jinja pages and their routes, the old rule UI, the LLM suggester
    (+ its cron job) and `create_all` removed; the rule engine stays for yard rules (§4). `/admin/...` URLs
    redirect to the SPA; probes are HTTP on `/api/config`; the app starts with a database down.
+6. **Prod** — promoted 2026-10-15 (gyopart main 48c4d38): https://gyopart-admin.danwils.com, prod DB at 0005, images
+   admin-api sha-6b4201f65922 / vin-resolver sha-2af88a943620. No mappings carried over (prod starts fresh). Re-match
+   of every unmatched vehicle: 102,941 → 104,055 matched (+1,114, from the bracketed-series fix alone); open reasons:
+   year_not_in_catalogue 9,779 · model_not_in_catalogue 2,408 · make_not_in_catalogue 2,317 · model_year_gap 1,737 ·
+   no_vin 512 · decode_failed 206.
+7. **Discrepancy-fix MCP** (§2.7; user, 2026-10-15/16) — instead of LLM suggestions, an MCP server at `/mcp` scoped
+   to the existing fixes, with OAuth sign-in like nodewright and webdoc. Built 2026-10-16 (gyopart 59f05d4), on in dev at
+   https://gyopart-admin-dev.danwils.com/mcp: dev DB at 0006, admin-api sha-59f05d45036c; every tool verified against
+   the dev data (a create → re-match → delete round trip included); the browser sign-in + consent is the user's to try. Later (user): a
+   richer VIN mapper (trim/engine-level mappings), which will lean on this.
 
 ## 4. Decisions (user, 2026-10-15)
 
