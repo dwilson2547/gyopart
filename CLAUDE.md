@@ -98,9 +98,9 @@ Never committed. Pre-provisioned with kubectl. Example templates in `helm/gyopar
 
 - `gyopart.local` → gyopart-ui:80
 - `gyopart.danwils.com` → gyopart-ui:80, **public** (prod only, `publicIngress` in `values-prod.yaml`; anonymous, read-only; `/v1/vin/` rate-limited).
-- `gyopart-admin-dev.danwils.com` → admin-api:8300 (dev), **public behind authentik sign-in** (group `gyopart-admin`;
-  `adminAuth` + `adminPublicIngress` in values). Prod: `gyopart-admin.danwils.com` once promoted. With sign-in on,
-  the LAN `admin.*` host redirects page loads to the public host.
+- `gyopart-admin.danwils.com` → admin-api:8300 (prod) and `gyopart-admin-dev.danwils.com` (dev), **public behind
+  authentik sign-in** (group `gyopart-admin`; `adminAuth` + `adminPublicIngress` in values). With sign-in on, the LAN
+  `admin.*` hosts redirect page loads to the public host.
 - `api.gyopart.local` → gyopart-api:8200
 - `admin.gyopart.local` → admin-api:8300
 - `inventory.gyopart.local` → inventory-api:8100

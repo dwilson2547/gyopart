@@ -1,11 +1,19 @@
 # gyopart prod (Argo app `gyopart`: main, values.yaml + this file). Only what differs from values.yaml.
 
 # Public at https://gyopart.danwils.com, anonymous and read-only (every gyopart-api route is a GET).
-# The LAN hosts (gyopart.local, api./admin.gyopart.local) stay as they are; admin-api stays LAN-only until its
-# rewrite (junkyard-platform/docs/admin-rewrite-design.md) adds sign-in.
+# The LAN hosts (gyopart.local, api./admin.gyopart.local) stay as they are.
 publicIngress:
   host: gyopart.danwils.com
   tlsSecretName: gyopart-danwils-com-tls
+
+# Admin at https://gyopart-admin.danwils.com behind authentik sign-in (app + group gyopart-admin,
+# infra/cluster-config/authentik/blueprints/gyopart-admin.yaml). The LAN admin.gyopart.local redirects here.
+adminAuth:
+  issuer: https://auth.danwils.com/application/o/gyopart-admin/
+  secret: gyopart-admin-oidc
+adminPublicIngress:
+  host: gyopart-admin.danwils.com
+  tlsSecretName: gyopart-admin-danwils-com-tls
 
 # Scraper fleet run by scrape-job-manager (templates/scrapers.yaml): the parts-direct updater.
 scraping:

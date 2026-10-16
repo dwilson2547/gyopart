@@ -10,8 +10,9 @@ images:
   gyopartApi: dwilson2547/gyopart-api:3.0.2
   gyopartUi: dwilson2547/gyopart-ui:3.0.7
   inventoryApi: dwilson2547/inventory-api:3.0.2
-  adminApi: dwilson2547/admin-api:latest
-  vinResolver: dwilson2547/vin-resolver:latest
+  # Admin rewrite (junkyard-platform/docs/admin-rewrite-design.md), verified in dev 2026-10-15.
+  adminApi: dwilson2547/admin-api:sha-6b4201f65922
+  vinResolver: dwilson2547/vin-resolver:sha-2af88a943620
 
 imagePullPolicy: Always
 

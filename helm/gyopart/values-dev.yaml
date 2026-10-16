@@ -6,12 +6,6 @@ domain: gyopart-dev.local
 
 imagePullPolicy: Always
 
-# Admin rewrite phases 1-5 (junkyard-platform/docs/admin-rewrite-design.md) under test in dev; prod stays on
-# values.yaml's images until it's promoted. Dev DB is migrated to 0005.
-images:
-  adminApi: dwilson2547/admin-api:sha-6b4201f65922
-  vinResolver: dwilson2547/vin-resolver:sha-2af88a943620
-
 # Admin sign-in (phase 4): authentik app gyopart-admin (infra/cluster-config/authentik/blueprints/gyopart-admin.yaml),
 # group gyopart-admin. The LAN host admin.gyopart-dev.local redirects page loads here.
 adminAuth:
