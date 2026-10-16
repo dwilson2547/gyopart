@@ -1,7 +1,11 @@
 """Sign-in routes and the guard in front of everything (the SPA and its /api).
 
 Off unless OIDC_ISSUER is set (local dev, tests). With it on:
-  - a signed-out page load (any GET outside /api) goes to authentik and comes back to the same page;
+  - a signed-out page load (a top-level navigation outside /api) goes to authentik and comes back to the same
+    page; background requests (favicon, images, scripts) just get 401, so they never start a sign-in that would
+    overwrite the one in progress;
+  - a failed callback (e.g. a duplicate request re-using a spent code) quietly restarts the sign-in once; the
+    authentik session is usually still alive, so the retry is instant;
   - a signed-out API call or write gets 401 (the SPA then sends the browser to sign in);
   - every write needs the X-Admin header (the SPA sends it): a custom header a cross-site form can't add,
     so a signed-in browser can't be made to write by another site.
@@ -11,14 +15,32 @@ from __future__ import annotations
 import os
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from urllib.parse import quote, urlsplit
 
 from . import session
 
 LOGIN = "/api/auth/oidc/login"
+RETRY_COOKIE = "gya_retry"   # marks one automatic sign-in retry after a failed callback
 PUBLIC = {"/api/config", LOGIN, "/api/auth/oidc/callback", "/favicon.svg"}
 WRITES = {"POST", "PUT", "PATCH", "DELETE"}
+
+
+def is_navigation(request: Request) -> bool:
+    """A top-level page load (the browser says so; older clients: they ask for HTML)."""
+    mode = request.headers.get("sec-fetch-mode")
+    if mode is not None:
+        return mode == "navigate"
+    return "text/html" in request.headers.get("accept", "")
+
+
+def _failed_page(next_path: str, reason: str) -> HTMLResponse:
+    retry = f"{LOGIN}?next={quote(next_path, safe='')}"
+    body = (f"<!doctype html><meta charset=utf-8><title>Sign-in didn't complete</title>"
+            f"<body style='font:15px system-ui;background:#14161b;color:#e4e5e9;padding:40px'>"
+            f"<h2>Sign-in didn't complete</h2><p style='color:#9096a3'>{reason}</p>"
+            f"<p><a style='color:#7852ee' href='{retry}'>Try again</a></p>")
+    return HTMLResponse(body, status_code=401)
 
 
 def current_user(request: Request) -> dict | None:
@@ -47,7 +69,7 @@ def install(app: FastAPI, env: dict | None = None) -> bool:
     if not issuer:
         return False
 
-    from .oidc import FLOW_COOKIE, FLOW_PATH, FLOW_TTL_S, Provider, SignInRefused, begin, finish
+    from .oidc import FLOW_COOKIE, FLOW_PATH, FLOW_TTL_S, Provider, SignInRefused, begin, finish, flow_next
 
     secret = env["OIDC_CLIENT_SECRET"]
     provider = Provider(issuer, env["OIDC_CLIENT_ID"], secret)
@@ -65,16 +87,28 @@ def install(app: FastAPI, env: dict | None = None) -> bool:
 
     @app.get(FLOW_PATH + "/callback", include_in_schema=False)
     def oidc_callback(request: Request, code: str = "", state: str = "", error: str = ""):
-        if error:
-            return JSONResponse({"detail": f"authentik: {error}"}, status_code=401)
+        flow = request.cookies.get(FLOW_COOKIE)
+        next_path = flow_next(flow)
         try:
-            user, next_path = finish(provider, public_url, request.cookies.get(FLOW_COOKIE), code, state)
+            if error:
+                raise SignInRefused(f"authentik said: {error}")
+            user, next_path = finish(provider, public_url, flow, code, state)
         except SignInRefused as exc:
-            return JSONResponse({"detail": str(exc)}, status_code=401)
+            if session.verify(secret, request.cookies.get(session.COOKIE)):
+                return RedirectResponse(next_path)       # a duplicate after a sign-in that already worked
+            if not request.cookies.get(RETRY_COOKIE):     # one quiet retry, then say so
+                r = RedirectResponse(f"{LOGIN}?next={quote(next_path, safe='')}")
+                r.set_cookie(RETRY_COOKIE, "1", max_age=120, httponly=True, samesite="lax", secure=secure,
+                             path=FLOW_PATH)
+                return r
+            r = _failed_page(next_path, str(exc))
+            r.delete_cookie(RETRY_COOKIE, path=FLOW_PATH)
+            return r
         r = RedirectResponse(next_path)
         r.set_cookie(session.COOKIE, session.sign(secret, user), max_age=session.TTL_S, httponly=True,
                      samesite="lax", secure=secure)
         r.delete_cookie(FLOW_COOKIE, path=FLOW_PATH)
+        r.delete_cookie(RETRY_COOKIE, path=FLOW_PATH)
         return r
 
     @app.post("/api/auth/logout", include_in_schema=False)
@@ -96,7 +130,7 @@ def install(app: FastAPI, env: dict | None = None) -> bool:
         if path in PUBLIC or path.startswith("/assets/"):
             return await call_next(request)
         if request.state.user is None:
-            if request.method == "GET" and not path.startswith("/api/") and path != "/api":
+            if request.method == "GET" and not path.startswith("/api/") and is_navigation(request):
                 target = path + (f"?{request.url.query}" if request.url.query else "")
                 return RedirectResponse(f"{LOGIN}?next={quote(target, safe='')}")
             if path != "/api/me":
