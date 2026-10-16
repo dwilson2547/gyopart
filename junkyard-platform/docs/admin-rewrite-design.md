@@ -231,7 +231,9 @@ can start. Same pattern as nodewright and webdoc (`apps/webdoc/api/webdoc/oauth.
    year_not_in_catalogue 9,779 · model_not_in_catalogue 2,408 · make_not_in_catalogue 2,317 · model_year_gap 1,737 ·
    no_vin 512 · decode_failed 206.
 7. **Discrepancy-fix MCP** (§2.7; user, 2026-10-15/16) — instead of LLM suggestions, an MCP server at `/mcp` scoped
-   to the existing fixes, with OAuth sign-in like nodewright and webdoc. In progress 2026-10-16. Later (user): a
+   to the existing fixes, with OAuth sign-in like nodewright and webdoc. Built 2026-10-16 (gyopart 59f05d4), on in dev at
+   https://gyopart-admin-dev.danwils.com/mcp: dev DB at 0006, admin-api sha-59f05d45036c; every tool verified against
+   the dev data (a create → re-match → delete round trip included); the browser sign-in + consent is the user's to try. Later (user): a
    richer VIN mapper (trim/engine-level mappings), which will lean on this.
 
 ## 4. Decisions (user, 2026-10-15)
