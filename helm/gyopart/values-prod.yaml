@@ -63,7 +63,7 @@ scraping:
     # lands ~10 min before) so 4 at a time rotate through every site with work in the 17h window.
     # Browser: its own browserless sidecar (headed, scraping.browserSidecar); site traffic goes through the VPN proxy.
     parts-direct:
-      image: dwilson2547/gyopart-scraper-parts-direct@sha256:f98991297aa72a8022e99b03360e17fb9fdbbdd9c0d93e2aeae94f339c9096e7
+      image: dwilson2547/gyopart-scraper-parts-direct@sha256:33f17010516b510cec5411dab64f136cd1880dad57852288bc7c4a897f23cc09
       database: parts-interchange
       browserSidecar: true
       timeout: 3h
@@ -83,8 +83,10 @@ scraping:
         # Mopar (the full catalogue lives on the 'fiat' site): backlog of never-filled vehicles, refresh on.
         parts-direct-mopar: {pool: parts-direct, params: {config: fiat, discovery_interval_days: 30}}
         # Every other site changes rarely (user, 2026-10-11): new vehicles only, looked for monthly.
-        # Not yet: audi, acura, porsche (moved to oempartsonline.com; picker 403), vw (redirects to a
-        # dealer site), mazda (Cloudflare never clears from the VPN), suzuki (expired certificate).
+        # New domains 2026-10-16, each proven by a dev run (design-v2 §0): vw, mazda, and audi/acura/porsche
+        # on <make>.oempartsonline.com. No suzuki job: its catalogue is complete (Suzuki left the US in 2013).
+        parts-direct-acura: {pool: parts-direct, params: {config: acura, refresh: false, discovery_interval_days: 30}}
+        parts-direct-audi: {pool: parts-direct, params: {config: audi, refresh: false, discovery_interval_days: 30}}
         parts-direct-bmw: {pool: parts-direct, params: {config: bmw, refresh: false, discovery_interval_days: 30}}
         parts-direct-ford: {pool: parts-direct, params: {config: ford, refresh: false, discovery_interval_days: 30}}
         parts-direct-gm: {pool: parts-direct, params: {config: gm, refresh: false, discovery_interval_days: 30}}
@@ -93,13 +95,16 @@ scraping:
         parts-direct-infiniti: {pool: parts-direct, params: {config: infiniti, refresh: false, discovery_interval_days: 30}}
         parts-direct-jaguar: {pool: parts-direct, params: {config: jaguar, refresh: false, discovery_interval_days: 30}}
         parts-direct-kia: {pool: parts-direct, params: {config: kia, refresh: false, discovery_interval_days: 30}}
+        parts-direct-mazda: {pool: parts-direct, params: {config: mazda, refresh: false, discovery_interval_days: 30}}
         parts-direct-mercedes: {pool: parts-direct, params: {config: mercedes, refresh: false, discovery_interval_days: 30}}
         parts-direct-mini: {pool: parts-direct, params: {config: mini, refresh: false, discovery_interval_days: 30}}
         parts-direct-mitsubishi: {pool: parts-direct, params: {config: mitsubishi, refresh: false, discovery_interval_days: 30}}
         parts-direct-nissan: {pool: parts-direct, params: {config: nissan, refresh: false, discovery_interval_days: 30}}
+        parts-direct-porsche: {pool: parts-direct, params: {config: porsche, refresh: false, discovery_interval_days: 30}}
         parts-direct-subaru: {pool: parts-direct, params: {config: subaru, refresh: false, discovery_interval_days: 30}}
         parts-direct-toyota: {pool: parts-direct, params: {config: toyota, refresh: false, discovery_interval_days: 30}}
         parts-direct-volvo: {pool: parts-direct, params: {config: volvo, refresh: false, discovery_interval_days: 30}}
+        parts-direct-vw: {pool: parts-direct, params: {config: vw, refresh: false, discovery_interval_days: 30}}
     # US Auto Supply, Sterling Heights MI: one GET of the yard's CrushYMS XML feed (full inventory).
     us-auto-supply:
       image: dwilson2547/gyopart-scraper-us-auto-supply@sha256:f285dde7d5f6041ded1b493b3b4fdf2477950986c0de87acc864a527c7346179
