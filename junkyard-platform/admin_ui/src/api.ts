@@ -24,13 +24,24 @@ export class ApiError extends Error {
   }
 }
 
+export function signIn(): never {
+  location.href = `/api/auth/oidc/login?next=${encodeURIComponent(location.pathname + location.search)}`;
+  throw new Error("signing in");
+}
+
+// X-Admin on every request: the server refuses writes without it (CSRF guard, admin_api/auth/web.py).
 async function call<T>(method: string, url: string, body?: unknown): Promise<T> {
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { "X-Admin": "1" };
   if (body !== undefined) headers["Content-Type"] = "application/json";
   const r = await fetch(url, {
     method, headers, credentials: "same-origin",
     body: body === undefined ? undefined : JSON.stringify(body),
   });
+  // Signed out (or the session expired mid-use): sign in and come back to this page.
+  if (r.status === 401 && !url.startsWith("/api/auth/")) {
+    const me = url === "/api/me";
+    if (!me) signIn();
+  }
   const data = await r.json().catch(() => null);
   if (!r.ok) throw new ApiError(r.status, (data as { detail?: unknown } | null)?.detail);
   return data as T;

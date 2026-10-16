@@ -67,6 +67,14 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+            {{- with .Values.adminAuth.issuer }}
+            - name: OIDC_ISSUER
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.adminPublicIngress.host }}
+            - name: PUBLIC_URL
+              value: "https://{{ . }}"
+            {{- end }}
             - name: JUNKYARD_USER
               valueFrom:
                 secretKeyRef:
@@ -91,6 +99,11 @@ spec:
                   key: PARTS_PASSWORD
             - name: PARTS_DATABASE_URL
               value: "postgresql://$(PARTS_USER):$(PARTS_PASSWORD)@{{ .Values.postgres.host }}:5432/parts_interchange"
+          {{- with .Values.adminAuth.secret }}
+          envFrom:
+            # OIDC_CLIENT_ID / OIDC_CLIENT_SECRET: the authentik client, hand-applied.
+            - secretRef: {name: {{ . }}}
+          {{- end }}
           # TCP, not HTTP: `/` redirects to the unresolved-discrepancies page, which renders ~11 MB in ~2.7 s
           # (2026-10-14) — past the probes' 1 s timeout, so the pod was never Ready and was restarted 34
           # times in 45 h. The probes only need to know uvicorn is accepting connections.

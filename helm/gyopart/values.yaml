@@ -24,6 +24,18 @@ ingress:
   enabled: true
   className: nginx
 
+# Admin sign-in (junkyard-platform/admin_api/auth): authentik OIDC, who may sign in = authentik group
+# gyopart-admin. Empty issuer = no sign-in (LAN only). Secret keys: OIDC_CLIENT_ID, OIDC_CLIENT_SECRET.
+adminAuth:
+  issuer: ""
+  secret: ""
+
+# Public admin host (templates/admin-public-ingress.yaml); refused without adminAuth.issuer. One level under
+# danwils.com (gyopart-admin.danwils.com): Cloudflare's free certificate doesn't cover deeper names.
+adminPublicIngress:
+  host: ""
+  tlsSecretName: ""
+
 # Public site (templates/public-ingress.yaml): the UI on a *.danwils.com host via
 # Traefik pubsecure. Empty host = LAN only. Set per environment (values-prod.yaml).
 publicIngress:

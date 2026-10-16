@@ -9,7 +9,7 @@ from __future__ import annotations
 import datetime
 from collections import Counter
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -20,11 +20,11 @@ from pipeline.resolution_pipeline import load_mappings
 from pipeline.ymmt_matcher import match_car
 
 from . import catalogue
+from ..auth.web import who
 from .common import IGNORED, YARD_REASONS, engines, requeue, sql_key, sql_year
 
 router = APIRouter(prefix="/api", tags=["fixes"])
 D, V = MappingDiscrepancy, Vehicle
-CREATED_BY = "admin"  # the signed-in user once sign-in lands (phase 4)
 
 # The decode fields match_decoded reads; vehicles whose decodes agree on these match identically.
 _MATCH_FIELDS = ("ModelYear", "Make", "Model", "Series", "Trim", "DisplacementL", "EngineCylinders",
@@ -122,7 +122,7 @@ def preview_mapping(req: MappingRequest, eng=Depends(engines)):
 
 
 @router.post("/mappings")
-def create_mapping(req: MappingRequest, eng=Depends(engines)):
+def create_mapping(req: MappingRequest, request: Request, eng=Depends(engines)):
     ji, pi = eng
     _check_targets(pi, req.targets)
     now = _now()
@@ -137,7 +137,7 @@ def create_mapping(req: MappingRequest, eng=Depends(engines)):
             s.add(DecodeMapping(nhtsa_make=req.make, nhtsa_model=req.model, nhtsa_series=req.series,
                                 make_key=m.make_key, model_key=m.model_key, series_key=m.series_key,
                                 year_from=req.year_from, year_to=req.year_to, catalogue_make=m.catalogue_make,
-                                catalogue_model=m.catalogue_model, created_by=CREATED_BY, created_at=now))
+                                catalogue_model=m.catalogue_model, created_by=who(request), created_at=now))
             created += 1
         requeued = requeue(s, [vid for vid, _ in mapping_vehicles(s, req)])
         s.commit()
@@ -235,7 +235,7 @@ def preview_rule(req: RuleRequest, eng=Depends(engines)):
 
 
 @router.post("/rules")
-def create_rule(req: RuleRequest, eng=Depends(engines)):
+def create_rule(req: RuleRequest, request: Request, eng=Depends(engines)):
     ji, pi = eng
     cat_make = _check_rule(pi, req)
     now = _now()
@@ -245,13 +245,13 @@ def create_rule(req: RuleRequest, eng=Depends(engines)):
         if req.raw_make and req.raw_make.strip().lower() != cat_make.lower():
             s.add(MappingRule(**scope, field="make", rule_type="exact", raw_value=req.raw_make,
                               canonical_value=cat_make, priority=100, is_active=True, created_by="manual",
-                              created_at=now, applied_count=0, approved_by=CREATED_BY, approved_at=now))
+                              created_at=now, applied_count=0, approved_by=who(request), approved_at=now))
             created += 1
         if req.model and req.raw_model and req.raw_model != req.model:
             s.add(MappingRule(**scope, field="model", rule_type="exact", raw_value=req.raw_model,
                               canonical_value=req.model, make_context=cat_make, priority=100, is_active=True,
                               created_by="manual", created_at=now, applied_count=0,
-                              approved_by=CREATED_BY, approved_at=now))
+                              approved_by=who(request), approved_at=now))
             created += 1
         if not created:
             _invalid("make", "the yard already says exactly this; nothing to map")

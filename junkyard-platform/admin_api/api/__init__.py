@@ -9,7 +9,3 @@ router.include_router(discrepancies.router)
 router.include_router(fixes.router)
 router.include_router(vehicles.router)
 
-
-@router.get("/api/config", tags=["meta"])
-def config():
-    return {"app": "junkyard-admin", "phase": 3}

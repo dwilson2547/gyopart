@@ -25,6 +25,7 @@ from admin_api.discrepancies import (
 from admin_api.discrepancies import router as discrepancies_router
 from admin_api.discrepancies import admin_router as discrepancies_admin_router
 from admin_api.api import router as api_router
+from admin_api.auth.web import install as install_auth
 from admin_api.rules import list_rules
 from admin_api.rules import router as rules_router
 from admin_api.rules import vehicles_router
@@ -144,6 +145,8 @@ async def _db_unreachable(request: Request, exc: OperationalError):
     return JSONResponse({"detail": "database unreachable; try again shortly"}, status_code=503)
 
 
+# authentik sign-in + the guard in front of everything (on when OIDC_ISSUER is set): admin_api/auth/web.py.
+install_auth(app)
 app.include_router(api_router)
 app.include_router(discrepancies_router)
 app.include_router(discrepancies_admin_router)
