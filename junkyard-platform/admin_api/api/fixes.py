@@ -123,25 +123,31 @@ def preview_mapping(req: MappingRequest, eng=Depends(engines)):
 
 @router.post("/mappings")
 def create_mapping(req: MappingRequest, request: Request, eng=Depends(engines)):
+    return save_mapping(eng, req, who(request))
+
+
+def save_mapping(eng, req: MappingRequest, by: str) -> dict:
+    """Write the mapping rows (skipping exact duplicates) and requeue the vehicles they cover."""
     ji, pi = eng
     _check_targets(pi, req.targets)
     now = _now()
     with Session(ji) as s:
         have = {(m.make_key, m.model_key, m.series_key, m.year_from, m.year_to, m.catalogue_make, m.catalogue_model)
                 for m in load_mappings(s)}
-        created = 0
+        rows = []
         for m in req.mappings():
             if (m.make_key, m.model_key, m.series_key, m.year_from, m.year_to, m.catalogue_make,
                     m.catalogue_model) in have:
                 continue
-            s.add(DecodeMapping(nhtsa_make=req.make, nhtsa_model=req.model, nhtsa_series=req.series,
+            rows.append(DecodeMapping(nhtsa_make=req.make, nhtsa_model=req.model, nhtsa_series=req.series,
                                 make_key=m.make_key, model_key=m.model_key, series_key=m.series_key,
                                 year_from=req.year_from, year_to=req.year_to, catalogue_make=m.catalogue_make,
-                                catalogue_model=m.catalogue_model, created_by=who(request), created_at=now))
-            created += 1
+                                catalogue_model=m.catalogue_model, created_by=by[:100], created_at=now))
+        s.add_all(rows)
+        s.flush()
         requeued = requeue(s, [vid for vid, _ in mapping_vehicles(s, req)])
         s.commit()
-    return {"created": created, "requeued": requeued}
+        return {"created": len(rows), "ids": [r.id for r in rows], "requeued": requeued}
 
 
 def _mapping_decode_vehicles(session: Session, m: DecodeMapping):
@@ -175,10 +181,19 @@ def list_mappings(eng=Depends(engines)):
 
 @router.delete("/mappings/{mapping_id}")
 def delete_mapping(mapping_id: int, eng=Depends(engines)):
+    return remove_mapping(eng, mapping_id)
+
+
+def remove_mapping(eng, mapping_id: int, created_by_prefix: str | None = None) -> dict:
+    """Delete a mapping and requeue every vehicle it may have matched. With created_by_prefix, only a mapping
+    whose creator starts with it (the MCP may delete only what agents made)."""
     with Session(eng[0]) as s:
         m = s.get(DecodeMapping, mapping_id)
         if m is None:
             raise HTTPException(404, "mapping not found")
+        if created_by_prefix and not (m.created_by or "").startswith(created_by_prefix):
+            raise HTTPException(403, f"mapping {mapping_id} was made by {m.created_by}, not by an agent; "
+                                     "only the user can delete it, in the admin UI")
         ids = [vid for vid, _ in s.execute(_mapping_decode_vehicles(s, m))]
         s.delete(m)
         requeued = requeue(s, ids, include_matched=True)
@@ -236,6 +251,11 @@ def preview_rule(req: RuleRequest, eng=Depends(engines)):
 
 @router.post("/rules")
 def create_rule(req: RuleRequest, request: Request, eng=Depends(engines)):
+    return save_rule(eng, req, who(request))
+
+
+def save_rule(eng, req: RuleRequest, by: str) -> dict:
+    """Write the make and/or model rule and requeue the group's vehicles."""
     ji, pi = eng
     cat_make = _check_rule(pi, req)
     now = _now()
@@ -245,13 +265,13 @@ def create_rule(req: RuleRequest, request: Request, eng=Depends(engines)):
         if req.raw_make and req.raw_make.strip().lower() != cat_make.lower():
             s.add(MappingRule(**scope, field="make", rule_type="exact", raw_value=req.raw_make,
                               canonical_value=cat_make, priority=100, is_active=True, created_by="manual",
-                              created_at=now, applied_count=0, approved_by=who(request), approved_at=now))
+                              created_at=now, applied_count=0, approved_by=by[:100], approved_at=now))
             created += 1
         if req.model and req.raw_model and req.raw_model != req.model:
             s.add(MappingRule(**scope, field="model", rule_type="exact", raw_value=req.raw_model,
                               canonical_value=req.model, make_context=cat_make, priority=100, is_active=True,
                               created_by="manual", created_at=now, applied_count=0,
-                              approved_by=who(request), approved_at=now))
+                              approved_by=by[:100], approved_at=now))
             created += 1
         if not created:
             _invalid("make", "the yard already says exactly this; nothing to map")

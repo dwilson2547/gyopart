@@ -18,7 +18,10 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from urllib.parse import quote, urlsplit
 
+from ..mcp import is_open
 from . import session
+
+CONSENT_PATH = "/oauth/consent"   # admin_api/mcp/oauth.py
 
 LOGIN = "/api/auth/oidc/login"
 RETRY_COOKIE = "gya_retry"   # marks one automatic sign-in retry after a failed callback
@@ -123,11 +126,13 @@ def install(app: FastAPI, env: dict | None = None) -> bool:
         # The session cookie belongs to the public host: send page loads on any other host (the LAN ingress)
         # there, or they'd loop through sign-in forever.
         if public_host and request.headers.get("host") != public_host and request.method == "GET" \
-                and not path.startswith("/api/") and not path.startswith("/assets/"):
+                and not path.startswith("/api/") and not path.startswith("/assets/") and not is_open(path):
             target = path + (f"?{request.url.query}" if request.url.query else "")
             return RedirectResponse(public_url.rstrip("/") + target)
         request.state.user = session.verify(secret, request.cookies.get(session.COOKIE))
-        if path in PUBLIC or path.startswith("/assets/"):
+        # The MCP endpoint and OAuth handlers check their own credentials; the consent page checks the session
+        # itself (its form post is bound to the page by a nonce, so it needs no X-Admin header).
+        if path in PUBLIC or path.startswith("/assets/") or is_open(path) or path == CONSENT_PATH:
             return await call_next(request)
         if request.state.user is None:
             if request.method == "GET" and not path.startswith("/api/") and is_navigation(request):

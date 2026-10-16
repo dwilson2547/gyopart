@@ -1,6 +1,7 @@
 import { Link, useLocation } from "./router.tsx";
 import { get, post } from "./api.ts";
 import { ToastHost, useLoad } from "./util.tsx";
+import { AgentsPage } from "./AgentsPage.tsx";
 import { DiscrepanciesPage } from "./DiscrepanciesPage.tsx";
 import { MappingsPage } from "./MappingsPage.tsx";
 import { VehiclePage } from "./VehiclePage.tsx";
@@ -10,7 +11,7 @@ export default function App() {
   const loc = useLocation();
   const vehicle = loc.path.match(/^\/vehicles\/(\d+)$/);
   const page = vehicle ? <VehiclePage key={vehicle[1]} id={Number(vehicle[1])} />
-    : loc.path === "/mappings" ? <MappingsPage /> : <DiscrepanciesPage />;
+    : loc.path === "/mappings" ? <MappingsPage /> : loc.path === "/agents" ? <AgentsPage /> : <DiscrepanciesPage />;
   return (
     <ToastHost>
       <header className="topbar">
@@ -18,6 +19,7 @@ export default function App() {
         <nav>
           <Link to="/" className={loc.path === "/" ? "on" : ""}>Discrepancies</Link>
           <Link to="/mappings" className={loc.path === "/mappings" ? "on" : ""}>Mappings &amp; rules</Link>
+          <Link to="/agents" className={loc.path === "/agents" ? "on" : ""}>Agents</Link>
         </nav>
         <div className="grow" />
         <VehicleSearch />

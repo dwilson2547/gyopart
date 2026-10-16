@@ -1,5 +1,6 @@
 """Junkyard admin: the JSON API (admin_api/api) behind the admin SPA (admin_ui/, served from STATIC_DIR), with
-authentik sign-in in front (admin_api/auth). Design: docs/admin-rewrite-design.md.
+authentik sign-in in front (admin_api/auth) and the discrepancy-fix MCP at /mcp (admin_api/mcp). Design:
+docs/admin-rewrite-design.md.
 
     JUNKYARD_DATABASE_URL=... PARTS_DATABASE_URL=... uvicorn admin_api.main:app --port 8300
 
@@ -21,6 +22,7 @@ from sqlalchemy.exc import OperationalError
 
 from admin_api.api import router as api_router
 from admin_api.auth.web import install as install_auth
+from admin_api.mcp import install as install_mcp
 
 _engine: Engine | None = None
 _pi_engine: Engine | None = None
@@ -33,7 +35,11 @@ async def lifespan(app: FastAPI):
                             connect_args={"options": "-c statement_timeout=10000"})
     if parts_url := os.environ.get("PARTS_DATABASE_URL"):
         _pi_engine = create_engine(parts_url, pool_pre_ping=True)
-    yield
+    if _mcp is not None:
+        async with _mcp.session_manager.run():
+            yield
+    else:
+        yield
     _engine.dispose()
     if _pi_engine:
         _pi_engine.dispose()
@@ -51,6 +57,8 @@ async def _db_unreachable(request: Request, exc: OperationalError):
 # authentik sign-in + the guard in front of everything (on when OIDC_ISSUER is set).
 install_auth(app)
 app.include_router(api_router)
+# The discrepancy-fix MCP at /mcp, with OAuth sign-in for its clients (on with sign-in and an https PUBLIC_URL).
+_mcp = install_mcp(app)
 
 
 @app.get("/admin/{rest:path}", include_in_schema=False)
