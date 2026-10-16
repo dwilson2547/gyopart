@@ -99,6 +99,15 @@ def local_path(path: str | None) -> str:
     return path
 
 
+def flow_next(flow_cookie: str | None) -> str:
+    """The return-to page recorded in a flow cookie ("/" if there's none or it's unreadable)."""
+    parts = (flow_cookie or "").split(".")
+    try:
+        return local_path(_unb64(parts[3])) if len(parts) == 4 else "/"
+    except ValueError:
+        return "/"
+
+
 def redirect_uri(public_url: str) -> str:
     return f"{public_url.rstrip('/')}{FLOW_PATH}/callback"
 
