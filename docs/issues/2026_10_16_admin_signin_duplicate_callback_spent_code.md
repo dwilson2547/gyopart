@@ -127,10 +127,11 @@ user's exact failed callback URL in prod now restarts the sign-in.
 - `junkyard-platform/tests/test_admin_auth.py` — navigation-only sign-in starts, one quiet retry then the readable page, duplicate after a successful sign-in
 - `helm/gyopart/values.yaml` — `images.adminApi: sha-355b70fb7b49`
 
-## Follow-ups
+## Follow-ups (done 2026-10-16)
 
-- The scrape-job-manager UI (`web-scrapers/scrape-job-manager/ui/backend/sjm_ui/main.py`, `oidc.py`) has the
-  same guard and callback code and the same two weaknesses; not yet ported.
-- Cloudflare caches responses for file-like paths (`.ico` for 4 h): the signed-in `/favicon.ico` request got the
-  SPA's `index.html` (200, no data in it) and the edge served that copy afterwards. The SPA route should 404
-  missing files with an extension and not let the shell be cached.
+- Ported to the scrape-job-manager UI (web-scrapers/scrape-job-manager b422c0b, UI image sha-b422c0b2b63d): the
+  same callback recovery. Its server only guards /api (the SPA isn't gated), so the favicon case didn't apply.
+- Both SPAs: only the first 401 navigates to sign-in. Concurrent API calls each starting one were the likely source
+  of the 7-in-6-seconds burst (admin-api sha-313aed947b12).
+- Cloudflare caching: both SPA routes now 404 missing files with an extension and send the shell as no-store
+  (admin-api sha-f9c82e4c01a3). Cloudflare still answers /robots.txt itself (its managed content-signals file).
