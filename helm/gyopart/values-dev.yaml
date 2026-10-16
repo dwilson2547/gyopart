@@ -200,7 +200,7 @@ scraping:
     # DB queue, so items per run vary with what is due — no zero/drop checks. Browser is its own browserless
     # sidecar (headed, scraping.browserSidecar); all site traffic goes through the VPN proxy.
     parts-direct:
-      image: dwilson2547/gyopart-scraper-parts-direct@sha256:f98991297aa72a8022e99b03360e17fb9fdbbdd9c0d93e2aeae94f339c9096e7
+      image: dwilson2547/gyopart-scraper-parts-direct@sha256:22a78ded39ebb3ddd0b4b2a515aa1e1a5b1ff575419209a0901c5cf34a3e6479
       database: parts-interchange
       browserSidecar: true
       timeout: 17h
@@ -220,3 +220,8 @@ scraping:
         parts-direct-mopar: {pool: parts-direct, params: {config: fiat}, suspend: true}
         # New site (2026-10-13): Alfa Romeo, OEM catalogues from 2017 only, so discovery reaches back 10 years.
         parts-direct-alfa: {pool: parts-direct, params: {config: alfa, refresh: false, discovery_years: 10, discovery_interval_days: 30}}
+        # New domains (2026-10-16, design-v2 §0): one manual run each to see whether Cloudflare clears through the VPN.
+        # Suzuki's catalogue is complete (1985-2013); its run only proves the site, looking back to 2013.
+        parts-direct-vw: {pool: parts-direct, params: {config: vw, refresh: false, discovery_interval_days: 30}, suspend: true}
+        parts-direct-mazda: {pool: parts-direct, params: {config: mazda, refresh: false, discovery_interval_days: 30}, suspend: true}
+        parts-direct-suzuki: {pool: parts-direct, params: {config: suzuki, refresh: false, discovery_years: 15, discovery_interval_days: 30}, suspend: true}
