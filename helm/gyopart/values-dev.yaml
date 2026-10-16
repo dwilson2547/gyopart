@@ -9,7 +9,7 @@ imagePullPolicy: Always
 # Admin rewrite phases 1-3 (junkyard-platform/docs/admin-rewrite-design.md) under test in dev; prod stays on
 # values.yaml's images until it's promoted. Dev DB is migrated to 0005.
 images:
-  adminApi: dwilson2547/admin-api:sha-00faacc6adc5
+  adminApi: dwilson2547/admin-api:sha-0f4acb0acccb
   vinResolver: dwilson2547/vin-resolver:sha-2af88a943620
 
 # Admin sign-in (phase 4): authentik app gyopart-admin (infra/cluster-config/authentik/blueprints/gyopart-admin.yaml),
