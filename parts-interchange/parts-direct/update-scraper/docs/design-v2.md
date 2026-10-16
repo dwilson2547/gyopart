@@ -28,19 +28,22 @@ Replace the JSON state files with database writes and a work queue; add outage h
 | bmw, ford, gm, honda, hyundai, infiniti, jaguar, kia, mercedes, mini, mitsubishi, nissan, subaru, toyota, volvo | `refresh: false`, `discovery_interval_days: 30` | new vehicles only (§3.8d); mini also checked with a full discovery + 2026 cars written |
 | fiat (Mopar's full catalogue) | `discovery_interval_days: 30`, refresh on | 3,493-vehicle backlog; dev pilot ran here first |
 
-- **Held back** (no job):
+- **New domains, prod jobs 2026-10-16** (`refresh: false`, `discovery_interval_days: 30`; image built from main
+  `fda4744`). Each first ran in dev (one manual run, capped at 2 h) through the VPN:
 
-| Site | Finding (2026-10-11) |
-|---|---|
-| audi, acura, porsche | moved to `<make>.oempartsonline.com`. 2026-10-11: vehicle URLs redirected to a model page and the picker AJAX answered 403 even after the warm-up. **Rechecked 2026-10-16** from a local browser: it is the same RevolutionParts webstore (`cdn-resources.revolutionparts.io`), vehicle pages load without redirecting, and every picker step answers 200 with the scraper's query + CSRF header. Configs now point there; dev jobs `parts-direct-{audi,acura,porsche}` test the VPN path |
-| vw | `volkswagenpartsdirect.com` redirects to a dealer site, `hewlettvw.com`. **Candidate (2026-10-16):** `www.vwdirectparts.com` |
-| mazda | Cloudflare interstitial never cleared from the VPN (> 45 s, twice) on `mazdapartsdirect.com` (the config's domain). **Candidate (2026-10-16):** `www.mazdapartdirect.com` (no s); `mazda.oempartsonline.com` also exists but is the oempartsonline platform (see audi) |
-| suzuki | `suzukicarparts.com` serves an expired TLS certificate, and is no longer a parts site (user, 2026-10-16). **Candidate (2026-10-16):** `www.suzukiautomotiveparts.com` — Suzuki left the US car market after 2013, so its job needs `discovery_years` reaching back past 7 years |
+| Site config | Domain (was) | Dev run 2026-10-16 |
+|---|---|---|
+| vw | `www.vwdirectparts.com` (volkswagenpartsdirect.com, now a dealer redirect) | 275 listed, 123 new; 16 cars written |
+| mazda | `www.mazdapartdirect.com` (mazdapartsdirect.com: Cloudflare never cleared from the VPN) | 200 listed, 74 new; 7 cars incl. two full Mazda 3s (~2,500 parts, ~320 diagrams each) |
+| audi | `audi.oempartsonline.com` (flowaudipartsdirect.com) | 676 listed, 350 new; first car (2026 A3, 1,498 part pages) cut off by the 2 h dev cap |
+| acura | `acura.oempartsonline.com` (acuraoempartsdirect.com) | 79 listed, 32 new; cars written |
+| porsche | `porsche.oempartsonline.com` (porscheoemwarehouse.com) | 513 listed, 248 new; 11 cars written (one transient challenge page mid-run) |
 
-- Candidates (user's leads, checked 2026-10-16 from a local headed browser, **not yet through the VPN**): all
-  three are RevolutionParts stores like the 16 working sites (`cdn-resources.revolutionparts.io`, `/oem-parts`,
-  vehicle pages `/v-<year>-<make>-<model>`: 2010 Suzuki SX4, 2015 VW Jetta, 2015 Mazda 3 all load). Each should
-  need only a `Configs` entry + a dev ScrapeJob; whether Cloudflare clears through the VPN is the open question.
+  oempartsonline is the same RevolutionParts webstore as the other sites (the 2026-10-11 note that it was a
+  different platform was wrong; the redirects and picker 403 seen then no longer happen). Brand-new models
+  (2026/2027) list accessories only or no catalogue, as on the other sites.
+- **suzuki**: `www.suzukiautomotiveparts.com` works (dev run: 27 listed, 0 new) but has **no prod job**: the
+  catalogue is complete (Suzuki left the US car market after 2013).
 
 - The dev pilot job (`gyopart-dev/parts-direct-mopar`) is suspended so the site isn't scraped twice.
 
