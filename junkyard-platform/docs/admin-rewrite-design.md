@@ -125,7 +125,8 @@ and yards:
   them within seconds and the group leaves the list.
 - **Ignore** marks the group ignored. It reopens if new vehicles arrive with a different decode.
 
-**Catalogue gaps resolve themselves**: a nightly job requeues `year_not_in_catalogue` /
+**Catalogue gaps resolve themselves** (built 2026-10-16: CronJob `catalogue-gap-recheck`, 03:30 New York,
+`pipeline.worker --requeue-reasons`; first prod run requeued 11,516): a nightly job requeues `year_not_in_catalogue` /
 `model_year_gap` vehicles. That's ~14k vehicles with cached decodes, so it costs catalogue queries
 only.
 
