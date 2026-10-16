@@ -13,7 +13,7 @@ class Configs:
             'port': '9222'
         },
         'acura': {
-            'base_url': 'https://www.acuraoempartsdirect.com',
+            'base_url': 'https://acura.oempartsonline.com',  # 2026-10-16: the old domain moved here (RevolutionParts)
             'data_dir': f'{ROOT_PATH}/acura',
             'port': '9223'
         },
@@ -78,7 +78,7 @@ class Configs:
             'port': '9234'
         },
         'porsche': {
-            'base_url': 'https://www.porscheoemwarehouse.com',
+            'base_url': 'https://porsche.oempartsonline.com',  # 2026-10-16: the old domain moved here (RevolutionParts)
             'data_dir': f'{ROOT_PATH}/porsche',
             'port': '9235'
         },
@@ -88,7 +88,7 @@ class Configs:
             'port': '9236'
         },
         'audi': {
-            'base_url': 'https://www.flowaudipartsdirect.com',
+            'base_url': 'https://audi.oempartsonline.com',  # 2026-10-16: the old domain moved here (RevolutionParts)
             'data_dir': f'{ROOT_PATH}/audi',
             'port': '9237'
         },
