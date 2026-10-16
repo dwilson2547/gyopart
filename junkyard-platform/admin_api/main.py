@@ -71,7 +71,11 @@ if _static and _static.is_dir():
         file = (_static / path).resolve()
         if path and file.is_file() and _static.resolve() in file.parents:
             return FileResponse(file)
-        return FileResponse(_static / "index.html")
+        # A missing file (favicon.ico, robots.txt, …) is a 404, not the app shell: Cloudflare caches file-like
+        # paths, and once kept a signed-in browser's /favicon.ico (= index.html) for 4 h.
+        if "." in path.rsplit("/", 1)[-1]:
+            raise HTTPException(404)
+        return FileResponse(_static / "index.html", headers={"Cache-Control": "no-store"})
 else:
     @app.get("/", include_in_schema=False)
     async def root():

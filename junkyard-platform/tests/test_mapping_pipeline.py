@@ -620,3 +620,18 @@ def test_integration_resolve_vehicle_no_crash():
             if v:
                 result = resolve_vehicle(v, session, pi_engine, rules, dry_run=True)
                 assert result in valid_results, f"Unexpected result: {result!r}"
+
+
+def test_requeue_reasons_targets_open_discrepancies_by_reason():
+    """The nightly catalogue-gap re-check: only active, unmatched, non-ignored vehicles with those reasons."""
+    from pipeline.worker import requeue_reasons
+    session = MagicMock()
+    session.execute.return_value.rowcount = 7
+    with patch("pipeline.worker.Session") as S:
+        S.return_value.__enter__.return_value = session
+        assert requeue_reasons(MagicMock(), ["year_not_in_catalogue", "model_year_gap"]) == 7
+    sql = str(session.execute.call_args.args[0].compile(compile_kwargs={"literal_binds": True}))
+    assert "UPDATE vehicles SET resolve_attempted_at=NULL" in sql
+    assert "'year_not_in_catalogue', 'model_year_gap'" in sql and "!= 'ignored'" in sql
+    assert "is_active IS true" in sql and "car_id_resolved = false" in sql
+    session.commit.assert_called_once()
