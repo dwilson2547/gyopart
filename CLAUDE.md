@@ -100,7 +100,8 @@ Never committed. Pre-provisioned with kubectl. Example templates in `helm/gyopar
 - `gyopart.danwils.com` → gyopart-ui:80, **public** (prod only, `publicIngress` in `values-prod.yaml`; anonymous, read-only; `/v1/vin/` rate-limited).
 - `gyopart-admin.danwils.com` → admin-api:8300 (prod) and `gyopart-admin-dev.danwils.com` (dev), **public behind
   authentik sign-in** (group `gyopart-admin`; `adminAuth` + `adminPublicIngress` in values). With sign-in on, the LAN
-  `admin.*` hosts redirect page loads to the public host.
+  `admin.*` hosts redirect page loads to the public host. Its MCP server (discrepancy fixes) is at `<that host>/mcp`,
+  OAuth sign-in from the client (`junkyard-platform/admin_api/mcp`).
 - `api.gyopart.local` → gyopart-api:8200
 - `admin.gyopart.local` → admin-api:8300
 - `inventory.gyopart.local` → inventory-api:8100
