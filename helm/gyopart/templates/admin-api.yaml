@@ -1,3 +1,41 @@
+# The admin can request a yard re-scrape: Run now on the yard's ScrapeJob (scrape-job-manager's run-now
+# annotation). Read + annotate ScrapeJobs in this namespace only.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: admin-api
+  namespace: {{ include "gyopart.namespace" . }}
+  labels:
+    {{- include "gyopart.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: admin-api
+  namespace: {{ include "gyopart.namespace" . }}
+  labels:
+    {{- include "gyopart.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [scrape.danwils.com]
+    resources: [scrapejobs]
+    verbs: [get, list, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: admin-api
+  namespace: {{ include "gyopart.namespace" . }}
+  labels:
+    {{- include "gyopart.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: admin-api
+subjects:
+  - kind: ServiceAccount
+    name: admin-api
+    namespace: {{ include "gyopart.namespace" . }}
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -17,6 +55,7 @@ spec:
         app: admin-api
         {{- include "gyopart.labels" . | nindent 8 }}
     spec:
+      serviceAccountName: admin-api
       containers:
         - name: admin-api
           image: {{ .Values.images.adminApi }}
@@ -24,6 +63,18 @@ spec:
           ports:
             - containerPort: 8300
           env:
+            - name: SCRAPEJOB_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            {{- with .Values.adminAuth.issuer }}
+            - name: OIDC_ISSUER
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.adminPublicIngress.host }}
+            - name: PUBLIC_URL
+              value: "https://{{ . }}"
+            {{- end }}
             - name: JUNKYARD_USER
               valueFrom:
                 secretKeyRef:
@@ -48,17 +99,23 @@ spec:
                   key: PARTS_PASSWORD
             - name: PARTS_DATABASE_URL
               value: "postgresql://$(PARTS_USER):$(PARTS_PASSWORD)@{{ .Values.postgres.host }}:5432/parts_interchange"
-          # TCP, not HTTP: `/` redirects to the unresolved-discrepancies page, which renders ~11 MB in ~2.7 s
-          # (2026-10-14) — past the probes' 1 s timeout, so the pod was never Ready and was restarted 34
-          # times in 45 h. The probes only need to know uvicorn is accepting connections.
+          {{- with .Values.adminAuth.secret }}
+          envFrom:
+            # OIDC_CLIENT_ID / OIDC_CLIENT_SECRET: the authentik client, hand-applied.
+            - secretRef: {name: {{ . }}}
+          {{- end }}
+          # /api/config: public (no sign-in), no database, instant. (The old pages took 2.7 s to render `/`,
+          # which is why these were TCP until the rewrite.)
           readinessProbe:
-            tcpSocket:
+            httpGet:
+              path: /api/config
               port: 8300
             initialDelaySeconds: 5
             periodSeconds: 5
             failureThreshold: 10
           livenessProbe:
-            tcpSocket:
+            httpGet:
+              path: /api/config
               port: 8300
             initialDelaySeconds: 15
             periodSeconds: 10

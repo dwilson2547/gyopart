@@ -5,7 +5,7 @@ VehicleDetail has been eliminated — all fields are flat on Vehicle.
 """
 
 from sqlalchemy import (
-    Boolean, Column, DateTime, Float, ForeignKey,
+    Boolean, Column, DateTime, Float, ForeignKey, Index,
     Integer, String, UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
@@ -132,6 +132,7 @@ class MappingDiscrepancy(Base):
     __tablename__ = "mapping_discrepancies"
     __table_args__ = (
         UniqueConstraint("vehicle_id", name="uq_discrepancy_vehicle"),
+        Index("ix_discrepancies_reason_decode", "status", "reason", "nhtsa_make", "nhtsa_model"),
     )
 
     id         = Column(Integer, primary_key=True, autoincrement=True)
@@ -147,14 +148,51 @@ class MappingDiscrepancy(Base):
     fuzzy_model_score = Column(Float,       nullable=True)
     candidate_car_id  = Column(Integer,     nullable=True)
 
-    # unresolved | pending_rule | rule_applied | manual | ignored | no_match_in_dataset
+    # unresolved (open) | ignored. Rows from before the rewrite may still say pending_rule/no_match_in_dataset;
+    # nothing writes those any more, and a matched vehicle's row is deleted.
     status = Column(String(30), nullable=False, default="unresolved")
+
+    # Why the vehicle didn't match, and what NHTSA said (null for rows recorded before 0005).
+    # reason: no_vin | decode_failed | make_not_in_catalogue | year_not_in_catalogue |
+    #         model_not_in_catalogue | model_year_gap
+    reason       = Column(String(40),  nullable=True)
+    nhtsa_year   = Column(String(10),  nullable=True)
+    nhtsa_make   = Column(String(100), nullable=True)
+    nhtsa_model  = Column(String(200), nullable=True)
+    nhtsa_series = Column(String(200), nullable=True)
 
     resolved_car_id     = Column(Integer,  nullable=True)
     resolved_by_rule_id = Column(Integer,  ForeignKey("mapping_rules.id"), nullable=True)
     resolved_at         = Column(DateTime, nullable=True)
     created_at          = Column(DateTime, nullable=False)
     last_processed_at   = Column(DateTime, nullable=True)
+
+
+class DecodeMapping(Base):
+    """An NHTSA decode name that means a catalogue make/model (admin-rewrite-design §2.2).
+
+    Matched on loose name keys (pipeline.car_matcher.name_key) of the decode's make, model and,
+    when set, series, within an optional year range. The catalogue side is always picked from the
+    catalogue, never typed; it may name a different make (Geo Prizm -> Chevrolet Prizm).
+    """
+    __tablename__ = "decode_mappings"
+    __table_args__ = (
+        Index("ix_decode_mappings_key", "make_key", "model_key"),
+    )
+
+    id              = Column(Integer,     primary_key=True, autoincrement=True)
+    nhtsa_make      = Column(String(100), nullable=False)
+    nhtsa_model     = Column(String(200), nullable=False)
+    nhtsa_series    = Column(String(200), nullable=True)   # null = any series
+    make_key        = Column(String(100), nullable=False)
+    model_key       = Column(String(200), nullable=False)
+    series_key      = Column(String(200), nullable=True)
+    year_from       = Column(Integer,     nullable=True)   # null = open-ended
+    year_to         = Column(Integer,     nullable=True)
+    catalogue_make  = Column(String(120), nullable=False)
+    catalogue_model = Column(String(120), nullable=False)
+    created_by      = Column(String(100), nullable=False)
+    created_at      = Column(DateTime,    nullable=False)
 
 
 class ScrapeRun(Base):

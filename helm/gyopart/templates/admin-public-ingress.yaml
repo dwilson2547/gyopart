@@ -1,0 +1,42 @@
+{{- with .Values.adminPublicIngress }}
+{{- if .host }}
+{{- if not $.Values.adminAuth.issuer }}
+{{- fail "adminPublicIngress.host makes the admin public: set adminAuth.issuer (and adminAuth.secret) too, it writes" -}}
+{{- end }}
+{{- if not $.Values.adminAuth.secret }}
+{{- fail "adminAuth.issuer needs adminAuth.secret (OIDC_CLIENT_ID / OIDC_CLIENT_SECRET)" -}}
+{{- end }}
+# The admin on a public host behind authentik sign-in (admin_api/auth), via Traefik pubsecure (Cloudflare in front;
+# the cluster-wide origin lockdown and per-visitor limits apply). The LAN admin.* host stays on ingress.yaml; with
+# sign-in on, page loads there are redirected here, where the session cookie lives.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: admin-public
+  namespace: {{ include "gyopart.namespace" $ }}
+  labels:
+    {{- include "gyopart.labels" $ | nindent 4 }}
+    dns.danwils.com/public: "true"
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    traefik.ingress.kubernetes.io/router.entrypoints: pubsecure
+    external-dns.kubernetes.io/target: danwils.com
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - {{ .host }}
+      secretName: {{ .tlsSecretName }}
+  rules:
+    - host: {{ .host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: admin-api
+                port:
+                  number: 8300
+{{- end }}
+{{- end }}

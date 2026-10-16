@@ -71,6 +71,12 @@ kind: ScrapeJob
 metadata:
   name: {{ $jobName }}
   namespace: {{ $ns }}
+  {{- with $job.source }}
+  labels:
+    # The vehicles.source this job writes, where it isn't the job name with - -> _ (the admin finds a
+    # vehicle's yard job by it: admin_api/api/scrapejobs.py).
+    gyopart.danwils.com/source: {{ . | quote }}
+  {{- end }}
 spec:
   scraperRef: {{ $name }}
   poolRef: {{ $job.pool }}

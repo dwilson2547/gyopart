@@ -4,4 +4,4 @@ date: 2026-05-31
 tags: k8s, postgres, schema, fastapi
 ---
 
-Both DBs use Base.metadata.create_all() in FastAPI lifespan hooks — idempotent, no separate init Job needed. junkyard_common.models.Base covers junkyard_inventory (inventory_api + admin_api). parts_interchange_common.models.Base covers parts_interchange (gyopart-api). Schema authority: dwilson-junkyard-common and dwilson-parts-interchange-common on PyPI are the single source of truth for both schemas.
+inventory_api and gyopart-api call Base.metadata.create_all() in their FastAPI lifespan hooks (idempotent, creates missing tables only, never alters). admin_api no longer does (removed 2026-10-15, admin rewrite phase 5): it starts with its database down. Column changes to junkyard_inventory go through Alembic in junkyard-platform/db/, applied by hand (gyopart CLAUDE.md). junkyard_common.models.Base covers junkyard_inventory. parts_interchange_common.models.Base covers parts_interchange (gyopart-api). Schema authority: dwilson-junkyard-common and dwilson-parts-interchange-common on PyPI are the single source of truth for both schemas.

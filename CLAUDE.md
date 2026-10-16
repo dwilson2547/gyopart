@@ -8,7 +8,9 @@ Monorepo at `workspace/gyopart/`. Services:
 - `gyopart-api/` — FastAPI BFF, port 8200. Reads parts_interchange DB, proxies inventory_api.
 - `gyopart-ui/` — React/Vite/Tailwind, port 5173/80. nginx proxy: `/v1/` → gyopart-api:8200.
 - `junkyard-platform/` — Contains `inventory_api/` (port 8100), `admin_api/` (port 8300), `junkyard_common/`, `pipeline/`.
-- `junkyard-inventory-scrapers/` — Scrapers. Alembic migrations root is here.
+- `junkyard-inventory-scrapers/` — Scrapers.
+- Junkyard schema migrations: `junkyard-platform/db/` (Alembic). Nothing applies them automatically: run
+  `alembic upgrade head` from `/app/db` in the vin-resolver pod (dev first), before deploying code that needs them.
 - `parts-interchange/` — Parts catalog data, loader, docs. Schema authority: `dwilson-parts-interchange-common` on PyPI.
 - `helm/gyopart/` — Helm chart. `values.yaml` = shared defaults + prod (`gyopart.local`), `values-prod.yaml` = prod-only
   (the scraper fleet), `values-dev.yaml` = dev (`gyopart-dev.local`, namespace `gyopart-dev`). Helm merges
@@ -88,12 +90,17 @@ Infrastructure (DNS, monitoring, postgres, ArgoCD, ai-services, etc.) lives at `
 ## Secrets
 
 Never committed. Pre-provisioned with kubectl. Example templates in `helm/gyopart/example-secrets/`.
-- `junkyard-credentials` — JUNKYARD_USER, JUNKYARD_PASSWORD, ADMIN_API_KEY
+- `junkyard-credentials` — JUNKYARD_USER, JUNKYARD_PASSWORD (ADMIN_API_KEY is unused: the admin signs in through authentik)
+- `gyopart-admin-oidc` — OIDC_CLIENT_ID, OIDC_CLIENT_SECRET (admin sign-in; same value as `authentik-gyopart-admin-oidc` in the authentik namespace)
 - `parts-interchange-credentials` — PARTS_USER, PARTS_PASSWORD
 
 ## Ingresses
 
 - `gyopart.local` → gyopart-ui:80
+- `gyopart.danwils.com` → gyopart-ui:80, **public** (prod only, `publicIngress` in `values-prod.yaml`; anonymous, read-only; `/v1/vin/` rate-limited).
+- `gyopart-admin.danwils.com` → admin-api:8300 (prod) and `gyopart-admin-dev.danwils.com` (dev), **public behind
+  authentik sign-in** (group `gyopart-admin`; `adminAuth` + `adminPublicIngress` in values). With sign-in on, the LAN
+  `admin.*` hosts redirect page loads to the public host.
 - `api.gyopart.local` → gyopart-api:8200
 - `admin.gyopart.local` → admin-api:8300
 - `inventory.gyopart.local` → inventory-api:8100

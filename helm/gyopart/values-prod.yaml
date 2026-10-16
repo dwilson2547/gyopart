@@ -1,10 +1,19 @@
 # gyopart prod (Argo app `gyopart`: main, values.yaml + this file). Only what differs from values.yaml.
 
 # Public at https://gyopart.danwils.com, anonymous and read-only (every gyopart-api route is a GET).
-# The LAN hosts (gyopart.local, api./admin.gyopart.local) stay as they are; admin-api is never public.
+# The LAN hosts (gyopart.local, api./admin.gyopart.local) stay as they are.
 publicIngress:
   host: gyopart.danwils.com
   tlsSecretName: gyopart-danwils-com-tls
+
+# Admin at https://gyopart-admin.danwils.com behind authentik sign-in (app + group gyopart-admin,
+# infra/cluster-config/authentik/blueprints/gyopart-admin.yaml). The LAN admin.gyopart.local redirects here.
+adminAuth:
+  issuer: https://auth.danwils.com/application/o/gyopart-admin/
+  secret: gyopart-admin-oidc
+adminPublicIngress:
+  host: gyopart-admin.danwils.com
+  tlsSecretName: gyopart-admin-danwils-com-tls
 
 # Scraper fleet run by scrape-job-manager (templates/scrapers.yaml): the parts-direct updater.
 scraping:
@@ -128,7 +137,7 @@ scraping:
       image: dwilson2547/gyopart-scraper-picknpull-sa@sha256:910447fb4601118daf2b58002fc116524fceeabac3759dadafd2f5401f6b30c3
       timeout: 30m
       jobs:
-        picknpull-sa: {pool: junkyard-inventory}
+        picknpull-sa: {source: picknpullsa, pool: junkyard-inventory}
     # iPull-uPull, 4 California yards.
     ipullupull:
       image: dwilson2547/gyopart-scraper-ipullupull@sha256:f0b6cb32a561e1b8420723a1e06c5661db5f1f030c350f7dbc6513975cd668fa
