@@ -24,8 +24,15 @@ export class ApiError extends Error {
   }
 }
 
+let signingIn = false;
+
+/** Go sign in and come back here. Only the first call navigates: several concurrent 401s each starting a
+ *  sign-in would overwrite each other's flow cookie (gyopart docs/issues/2026_10_16_...). */
 export function signIn(): never {
-  location.href = `/api/auth/oidc/login?next=${encodeURIComponent(location.pathname + location.search)}`;
+  if (!signingIn) {
+    signingIn = true;
+    location.href = `/api/auth/oidc/login?next=${encodeURIComponent(location.pathname + location.search)}`;
+  }
   throw new Error("signing in");
 }
 
