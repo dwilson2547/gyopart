@@ -1,6 +1,6 @@
 # Junkyard admin rewrite — design
 
-Status: **agreed** (2026-10-15, decisions in §4). Nothing here is built yet. The "Today" section and the numbers are
+Status: **live in prod** (2026-10-15; decisions in §4, phases in §3). Nothing here is built yet. The "Today" section and the numbers are
 verified against the code on `dev` (fd3f7af) and read-only queries against prod on 2026-10-15; the
 rest is planned.
 
@@ -200,6 +200,14 @@ vehicles. Edit is delete + create, so a change always goes through the preview.
 5. **Cleanup** — done 2026-10-15 (dev): old Jinja pages and their routes, the old rule UI, the LLM suggester
    (+ its cron job) and `create_all` removed; the rule engine stays for yard rules (§4). `/admin/...` URLs
    redirect to the SPA; probes are HTTP on `/api/config`; the app starts with a database down.
+6. **Prod** — promoted 2026-10-15 (gyopart main 48c4d38): https://gyopart-admin.danwils.com, prod DB at 0005, images
+   admin-api sha-6b4201f65922 / vin-resolver sha-2af88a943620. No mappings carried over (prod starts fresh). Re-match
+   of every unmatched vehicle: 102,941 → 104,055 matched (+1,114, from the bracketed-series fix alone); open reasons:
+   year_not_in_catalogue 9,779 · model_not_in_catalogue 2,408 · make_not_in_catalogue 2,317 · model_year_gap 1,737 ·
+   no_vin 512 · decode_failed 206.
+7. **Stretch: discrepancy-fix MCP** (user, 2026-10-15) — instead of LLM suggestions, a very light MCP server scoped
+   strictly to discrepancy fixes: list groups, read a group, preview a mapping/rule, create it. Same API and the same
+   preview-before-create rule as the UI; behind authentik like the admin. Not started.
 
 ## 4. Decisions (user, 2026-10-15)
 
