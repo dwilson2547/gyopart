@@ -12,6 +12,15 @@ images:
   adminApi: dwilson2547/admin-api:sha-00faacc6adc5
   vinResolver: dwilson2547/vin-resolver:sha-2af88a943620
 
+# Admin sign-in (phase 4): authentik app gyopart-admin (infra/cluster-config/authentik/blueprints/gyopart-admin.yaml),
+# group gyopart-admin. The LAN host admin.gyopart-dev.local redirects page loads here.
+adminAuth:
+  issuer: https://auth.danwils.com/application/o/gyopart-admin/
+  secret: gyopart-admin-oidc
+adminPublicIngress:
+  host: gyopart-admin-dev.danwils.com
+  tlsSecretName: gyopart-admin-dev-danwils-com-tls
+
 postgres:
   host: postgres-dev.postgres.svc.cluster.local
   junkyardSecret: junkyard-credentials
