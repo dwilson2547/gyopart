@@ -203,7 +203,9 @@ scraping:
       image: dwilson2547/gyopart-scraper-parts-direct@sha256:1d337e46a25f3ee2d4df35f11979792def274c2b62e2a862c537f58dfbd09658
       database: parts-interchange
       browserSidecar: true
-      timeout: 17h
+      # Dev runs only prove a site works before it ships to prod (user, 2026-10-16); the scraper stops gracefully
+      # at SCRAPE_DEADLINE (timeout minus 10%) and the next run resumes the queue.
+      timeout: 2h
       health: {minItems: 0, maxDropPct: 100}
       policy:
         spacing: {min: 2m, jitter: 3m}
