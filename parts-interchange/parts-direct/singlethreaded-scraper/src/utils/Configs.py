@@ -53,7 +53,7 @@ class Configs:
             'port': '9230'
         },
         'vw': {
-            'base_url': 'https://www.volkswagenpartsdirect.com',
+            'base_url': 'https://www.vwdirectparts.com',  # 2026-10-16: volkswagenpartsdirect.com redirects to a dealer
             'data_dir': f'{ROOT_PATH}/vw',
             'port': '9231'
         },
@@ -103,7 +103,7 @@ class Configs:
             'port': '9239'
         },
         'mazda': {
-            'base_url': 'https://www.mazdapartsdirect.com',
+            'base_url': 'https://www.mazdapartdirect.com',  # 2026-10-16: mazdapartsdirect.com never cleared Cloudflare via the VPN
             'data_dir': f'{ROOT_PATH}/mazda',
             'port': '9231'
         },
@@ -118,7 +118,7 @@ class Configs:
             'port': '9233'
         },
         'suzuki': {
-            'base_url': 'https://www.suzukicarparts.com',
+            'base_url': 'https://www.suzukiautomotiveparts.com',  # 2026-10-16: suzukicarparts.com is no longer a parts site
             'data_dir': f'{ROOT_PATH}/suzuki',
             'port': '9234'
         },
