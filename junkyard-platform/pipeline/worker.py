@@ -15,6 +15,7 @@ CLI:
   python -m pipeline.worker --once                # drain the queue, then exit
   python -m pipeline.worker --requeue vin_decode  # put vehicles resolved by these methods back in the queue
   python -m pipeline.worker --requeue vin_exact vin_candidates ymmt_match rule_applied vin_decode discrepancy
+  python -m pipeline.worker --requeue-reasons year_not_in_catalogue model_year_gap  # open discrepancies by reason
 """
 from __future__ import annotations
 
@@ -29,7 +30,7 @@ from sqlalchemy import create_engine, select, update
 from sqlalchemy.orm import Session
 
 from junkyard_common.db import get_engine
-from junkyard_common.models import MappingRule, Vehicle
+from junkyard_common.models import MappingDiscrepancy, MappingRule, Vehicle
 from pipeline.resolution_pipeline import geocode_locations, load_mappings, resolve_vehicle
 from pipeline.vin_decoder import fetch_into_cache
 
@@ -106,6 +107,22 @@ def requeue(ji_engine, methods: list[str]) -> int:
     return n
 
 
+def requeue_reasons(ji_engine, reasons: list[str]) -> int:
+    """Put unmatched vehicles back in the queue by discrepancy reason (ignored ones stay put). The nightly
+    catalogue-gap re-check uses this: as the catalogue fills, gap vehicles match without anyone touching them.
+    Decodes come from vin_cache, so NHTSA is not re-hit."""
+    open_ids = (select(MappingDiscrepancy.vehicle_id)
+                .where(MappingDiscrepancy.reason.in_(reasons), MappingDiscrepancy.status != "ignored"))
+    with Session(ji_engine) as s:
+        n = s.execute(
+            update(Vehicle)
+            .where(Vehicle.id.in_(open_ids), Vehicle.is_active.is_(True), Vehicle.car_id_resolved == False)  # noqa: E712
+            .values(resolve_attempted_at=None)
+        ).rowcount
+        s.commit()
+    return n
+
+
 def run(once: bool = False) -> None:
     ji_engine = get_engine()
     pi_engine = create_engine(os.environ["PARTS_DATABASE_URL"], pool_pre_ping=True)
@@ -148,8 +165,12 @@ if __name__ == "__main__":
     parser.add_argument("--once", action="store_true", help="drain the queue, then exit")
     parser.add_argument("--requeue", nargs="+", metavar="METHOD",
                         help="requeue vehicles resolved by these car_id_method values, then exit")
+    parser.add_argument("--requeue-reasons", nargs="+", metavar="REASON",
+                        help="requeue open discrepancies with these reasons, then exit")
     args = parser.parse_args()
-    if args.requeue:
+    if args.requeue_reasons:
+        print(f"requeued {requeue_reasons(get_engine(), args.requeue_reasons)} vehicles")
+    elif args.requeue:
         print(f"requeued {requeue(get_engine(), args.requeue)} vehicles")
     else:
         run(once=args.once)

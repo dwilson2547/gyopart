@@ -60,7 +60,7 @@ def install(app: FastAPI, env: dict | None = None) -> bool:
 
     @app.get("/api/config", include_in_schema=False)
     def config():
-        return {"app": "junkyard-admin", "phase": 4, "oidc": bool(issuer)}
+        return {"app": "junkyard-admin", "oidc": bool(issuer)}
 
     @app.get("/api/me", include_in_schema=False)
     def me(request: Request):

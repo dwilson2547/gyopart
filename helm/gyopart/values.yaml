@@ -57,6 +57,12 @@ monitoring:
 vinResolver:
   enabled: true
 
+# Nightly requeue of catalogue-gap vehicles (templates/catalogue-gap-recheck.yaml) so they match as the catalogue fills.
+catalogueGapRecheck:
+  enabled: true
+  schedule: "30 3 * * *"
+  timeZone: America/New_York
+
 
 # Scraper fleet run by scrape-job-manager (templates/scrapers.yaml). Off by default: Helm layers every
 # environment's values file over this one and merges maps, so jobs defined here would also run in dev.

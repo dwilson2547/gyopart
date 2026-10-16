@@ -1,0 +1,45 @@
+{{- if and .Values.vinResolver.enabled .Values.catalogueGapRecheck.enabled }}
+# Nightly catalogue-gap re-check (junkyard-platform/docs/admin-rewrite-design.md §2.3): requeue unmatched vehicles
+# whose discrepancy says the catalogue doesn't cover them yet (year_not_in_catalogue, model_year_gap). The running
+# vin-resolver re-matches them from cached decodes (no NHTSA calls), so as the catalogue fills (Mopar backlog),
+# they match without anyone touching them. Ignored groups stay put. Takes seconds; the re-match a few minutes.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: catalogue-gap-recheck
+  namespace: {{ include "gyopart.namespace" . }}
+  labels:
+    app: catalogue-gap-recheck
+    {{- include "gyopart.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.catalogueGapRecheck.schedule | quote }}
+  timeZone: {{ .Values.catalogueGapRecheck.timeZone | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      ttlSecondsAfterFinished: 86400
+      template:
+        metadata:
+          labels:
+            app: catalogue-gap-recheck
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: recheck
+              image: {{ .Values.images.vinResolver }}
+              imagePullPolicy: {{ .Values.imagePullPolicy }}
+              command: ["python", "-m", "pipeline.worker", "--requeue-reasons", "year_not_in_catalogue", "model_year_gap"]
+              env:
+                - name: JUNKYARD_USER
+                  valueFrom: {secretKeyRef: {name: {{ .Values.postgres.junkyardSecret }}, key: JUNKYARD_USER}}
+                - name: JUNKYARD_PASSWORD
+                  valueFrom: {secretKeyRef: {name: {{ .Values.postgres.junkyardSecret }}, key: JUNKYARD_PASSWORD}}
+                - name: JUNKYARD_DATABASE_URL
+                  value: "postgresql://$(JUNKYARD_USER):$(JUNKYARD_PASSWORD)@{{ .Values.postgres.host }}:5432/junkyard_inventory"
+              resources:
+                requests: {cpu: 10m, memory: 64Mi}
+                limits: {memory: 256Mi}
+{{- end }}
