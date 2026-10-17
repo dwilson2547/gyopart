@@ -1,0 +1,10 @@
+{{- /* Log filter for the per-run browserless sidecar (values: scraping.browserLogging). */ -}}
+{{- if .Values.scraping.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: browserless-logging
+  namespace: {{ .Values.namespace.name }}
+data:
+  DEBUG: {{ .Values.scraping.browserLogging.DEBUG | quote }}
+{{- end }}

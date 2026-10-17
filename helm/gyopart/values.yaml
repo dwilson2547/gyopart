@@ -74,6 +74,11 @@ scraping:
   # picks and is bounded by its own memory limit. One shared browserless pod held every session on
   # one node and a single tab reached 6.8 GB (2026-10-13). Scrapers that only need a browser for a
   # token keep using scrape-stack's shared browserless.
+  # Browserless sidecar log filter, in the `debug` library's syntax (browserless.io:<module>:<level>, levels
+  # trace < debug < info < warn < error). Info and up by default: trace/debug were ~80% of its lines, mostly
+  # the CDP websocket route. Everything: "browserless*". Takes effect on the next run (each run is a new pod).
+  browserLogging:
+    DEBUG: "browserless*,-browserless*:trace,-browserless*:debug"
   browserSidecar:
     name: browserless
     # Browserless 2.57.0 / Chrome 156 — the version Scuderia collection was verified on (2026-10-13).
@@ -83,6 +88,9 @@ scraping:
       - {name: CONCURRENT, value: "1"}
       # Session lifetime cap (ms); clients ask for their own with ?timeout= (parts-direct does).
       - {name: TIMEOUT, value: "64800000"}
+      # Which browserless loggers print (ConfigMap browserless-logging, from browserLogging below).
+      - name: DEBUG
+        valueFrom: {configMapKeyRef: {name: browserless-logging, key: DEBUG}}
     # The scraper container starts only once this passes.
     startupProbe:
       httpGet: {path: /active, port: 3000}
