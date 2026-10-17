@@ -145,7 +145,7 @@ class Image(Base):
     saved            = Column(Boolean,     default=False)
     uploaded         = Column(Boolean,     default=False)
     manufacturer_id  = Column(Integer,     ForeignKey("manufacturer.id"), index=True)
-    imgcache_hash    = Column(String(64))
+    content_hash     = Column(String(64), index=True)  # BLAKE3 of the image bytes (also imgcache's key)
     imgcache_bucket  = Column(String(100))
 
     manufacturer = relationship("Manufacturer", back_populates="images")

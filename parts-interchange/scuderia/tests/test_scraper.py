@@ -23,7 +23,7 @@ def test_journal_resume_and_lossless_output(captured, tmp_path):
         journal.save(parsed, "a" * 64, "scuderia")
     records = [json.loads(line) for line in path.read_text().splitlines()]
     assert len(records) == 71
-    assert records[0]["image"]["imgcache_hash"] == "a" * 64
+    assert records[0]["image"]["content_hash"] == "a" * 64
     assert len(records[0]["source"]["hotspots"]) == len(parsed.hotspots)
     assert records[1]["part"]["manufacturer"] == "Ferrari"
     assert records[1]["source"]["notes"] == "Not for EU GS, UK"
@@ -107,7 +107,7 @@ def test_bad_cached_html_fails_without_marking_complete(captured, tmp_path):
     web.store.assert_not_called()
 
 
-def test_image_miss_uses_imgcache_hash_contract(captured):
+def test_image_miss_uses_content_hash_contract(captured):
     c, _, image, transport = collector(captured)
     image.lookup.return_value = None
     image.store.return_value = {"hash": "b" * 64}

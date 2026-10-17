@@ -85,7 +85,7 @@ image_table = Table("image", metadata,
     Column("saved", Boolean, default=False),
     Column("uploaded", Boolean, default=False),
     Column("manufacturer_id", Integer, ForeignKey("manufacturer.id")),
-    Column("imgcache_hash", String(64)),
+    Column("content_hash", String(64)),
     Column("imgcache_bucket", String(100)),
 )
 

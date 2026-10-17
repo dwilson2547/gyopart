@@ -272,7 +272,7 @@ class PartsDirectScraper:
                                     self.pi_engine, car_context,
                                     engine.get(keys.DIAGRAMS, []),
                                     parts, manufacturer_id,
-                                    imgcache_hashes=img_hashes,
+                                    content_hashes=img_hashes,
                                 )
                                 self.save(tree, parts)
                 year["done"] = True
