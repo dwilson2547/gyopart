@@ -207,7 +207,7 @@ scraping:
     # DB queue, so items per run vary with what is due — no zero/drop checks. Browser is its own browserless
     # sidecar (headed, scraping.browserSidecar); all site traffic goes through the VPN proxy.
     parts-direct:
-      image: dwilson2547/gyopart-scraper-parts-direct@sha256:1d337e46a25f3ee2d4df35f11979792def274c2b62e2a862c537f58dfbd09658
+      image: dwilson2547/gyopart-scraper-parts-direct@sha256:5cd8f5cc4f6699d31fa7208ced9c24e1ef8286a76d60d3c4db81eca75e8bd255
       database: parts-interchange
       browserSidecar: true
       # Dev runs only prove a site works before it ships to prod (user, 2026-10-16); the scraper stops gracefully
