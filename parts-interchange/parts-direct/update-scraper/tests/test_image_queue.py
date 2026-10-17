@@ -60,17 +60,22 @@ def test_late_finishers_are_flipped_once_and_failures_never():
 
 
 class FakeBucket:
-    def __init__(self, existing=()):
-        self.objects = {k: b"" for k in existing}
+    def __init__(self, existing=None):
+        self.objects = {}
+        self.meta = dict(existing or {})          # key -> metadata dict as stat_object reports it
 
     def stat_object(self, bucket, key):
         from minio.error import S3Error
-        if key not in self.objects:
+        if key not in self.meta:
             raise S3Error(response=None, code="NoSuchKey", message="missing", resource=key, request_id="r", host_id="h")
-        return object()
 
-    def put_object(self, bucket, key, data, length, content_type=None):
+        class St:
+            metadata = self.meta[key]
+        return St()
+
+    def put_object(self, bucket, key, data, length, content_type=None, metadata=None):
         self.objects[key] = data.read()
+        self.meta[key] = {f"X-Amz-Meta-{k.capitalize()}": v for k, v in (metadata or {}).items()}
 
 
 def _scraper(bucket):
@@ -88,11 +93,13 @@ def test_save_image_stores_at_bucket_path_and_returns_hash(monkeypatch):
     b = FakeBucket()
     assert _scraper(b).save_image("https://cdn/x.png", "x.png") == blake3.blake3(b"png-bytes").hexdigest()
     assert b.objects["acura/images/x.png"] == b"png-bytes"
+    assert b.meta["acura/images/x.png"] == {"X-Amz-Meta-Blake3": blake3.blake3(b"png-bytes").hexdigest()}
 
 
 def test_save_image_skips_objects_already_stored(monkeypatch):
     import scraper_v2
     monkeypatch.setattr(scraper_v2.vpn, "proxy_url", lambda: None)
-    s = _scraper(FakeBucket(existing=["acura/images/x.png"]))
+    s = _scraper(FakeBucket(existing={"acura/images/x.png": {}, "acura/images/y.png": {"X-Amz-Meta-Blake3": "h1"}}))
     s._fetch_image = lambda url, proxies: (_ for _ in ()).throw(AssertionError("downloaded"))
-    assert s.save_image("https://cdn/x.png", "x.png") is True
+    assert s.save_image("https://cdn/x.png", "x.png") is True      # old upload: no hash on the object
+    assert s.save_image("https://cdn/y.png", "y.png") == "h1"      # earlier run's upload: hash read back

@@ -493,30 +493,36 @@ class UpdaterV2:
         resp.raise_for_status()
         return resp.content
 
-    def _object_exists(self, key: str) -> bool:
+    def _stored_hash(self, key: str):
+        """None if the object isn't in the bucket; else its BLAKE3 hash from the object metadata, or True for
+        objects stored without one (the original scraper's uploads)."""
         from minio.error import S3Error
         try:
-            self.bucket.stat_object(self.bucket_name, key)
-            return True
+            st = self.bucket.stat_object(self.bucket_name, key)
         except S3Error as ex:
             if ex.code in ("NoSuchKey", "NoSuchObject", "NotFound"):
-                return False
+                return None
             raise
+        meta = {k.lower(): v for k, v in (st.metadata or {}).items()}
+        return meta.get("x-amz-meta-blake3") or True
 
     def save_image(self, url: str, name: str):
         """Store one image in the part-images bucket at the key its image row's bucket_path names.
-        Returns its BLAKE3 hash, True if it was already there, False on failure (see ImageQueue)."""
+        Returns its BLAKE3 hash (also when it was already there and stored with one, e.g. by an earlier run cut off
+        before its vehicle was written), True if it was already there without a hash, False on failure."""
         key = f"{self.config_name}/images/{name}"
         try:
-            if self._with_retries("bucket stat", lambda: self._object_exists(key)):
-                return True
+            stored = self._with_retries("bucket stat", lambda: self._stored_hash(key))
+            if stored is not None:
+                return stored
             proxy = vpn.proxy_url()
             proxies = {"http": proxy, "https": proxy} if proxy else None
             content = self._with_retries("image download", lambda: self._fetch_image(url, proxies))
             digest = blake3.blake3(content).hexdigest()
             ctype = mimetypes.guess_type(name)[0] or "application/octet-stream"
             self._with_retries("bucket put", lambda: self.bucket.put_object(
-                self.bucket_name, key, io.BytesIO(content), len(content), content_type=ctype))
+                self.bucket_name, key, io.BytesIO(content), len(content), content_type=ctype,
+                metadata={"blake3": digest}))
             return digest
         except Exception as ex:  # noqa: BLE001 — an image failure never fails the vehicle
             print(f"image failed {url}: {ex}")
