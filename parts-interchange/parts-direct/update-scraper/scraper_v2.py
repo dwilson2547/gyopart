@@ -10,6 +10,8 @@ Stop conditions raise RunStopped with an exit code for scrape-job-manager:
 """
 from __future__ import annotations
 
+import io
+import mimetypes
 import os
 import random
 import sys
@@ -19,13 +21,14 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Optional
 from urllib.parse import urlparse
 
+import blake3
 import psycopg2
 import requests
 from bootstrap import ensure_singlethreaded_src_path
 
 ensure_singlethreaded_src_path()
 
-from cache_client import ImgCacheClient, WebCacheClient  # noqa: E402
+from cache_client import WebCacheClient  # noqa: E402
 from request_auth_client import RequestAuthClient  # noqa: E402
 from utils.CachedParser import CachedParser  # noqa: E402
 from utils.Configs import Configs  # noqa: E402
@@ -74,8 +77,11 @@ class ImageQueue:
 
     Pages submit image URLs as they are parsed and the browser moves straight on; 8 workers download
     alongside the crawl. De-duplicated per run, so an image shared by many cars downloads once. A
-    vehicle is written with whatever has finished (saved=true) and the rest as saved=false;
-    flush_updates() later flips the ones that completed after their vehicle was written."""
+    vehicle is written with whatever has finished (saved=uploaded=true) and the rest as saved=false;
+    flush_updates() later flips the ones that completed after their vehicle was written.
+
+    download(url, name) returns the image's BLAKE3 hash when it stored the bytes, True when the object
+    was already in the bucket (hash not re-read), or False on failure."""
 
     def __init__(self, download, workers: int):
         from concurrent.futures import ThreadPoolExecutor
@@ -98,6 +104,14 @@ class ImageQueue:
             self._written_unsaved.add(name)
         return False
 
+    def content_hash(self, name: str) -> Optional[str]:
+        """The hash recorded for a finished download, if this run computed one."""
+        f = self._futures.get(name)
+        if f is not None and f.done() and not f.cancelled() and f.exception() is None:
+            r = f.result()
+            return r if isinstance(r, str) else None
+        return None
+
     def pending(self) -> int:
         return sum(1 for f in self._futures.values() if not f.done())
 
@@ -107,9 +121,14 @@ class ImageQueue:
                    and self._futures[n].exception() is None and self._futures[n].result()]
         finished = [n for n in self._written_unsaved if self._futures[n].done()]
         if done_ok:
+            hashes = [self.content_hash(n) or "" for n in done_ok]
             with conn.cursor() as cur:
-                cur.execute("UPDATE image SET saved = true WHERE manufacturer_id = %s AND name = ANY(%s)",
-                            (mfr_id, done_ok))
+                cur.execute(
+                    "UPDATE image AS i SET saved = true, uploaded = true,"
+                    " content_hash = COALESCE(NULLIF(v.h, ''), i.content_hash)"
+                    " FROM unnest(%s::text[], %s::text[]) AS v(name, h)"
+                    " WHERE i.manufacturer_id = %s AND i.name = v.name",
+                    (done_ok, hashes, mfr_id))
             conn.commit()
         self._written_unsaved.difference_update(finished)
         return len(done_ok)
@@ -224,7 +243,13 @@ class UpdaterV2:
         self.stats = RunStats()
 
         self.web_cache = WebCacheClient(os.environ["WEBCACHE_URL"])
-        self.img_cache = ImgCacheClient(os.environ["IMGCACHE_URL"])
+        # Images go straight to the part-images bucket (AIStor), the permanent, backed-up store; imgcache
+        # is not in the image path (design-v2.md §3.8b).
+        from minio import Minio
+        self.bucket = Minio(os.environ["PART_IMAGES_ENDPOINT"], access_key=os.environ["PART_IMAGES_ACCESS_KEY"],
+                            secret_key=os.environ["PART_IMAGES_SECRET_KEY"],
+                            secure=os.environ.get("PART_IMAGES_SECURE", "false").lower() == "true")
+        self.bucket_name = os.environ.get("PART_IMAGES_BUCKET", "part-images")
         self.request_auth = RequestAuthClient(os.environ["REQUEST_AUTH_URL"])
         self.parser = CachedParser(self.base_url)
         self._browser = None
@@ -445,8 +470,10 @@ class UpdaterV2:
         connections refused or dropped (in the first parallel run, 2,448 of 10,203 images were lost to a
         local imgcache port-forward restarting under load). Anything else fails straight away."""
         import httpx
+        import urllib3
         transient = (requests.exceptions.ProxyError, requests.exceptions.ConnectionError,
-                     httpx.ConnectError, httpx.RemoteProtocolError, httpx.ReadError, ConnectionError)
+                     httpx.ConnectError, httpx.RemoteProtocolError, httpx.ReadError, ConnectionError,
+                     urllib3.exceptions.MaxRetryError, urllib3.exceptions.ProtocolError)
         for attempt in range(1, attempts + 1):
             try:
                 return fn()
@@ -466,16 +493,31 @@ class UpdaterV2:
         resp.raise_for_status()
         return resp.content
 
-    def save_image(self, url: str, name: str) -> bool:
+    def _object_exists(self, key: str) -> bool:
+        from minio.error import S3Error
         try:
-            if self._with_retries("imgcache lookup", lambda: self.img_cache.lookup(url)):
+            self.bucket.stat_object(self.bucket_name, key)
+            return True
+        except S3Error as ex:
+            if ex.code in ("NoSuchKey", "NoSuchObject", "NotFound"):
+                return False
+            raise
+
+    def save_image(self, url: str, name: str):
+        """Store one image in the part-images bucket at the key its image row's bucket_path names.
+        Returns its BLAKE3 hash, True if it was already there, False on failure (see ImageQueue)."""
+        key = f"{self.config_name}/images/{name}"
+        try:
+            if self._with_retries("bucket stat", lambda: self._object_exists(key)):
                 return True
             proxy = vpn.proxy_url()
             proxies = {"http": proxy, "https": proxy} if proxy else None
             content = self._with_retries("image download", lambda: self._fetch_image(url, proxies))
-            self._with_retries("imgcache store", lambda: self.img_cache.store(
-                url=url, file_bytes=content, client_name=f"parts-direct-{self.config_name}", filename=name))
-            return True
+            digest = blake3.blake3(content).hexdigest()
+            ctype = mimetypes.guess_type(name)[0] or "application/octet-stream"
+            self._with_retries("bucket put", lambda: self.bucket.put_object(
+                self.bucket_name, key, io.BytesIO(content), len(content), content_type=ctype))
+            return digest
         except Exception as ex:  # noqa: BLE001 — an image failure never fails the vehicle
             print(f"image failed {url}: {ex}")
             return False
@@ -658,7 +700,8 @@ class UpdaterV2:
                     try:
                         scraped = self.crawl(t)
                         for name, meta in scraped.images.items():
-                            meta["saved"] = self.images.status(name)
+                            meta["saved"] = meta["uploaded"] = self.images.status(name)
+                            meta["content_hash"] = self.images.content_hash(name)
                         ws = write_vehicle(conn, self.config_name, t, scraped)
                         conn.commit()
                         late = self.images.flush_updates(conn, mfr_id)

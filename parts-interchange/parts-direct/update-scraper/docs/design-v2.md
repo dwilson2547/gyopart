@@ -301,6 +301,14 @@ one replica — every concurrent job shares one exit IP).
   (✅ dev and prod, 2026-10-11): `cdn-product-images.revolutionparts.io`,
   `cdn-illustrations.revolutionparts.io`, `s3.amazonaws.com`, `dz310nzuyimx0.cloudfront.net` — pool 8,
   base delay 200 ms.
+- Where they go (2026-10-17, ⬜ dev, not yet prod): straight to the `part-images` bucket on AIStor, at the key
+  the image row's `bucket_path` already names (`<config>/images/<name>`, the layout the original scraper used).
+  An object already there is not downloaded again. A stored image gets `saved = uploaded = true` and its BLAKE3
+  hash in `image.content_hash` (renamed from `imgcache_hash`, parts_interchange revision `0003`). Before this the
+  updater stored images only in scrape-stack's imgcache, which never expires and is not backed up, and set
+  `saved` without `uploaded`: those rows (~159k on dev) are moved into the bucket by a separate drain job.
+  Settings: `scraping.partImages` in the Helm values (endpoint, bucket, secret `part-images-credentials`); dev
+  writes to `part-images-dev`.
 
 ### 3.8c Discovery (built 2026-10-11)
 

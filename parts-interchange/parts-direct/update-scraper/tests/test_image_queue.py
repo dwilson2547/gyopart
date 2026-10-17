@@ -24,7 +24,7 @@ class FakeConn:
                 return False
 
             def execute(self, sql, params):
-                conn.updates.append(sorted(params[1]))
+                conn.updates.append(sorted(zip(params[0], params[1])))
         return C()
 
     def commit(self):
@@ -36,7 +36,10 @@ def test_late_finishers_are_flipped_once_and_failures_never():
     def download(url, name):
         if name == "slow":
             gate.wait(5)
-        return name != "broken"
+            return "h-slow"           # stored now: its hash
+        if name == "fast":
+            return True               # already in the bucket: no hash
+        return False
 
     q = ImageQueue(download, 4)
     for n in ("fast", "slow", "broken", "fast"):  # duplicate submit is ignored
@@ -50,6 +53,46 @@ def test_late_finishers_are_flipped_once_and_failures_never():
     assert q.flush_updates(conn, 1) == 0  # nothing finished late yet
     gate.set()
     q.drain(conn, 1, None)
-    assert conn.updates == [["slow"]]     # flipped to saved after the fact, exactly once
+    assert conn.updates == [[("slow", "h-slow")]]  # flipped to saved/uploaded with its hash, exactly once
+    assert q.content_hash("slow") == "h-slow" and q.content_hash("fast") is None
     q.close(cancel=False)
     assert (q.saved, q.failed) == (2, 1)
+
+
+class FakeBucket:
+    def __init__(self, existing=()):
+        self.objects = {k: b"" for k in existing}
+
+    def stat_object(self, bucket, key):
+        from minio.error import S3Error
+        if key not in self.objects:
+            raise S3Error(response=None, code="NoSuchKey", message="missing", resource=key, request_id="r", host_id="h")
+        return object()
+
+    def put_object(self, bucket, key, data, length, content_type=None):
+        self.objects[key] = data.read()
+
+
+def _scraper(bucket):
+    from scraper_v2 import UpdaterV2 as Scraper
+    s = Scraper.__new__(Scraper)       # no browser, DB or services: only what save_image touches
+    s.config_name, s.bucket, s.bucket_name = "acura", bucket, "part-images"
+    s._fetch_image = lambda url, proxies: b"png-bytes"
+    return s
+
+
+def test_save_image_stores_at_bucket_path_and_returns_hash(monkeypatch):
+    import blake3
+    import scraper_v2
+    monkeypatch.setattr(scraper_v2.vpn, "proxy_url", lambda: None)
+    b = FakeBucket()
+    assert _scraper(b).save_image("https://cdn/x.png", "x.png") == blake3.blake3(b"png-bytes").hexdigest()
+    assert b.objects["acura/images/x.png"] == b"png-bytes"
+
+
+def test_save_image_skips_objects_already_stored(monkeypatch):
+    import scraper_v2
+    monkeypatch.setattr(scraper_v2.vpn, "proxy_url", lambda: None)
+    s = _scraper(FakeBucket(existing=["acura/images/x.png"]))
+    s._fetch_image = lambda url, proxies: (_ for _ in ()).throw(AssertionError("downloaded"))
+    assert s.save_image("https://cdn/x.png", "x.png") is True
