@@ -308,7 +308,7 @@ one replica — every concurrent job shares one exit IP).
   updater stored images only in scrape-stack's imgcache, which never expires and is not backed up, and set
   `saved` without `uploaded`: those rows (~159k on dev) are moved into the bucket by a separate drain job.
   Settings: `scraping.partImages` in the Helm values (endpoint, bucket, secret `part-images-credentials`); dev
-  writes to `part-images-dev`.
+  and prod share `part-images` (same sites, same file names, only missing objects written; user, 2026-10-17).
 
 ### 3.8c Discovery (built 2026-10-11)
 
