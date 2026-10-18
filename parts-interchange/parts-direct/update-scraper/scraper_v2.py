@@ -252,6 +252,7 @@ class UpdaterV2:
         self.bucket_name = os.environ.get("PART_IMAGES_BUCKET", "part-images")
         self.request_auth = RequestAuthClient(os.environ["REQUEST_AUTH_URL"])
         self.parser = CachedParser(self.base_url)
+        self._pw = None
         self._browser = None
         self._context: "BrowserContext | None" = None
         self._reconnects = 0
@@ -631,7 +632,12 @@ class UpdaterV2:
         except Exception as ex:  # noqa: BLE001 — the queue can still be worked; next run tries again
             conn.rollback()
             print(f"discovery failed, working the queue anyway: {type(ex).__name__}: {str(ex)[:300]}", flush=True)
-        self._navigate(self.base_url)  # back to a normal page for the crawl
+        try:
+            self._navigate(self.base_url)  # back to a normal page for the crawl
+        except (SiteUnavailableError, InternetDownError, vpn.VpnUnavailable) as ex:
+            # Unguarded until 2026-10-18: a VPN drop here exited 1 (Exit1) instead of 75, so the operator
+            # treated an outage as an unknown crash.
+            raise RunStopped(75, f"site unavailable after discovery: {ex}") from ex
 
     def _check_deadline(self) -> None:
         if self.deadline and datetime.now(timezone.utc).replace(tzinfo=None) >= self.deadline:
@@ -675,139 +681,146 @@ class UpdaterV2:
         consecutive_failures = 0
         self.images = ImageQueue(self.save_image, IMAGE_WORKERS)
         stopped = False
-        with sync_playwright() as p:
-            proxy = vpn.proxy_url()
-            self._pw = p
-            self._connect_browser()
+        # Started by hand rather than as a context manager: once the remote browser is gone (the VPN proxy
+        # died mid-run, 2026-10-18) closing it or stopping Playwright can block forever. close() does that
+        # after run_v2.py has reported the result, under a watchdog.
+        proxy = vpn.proxy_url()
+        self._pw = sync_playwright().start()
+        self._connect_browser()
+        try:
             try:
-                try:
-                    self._open_session()
-                    self.parser.check_page(self._content())  # homepage: challenge/block/maintenance?
-                except (SiteUnavailableError, vpn.VpnUnavailable) as ex:
-                    raise RunStopped(75, f"site unavailable at session start: {ex}") from ex
-                except (Browser403Error, Browser429Error) as ex:
-                    raise RunStopped(65, f"blocked at session start: {ex}") from ex
-                except SiteMoved as ex:
-                    raise RunStopped(65, f"site moved: {ex}") from ex
-                self._discover(conn, mfr_id)
-                while self._time_left_for_another():
-                    if (self.stats.vehicles_done + self.stats.no_catalog) % vpn.CHECK_EVERY == 0 and self.stats.vehicles_done:
-                        try:
-                            vpn.check()
-                        except vpn.VpnUnavailable as ex:
-                            raise RunStopped(75, str(ex)) from ex
-                    with conn.cursor() as cur:
-                        t = q.claim_next(cur, mfr_id, self.refresh_after_days)
-                    conn.commit()
-                    if t is None:
-                        self.stats.stop_reason = "queue_empty"
-                        break
-                    print(f"vehicle {t.id}: {t.year} {t.make} {t.model} {t.trim} {t.engine}")
+                self._open_session()
+                self.parser.check_page(self._content())  # homepage: challenge/block/maintenance?
+            except (SiteUnavailableError, vpn.VpnUnavailable) as ex:
+                raise RunStopped(75, f"site unavailable at session start: {ex}") from ex
+            except (Browser403Error, Browser429Error) as ex:
+                raise RunStopped(65, f"blocked at session start: {ex}") from ex
+            except SiteMoved as ex:
+                raise RunStopped(65, f"site moved: {ex}") from ex
+            self._discover(conn, mfr_id)
+            while self._time_left_for_another():
+                if (self.stats.vehicles_done + self.stats.no_catalog) % vpn.CHECK_EVERY == 0 and self.stats.vehicles_done:
                     try:
-                        scraped = self.crawl(t)
-                        for name, meta in scraped.images.items():
-                            meta["saved"] = meta["uploaded"] = self.images.status(name)
-                            meta["content_hash"] = self.images.content_hash(name)
-                        ws = write_vehicle(conn, self.config_name, t, scraped)
-                        conn.commit()
-                        late = self.images.flush_updates(conn, mfr_id)
-                        self.stats.vehicles_done += 1
-                        self.stats.cars_created += ws.car_created
-                        self.stats.parts_new += ws.parts_new
-                        self.stats.parts_updated += ws.parts_updated
-                        consecutive_failures = 0
-                        print(f"  done: car {ws.car_id} {'(new)' if ws.car_created else ''} parts={ws.car_parts} "
-                              f"diagrams={ws.diagrams} new_parts={ws.parts_new} | images queued={self.images.pending()} "
-                              f"late-saved={late}", flush=True)
-                    except RunStopped:
-                        conn.rollback()
-                        with conn.cursor() as cur:
-                            q.release(cur, t.id)  # stopped mid-vehicle (e.g. repeated tab crashes): it goes again
-                        conn.commit()
-                        raise
-                    except DeadlineReached:
-                        conn.rollback()
-                        with conn.cursor() as cur:
-                            q.release(cur, t.id)
-                        conn.commit()
-                        self.stats.stop_reason = "deadline"
-                        print("  deadline reached mid-vehicle: released, it goes again next run", flush=True)
-                        break
-                    except NoCatalog as ex:
-                        conn.rollback()
-                        with conn.cursor() as cur:
-                            q.mark_no_catalog(cur, t.id)
-                        conn.commit()
-                        self.stats.no_catalog += 1
-                        consecutive_failures = 0
-                        print("  not sold by this site (aftermarket only)" if isinstance(ex, NotOem) else "  no catalogue")
-                    except (SiteUnavailableError, InternetDownError, vpn.VpnUnavailable) as ex:
-                        conn.rollback()
-                        with conn.cursor() as cur:
-                            q.release(cur, t.id)
-                        conn.commit()
-                        raise RunStopped(75, f"site unavailable: {ex}") from ex
-                    except (Browser403Error, Browser429Error) as ex:
-                        conn.rollback()
-                        with conn.cursor() as cur:
-                            q.release(cur, t.id)
-                        conn.commit()
-                        raise RunStopped(65, f"blocked: {type(ex).__name__}") from ex
-                    except SiteMoved as ex:
-                        conn.rollback()
-                        with conn.cursor() as cur:
-                            q.release(cur, t.id)
-                        conn.commit()
-                        raise RunStopped(65, f"site moved: {ex}") from ex
-                    except Exception as ex:  # noqa: BLE001 — one vehicle's failure is recorded, run goes on
-                        if self._browser_gone(ex):
-                            conn.rollback()
-                            with conn.cursor() as cur:
-                                q.release(cur, t.id)  # not the vehicle's fault: it goes again
-                            conn.commit()
-                            print(f"  browser lost: {type(ex).__name__}", flush=True)
-                            self._reconnect()
-                            continue
-                        conn.rollback()
-                        with conn.cursor() as cur:
-                            q.mark_failed(cur, t.id, f"{type(ex).__name__}: {ex}")
-                        conn.commit()
-                        self.stats.failed += 1
-                        consecutive_failures += 1
-                        print(f"  failed: {type(ex).__name__}: {ex}")
-                        if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
-                            raise RunStopped(65, f"{consecutive_failures} vehicles failed in a row; last: {ex}")
-                    pause = random.uniform(*self.spacing_s)
-                    time.sleep(pause)
-                # Let queued images finish (within the deadline) and record them.
-                print(f"draining {self.images.pending()} queued images", flush=True)
-                self.images.drain(conn, mfr_id, self.deadline)
-            except RunStopped as stop:
-                self.stats.stop_reason = stop.reason  # before the finally records the run
-                stopped = True
-                raise
-            finally:
-                # On a stop (VPN/site down) pending downloads would fail anyway: cancel them; their
-                # rows stay saved=false for the image sweep.
-                self.images.close(cancel=stopped or sys.exc_info()[0] is not None)
+                        vpn.check()
+                    except vpn.VpnUnavailable as ex:
+                        raise RunStopped(75, str(ex)) from ex
+                with conn.cursor() as cur:
+                    t = q.claim_next(cur, mfr_id, self.refresh_after_days)
+                conn.commit()
+                if t is None:
+                    self.stats.stop_reason = "queue_empty"
+                    break
+                print(f"vehicle {t.id}: {t.year} {t.make} {t.model} {t.trim} {t.engine}")
                 try:
-                    self.images.flush_updates(conn, mfr_id)
-                except Exception as ex:  # noqa: BLE001
-                    print(f"could not record late image saves: {ex}")
+                    scraped = self.crawl(t)
+                    for name, meta in scraped.images.items():
+                        meta["saved"] = meta["uploaded"] = self.images.status(name)
+                        meta["content_hash"] = self.images.content_hash(name)
+                    ws = write_vehicle(conn, self.config_name, t, scraped)
+                    conn.commit()
+                    late = self.images.flush_updates(conn, mfr_id)
+                    self.stats.vehicles_done += 1
+                    self.stats.cars_created += ws.car_created
+                    self.stats.parts_new += ws.parts_new
+                    self.stats.parts_updated += ws.parts_updated
+                    consecutive_failures = 0
+                    print(f"  done: car {ws.car_id} {'(new)' if ws.car_created else ''} parts={ws.car_parts} "
+                          f"diagrams={ws.diagrams} new_parts={ws.parts_new} | images queued={self.images.pending()} "
+                          f"late-saved={late}", flush=True)
+                except RunStopped:
                     conn.rollback()
-                print(f"images this run: {self.images.saved} saved, {self.images.failed} failed", flush=True)
-                try:
-                    self._record_run(conn)
-                finally:
-                    try:  # the browser may already be gone; that must not skip closing the rest
-                        if self._context:
-                            self._context.close()
-                        self._browser.close()
-                    except Exception:  # noqa: BLE001
-                        pass
-                    conn.close()
-                    self.request_auth.close()
+                    with conn.cursor() as cur:
+                        q.release(cur, t.id)  # stopped mid-vehicle (e.g. repeated tab crashes): it goes again
+                    conn.commit()
+                    raise
+                except DeadlineReached:
+                    conn.rollback()
+                    with conn.cursor() as cur:
+                        q.release(cur, t.id)
+                    conn.commit()
+                    self.stats.stop_reason = "deadline"
+                    print("  deadline reached mid-vehicle: released, it goes again next run", flush=True)
+                    break
+                except NoCatalog as ex:
+                    conn.rollback()
+                    with conn.cursor() as cur:
+                        q.mark_no_catalog(cur, t.id)
+                    conn.commit()
+                    self.stats.no_catalog += 1
+                    consecutive_failures = 0
+                    print("  not sold by this site (aftermarket only)" if isinstance(ex, NotOem) else "  no catalogue")
+                except (SiteUnavailableError, InternetDownError, vpn.VpnUnavailable) as ex:
+                    conn.rollback()
+                    with conn.cursor() as cur:
+                        q.release(cur, t.id)
+                    conn.commit()
+                    raise RunStopped(75, f"site unavailable: {ex}") from ex
+                except (Browser403Error, Browser429Error) as ex:
+                    conn.rollback()
+                    with conn.cursor() as cur:
+                        q.release(cur, t.id)
+                    conn.commit()
+                    raise RunStopped(65, f"blocked: {type(ex).__name__}") from ex
+                except SiteMoved as ex:
+                    conn.rollback()
+                    with conn.cursor() as cur:
+                        q.release(cur, t.id)
+                    conn.commit()
+                    raise RunStopped(65, f"site moved: {ex}") from ex
+                except Exception as ex:  # noqa: BLE001 — one vehicle's failure is recorded, run goes on
+                    if self._browser_gone(ex):
+                        conn.rollback()
+                        with conn.cursor() as cur:
+                            q.release(cur, t.id)  # not the vehicle's fault: it goes again
+                        conn.commit()
+                        print(f"  browser lost: {type(ex).__name__}", flush=True)
+                        self._reconnect()
+                        continue
+                    conn.rollback()
+                    with conn.cursor() as cur:
+                        q.mark_failed(cur, t.id, f"{type(ex).__name__}: {ex}")
+                    conn.commit()
+                    self.stats.failed += 1
+                    consecutive_failures += 1
+                    print(f"  failed: {type(ex).__name__}: {ex}")
+                    if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                        raise RunStopped(65, f"{consecutive_failures} vehicles failed in a row; last: {ex}")
+                pause = random.uniform(*self.spacing_s)
+                time.sleep(pause)
+            # Let queued images finish (within the deadline) and record them.
+            print(f"draining {self.images.pending()} queued images", flush=True)
+            self.images.drain(conn, mfr_id, self.deadline)
+        except RunStopped as stop:
+            self.stats.stop_reason = stop.reason  # before the finally records the run
+            stopped = True
+            raise
+        finally:
+            # On a stop (VPN/site down) pending downloads would fail anyway: cancel them; their
+            # rows stay saved=false for the image sweep.
+            self.images.close(cancel=stopped or sys.exc_info()[0] is not None)
+            try:
+                self.images.flush_updates(conn, mfr_id)
+            except Exception as ex:  # noqa: BLE001
+                print(f"could not record late image saves: {ex}")
+                conn.rollback()
+            print(f"images this run: {self.images.saved} saved, {self.images.failed} failed", flush=True)
+            try:
+                self._record_run(conn)
+            finally:
+                conn.close()
+                self.request_auth.close()
         return self.stats
+
+    def close(self) -> None:
+        """Release the browser and Playwright. Runs after the result is reported because, with the remote
+        browser gone, each of these can block forever; the caller bounds it (run_v2.close_within)."""
+        for step in (lambda: self._context and self._context.close(),
+                     lambda: self._browser and self._browser.close(),
+                     lambda: self._pw and self._pw.stop()):
+            try:
+                step()
+            except Exception:  # noqa: BLE001 — already gone; the rest must still close
+                pass
 
     def _record_run(self, conn) -> None:
         try:
