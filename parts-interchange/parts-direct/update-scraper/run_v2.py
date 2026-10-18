@@ -21,10 +21,15 @@ import argparse
 import json
 import os
 import sys
+import threading
 import traceback
 from datetime import datetime, timedelta, timezone
 
 TERMINATION_LOG = os.environ.get("SCRAPE_TERMINATION_LOG", "/dev/termination-log")
+# How long releasing the browser may take once the result is reported. A remote browser that went away
+# mid-run can leave it blocked for good: the run then waited out its 3h Job deadline and was recorded as a
+# Timeout although its work was committed (2026-10-18).
+TEARDOWN_TIMEOUT_S = 120
 
 
 def write_result(result: dict) -> None:
@@ -99,13 +104,35 @@ def main() -> int:
     except RunStopped as stop:
         updater.stats.stop_reason = stop.reason
         write_result({**updater.stats.payload(), "error": stop.reason, "exitCode": stop.exit_code})
-        return stop.exit_code
+        code = stop.exit_code
     except Exception as ex:  # noqa: BLE001
         traceback.print_exc()
         write_result({**updater.stats.payload(), "error": f"{type(ex).__name__}: {ex}"[:500], "exitCode": 1})
-        return 1
-    write_result(stats.payload())
-    return 0
+        code = 1
+    else:
+        write_result(stats.payload())
+        code = 0
+    close_within(updater, TEARDOWN_TIMEOUT_S, code)
+    return code
+
+
+def close_within(updater, seconds: float, code: int) -> None:
+    """Release the updater's browser, or exit with the run's code if that blocks for `seconds`.
+
+    The result is already written, so a teardown that hangs can only cost the run its slot; never wait it out.
+    """
+    def give_up() -> None:
+        print(f"browser teardown still blocked after {seconds:.0f}s: exiting with the run's code {code}", flush=True)
+        sys.stderr.flush()
+        os._exit(code)
+
+    timer = threading.Timer(seconds, give_up)
+    timer.daemon = True
+    timer.start()
+    try:
+        updater.close()
+    finally:
+        timer.cancel()
 
 
 if __name__ == "__main__":
