@@ -6,11 +6,6 @@ domain: gyopart-dev.local
 
 imagePullPolicy: Always
 
-# gyopart-api 3.0.8 (parts-interchange-common 0.4.0: image.content_hash, needs the DB at alembic 0003) under test
-# in dev; moves to values.yaml with the prod migration.
-images:
-  gyopartApi: dwilson2547/gyopart-api:3.0.8
-
 # Admin sign-in (phase 4): authentik app gyopart-admin (infra/cluster-config/authentik/blueprints/gyopart-admin.yaml),
 # group gyopart-admin. The LAN host admin.gyopart-dev.local redirects page loads here.
 adminAuth:
