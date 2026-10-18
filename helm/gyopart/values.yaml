@@ -5,9 +5,9 @@ namespace:
 domain: gyopart.local
 
 images:
-  # Released versions (git tags v3.0.2; gyopart-ui v3.0.7): built from a clean clone with GYOPART_TAG=<v> docker compose build/push.
+  # Released versions (git tags v3.0.8 api; gyopart-ui v3.0.7; inventory-api v3.0.2): built from a clean clone with GYOPART_TAG=<v> docker compose build/push.
   # A new release goes into values-dev.yaml first and moves here once proven in dev.
-  gyopartApi: dwilson2547/gyopart-api:3.0.2
+  gyopartApi: dwilson2547/gyopart-api:3.0.8  # needs the DB at alembic 0003 (image.content_hash)
   gyopartUi: dwilson2547/gyopart-ui:3.0.7
   inventoryApi: dwilson2547/inventory-api:3.0.2
   # Admin rewrite (junkyard-platform/docs/admin-rewrite-design.md), verified in dev 2026-10-15.
