@@ -66,3 +66,10 @@ Dev: 0003 is already applied, so steps 1–2 and a restart fix it.
 ## Files changed
 
 - none (prod schema rolled back to 0002; the release order above is the fix)
+
+## Resolution
+
+Done in that order on 2026-10-18: common 0.4.0 on PyPI; gyopart-api 3.0.8 (`v3.0.8`, `a516879`; the requirement is
+now pinned `>=0.4.0` so a cached 0.3.0 layer can't be reused); dev on 3.0.8 (200 again); prod `values.yaml` 3.0.8
+(`d072e92`), with the rename run 1 s after the new pod was ready and `ix_image_content_hash` built `CONCURRENTLY`
+afterwards so the table was never locked for the build. No `UndefinedColumn` errors after the rollout.
