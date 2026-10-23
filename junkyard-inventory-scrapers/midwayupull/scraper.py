@@ -2,7 +2,9 @@
 # Site:     Midway U Pull (https://midwayupull.com)
 # Platform: URG iis-pro-upull (U-Pull variant of IIS Pro v2)
 # Strategy: parse makes from /search-inventory/ HTML → POST admin-ajax.php for models
-#           → GET /inventory/{MAKE}/{MODEL}/ → regex parse .car-details-uPull cards
+#           → GET /inventory/{MAKE}/{MODEL}/?id={YARD} per yard → regex parse .car-details-uPull cards
+# The unfiltered model page (and ?id=ANY) drops Tulsa's cars whenever another yard has that
+# model, so each yard is fetched by its own id and the results merged by VIN.
 # No /latest-arrivals/ — always full crawl; deactivate removed vehicles on each run.
 # Dedup key: VIN (stored as source_key); stock_number stored in extras.
 # Source identifier: "midway_upull"
@@ -56,6 +58,7 @@ HEADERS = {
 _LOCATION_NAME_TO_YARD: dict[str, str] = {
     "Liberty U-Pull": "MO09",
     "Muncie U-Pull":  "MO38",
+    "Tulsa U-Pull":   "OO95",
 }
 
 _LOCATION_DEFS = {
@@ -77,6 +80,15 @@ _LOCATION_DEFS = {
         "zip_code": "66111",
         "phone":    "913-287-6185",
     },
+    "OO95": {
+        "source_location_id": "OO95",
+        "name":     "Midway U Pull — Tulsa, OK",
+        "address":  "13802 E Apache St, Tulsa, OK 74116",
+        "city":     "Tulsa",
+        "state":    "OK",
+        "zip_code": "74116",
+        "phone":    "918-234-4444",
+    },
     "UNKNOWN": {
         "source_location_id": "UNKNOWN",
         "name":     "Midway U Pull — Location Unknown",
@@ -87,6 +99,9 @@ _LOCATION_DEFS = {
         "phone":    None,
     },
 }
+
+
+_YARD_IDS = [y for y in _LOCATION_DEFS if y != "UNKNOWN"]
 
 
 def _utcnow() -> datetime:
@@ -308,10 +323,11 @@ def _full_crawl(
         if not models:
             continue
         for model_slug in models:
-            url = BASE_URL + f"inventory/{make_slug}/{model_slug}/"
-            html = _fetch(http, web_cache, request_auth, url)
-            for card in _parse_vehicle_cards(html):
-                vehicles[card["vin"]] = card
+            for yard_id in _YARD_IDS:
+                url = BASE_URL + f"inventory/{make_slug}/{model_slug}/?id={yard_id}"
+                html = _fetch(http, web_cache, request_auth, url)
+                for card in _parse_vehicle_cards(html):
+                    vehicles[card["vin"]] = card
         logger.info("  %s: %d unique vehicles so far", make, len(vehicles))
     logger.info("Full crawl complete: %d unique vehicles", len(vehicles))
     return list(vehicles.values())

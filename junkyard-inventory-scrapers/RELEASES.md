@@ -18,7 +18,7 @@ scrape-job-manager.
 | `arizonaautoparts/` | `arizona_auto_parts` | [x] | [x] | Incremental: drop check off, 3 h timeout. First prod run 2026-10-13: 4,257 |
 | `las-parts/` | `las_parts` | [x] | [x] | Incremental: drop check off, 3 h timeout. First prod run 2026-10-13: 3,619 |
 | `strickerautoparts/` | `stricker_auto_parts` | [x] | [ ] | Incremental: drop check off, 3 h timeout. Dev 2026-10-13: 25,124. In prod; first run in progress 2026-10-13 |
-| `midwayupull/` | `midway_upull` | [x] | [ ] | Server stalls on some pages: requests retry (`with_retries`), 3 h timeout. Dev 2026-10-14: 1,870. In prod; first run in progress 2026-10-14. Tulsa yard not yet in `_LOCATION_DEFS` (its cars go to Unknown) |
+| `midwayupull/` | `midway_upull` | [x] | [ ] | Server stalls on some pages: requests retry (`with_retries`), 3 h timeout. Dev 2026-10-14: 1,870. In prod; first run in progress 2026-10-14. Tulsa (`OO95`) added 2026-10-23, crawled per yard with `?id=` |
 | `centralfloridapickandpay/` | `central_florida_pick_and_pay` | [x] | [x] | Needs the honest UA (browser UA without a browser TLS fingerprint → 403). First prod run 2026-10-13: 1,287 |
 | `picknpullsa/` | `picknpullsa` | [x] | [x] | Paged `/inventory?page=N`; stops on a repeated page. First prod run 2026-10-13: 4,222 |
 | `budgetupullit/` | `budget_upullit` | [x] | [x] | Honest UA, as above. Drop check off. First prod run 2026-10-13: 1,547 |

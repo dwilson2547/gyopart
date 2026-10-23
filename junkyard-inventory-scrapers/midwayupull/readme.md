@@ -6,9 +6,9 @@
 |------|--------|---------|-------|
 | Liberty U-Pull | `MO09` | 1101 Old State Hwy 210, Liberty, MO 64068 | 816-781-4886 |
 | Muncie U-Pull | `MO38` | 6345 Kansas Ave, Kansas City, KS 66111 | 913-287-6185 |
-| Tulsa (no inventory) | *(none)* | 13802 E Apache St, Tulsa, OK 74116 | 918-234-4444 |
+| Tulsa U-Pull | `OO95` | 13802 E Apache St, Tulsa, OK 74116 | 918-234-4444 |
 
-> **Note**: The Tulsa location is listed on the contact page but has **no URG yard ID and does not appear in the inventory search dropdown**. Its inventory is not accessible via the online system. Only Liberty (MO09) and Muncie (MO38) have online inventory.
+> **Note**: Tulsa went online after the May 2026 recon. Confirmed 2026-10-23: `OO95` is in `iisupullurgid` and the location dropdown, and `?id=OO95` returns only "Tulsa U-Pull" cards; the address is from the contact page.
 >
 > The "Muncie" location name is misleading — it is physically in Kansas City, KS, not Muncie, IN. Likely a historical brand name.
 
@@ -23,7 +23,7 @@ URG `iis-pro-upull` WordPress plugin v1.6.6. Same URG network as `iis-pro-v2` si
 - AJAX action names differ: `getMakesIISupull`, `getAllModelsIISupull`, etc. (suffix `IISupull` not `IIS`)
 - Inventory URL: `/inventory/{MAKE}/{MODEL}/` (configured via `iisupullpartdir = 'inventory'`)
 
-Yard IDs: `iisupullurgid = 'MO09,MO38'` (comma-separated, both embedded in page source)
+Yard IDs: `iisupullurgid = 'MO38,MO09,OO95'` (comma-separated, embedded in page source; 2026-10-23)
 
 ---
 
@@ -37,7 +37,7 @@ Yard IDs: `iisupullurgid = 'MO09,MO38'` (comma-separated, both embedded in page 
 
 ### Step 1 — Enumerate Makes
 
-The full make list is embedded as `<option>` values in the page HTML at `/search-inventory/`. No AJAX call needed. Alternatively, `getMakesIISupull` (AJAX) filters by year; use the HTML source for the complete cross-year list.
+The full make list is embedded as `<option>` values of `select.upullsimpleMake` (no `name` or `id`) in the page HTML at `/search-inventory/`; skip `ANY`, and `NISSAN` appears twice. No AJAX call needed. Alternatively, `getMakesIISupull` (AJAX) filters by year; use the HTML source for the complete cross-year list.
 
 **Full make list** (59 makes, from HTML):
 ACURA, ALFA ROMEO, AMC, AUDI, AUSTIN-HEALEY, BMW, BUICK, CADILLAC, CHEVROLET, CHRYSLER, DAEWOO, DAIHATSU, DODGE, EAGLE, FIAT, FORD, FREIGHTLINER, GEO, GMC, HONDA, HUMMER, HYUNDAI, INFINITI, INTERNATIONAL, ISUZU, JAGUAR, JEEP, KIA, LAND ROVER, LEXUS, LINCOLN, MAZDA, MERCEDES-BENZ, MERCURY, MG, MINI, MITSUBISHI, NISSAN, OLDSMOBILE, OPEL, PETERBILT, PEUGEOT, PLYMOUTH, PONTIAC, PORSCHE, RAM, RENAULT, SAAB, SATURN, SCION, SMART, STERLING, SUBARU, SUZUKI, TESLA, TOYOTA, TRIUMPH, VOLKSWAGEN, VOLVO
@@ -71,12 +71,12 @@ Response (JSON):
 GET https://midwayupull.com/inventory/{MAKE}/{MODEL}/
 ```
 
-- Returns **all vehicles** for that make/model, both locations, in a single response
+- **Unfiltered (and `?id=ANY`) is not all yards**: on 2026-10-23 `TOYOTA/CAMRY` and `VOLVO/VOLVO_XC90` showed only Muncie + Liberty and dropped Tulsa's cars, while `VOLVO/VOLVO_80_SERIES` (Tulsa-only stock) showed Tulsa. A comma list (`?id=MO38,MO09,OO95`) behaves the same. The scraper fetches each yard with `?id={URGID}` and merges by VIN.
 - **No pagination** — all results on one page
 - **No auth, no nonce, no cookies required**
 - Response is server-side rendered HTML
 
-To filter by one location, append `?id={URGID}`:
+Per location, append `?id={URGID}`:
 ```
 GET https://midwayupull.com/inventory/CHEVROLET/SILVERADO_1500/?id=MO09
 ```
@@ -90,7 +90,7 @@ Stock: {stock_number}
 Year: {year}
 Make/Model: {make} {model_full}
 Vin: {vin}
-Location: {Liberty U-Pull | Muncie U-Pull}
+Location: {Liberty U-Pull | Muncie U-Pull | Tulsa U-Pull}
 Row: {row_code}
 Set Date: {YYYY-MM-DD}
 ```
@@ -139,4 +139,4 @@ Use `stock_number` as the stable unique ID. The Set Date tells you when a vehicl
 
 ## Request Volume
 
-Approximately 59 makes × avg ~30 models = ~1,770 GET requests for a full crawl. Each is lightweight SSR HTML. No rate limiting observed during recon.
+1,302 model pages across 59 makes (2026-10-23) × 3 yards = ~3,900 GETs per full crawl, plus 59 models POSTs. Each is lightweight SSR HTML answering in 1–2 s. No rate limiting observed. robots.txt sets `Crawl-delay: 60` only for named AI bots, not `*`.
