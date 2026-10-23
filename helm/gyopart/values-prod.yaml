@@ -224,8 +224,8 @@ scraping:
       jobs:
         pull-a-part: {pool: junkyard-inventory}
     midway-upull:
-      image: dwilson2547/gyopart-scraper-midway-upull@sha256:40db41d24ce049c0156b5df861e94eb5a69f3fa8fd059dddd17e717d45680edd
-      timeout: 3h
+      image: dwilson2547/gyopart-scraper-midway-upull@sha256:61339bbfe47cff4a87ed460664edde114ecd390e6aa0095538f527fc8183ac11
+      timeout: 5h  # ~3,900 pages (3 yards × 1,302 models) at 1 s pacing
       jobs:
         midway-upull: {pool: junkyard-inventory}
     u-pull-n-save:
