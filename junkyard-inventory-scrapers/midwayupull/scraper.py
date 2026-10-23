@@ -143,7 +143,14 @@ def _post_ajax(
                 timeout=60,
             )
             permit.set_status(resp.status_code)
-            return resp
+        # The server sometimes stalls and then answers 200 with an empty body; retry that like a
+        # dropped connection rather than failing the whole crawl on a JSONDecodeError.
+        if resp.status_code == 200:
+            try:
+                resp.json()
+            except ValueError:
+                raise requests.ConnectionError(f"non-JSON body ({len(resp.content)} bytes)")
+        return resp
 
     resp = with_retries(post, f"{action} {params}")
     if resp.status_code == 429:
@@ -248,15 +255,14 @@ def _fetch_makes(
     html = _fetch(http, web_cache, request_auth, BASE_URL + "search-inventory/")
     soup = BeautifulSoup(html, "html.parser")
 
-    select = soup.find("select", attrs={"name": re.compile(r"make", re.I)})
-    if not select:
-        select = soup.find("select", id=re.compile(r"make", re.I))
+    # The make <select> has no name or id, only the class upullsimpleMake.
+    select = soup.find("select", class_="upullsimpleMake")
 
     makes = []
     if select:
         for opt in select.find_all("option"):
-            val = opt.get("value", "").strip()
-            if val and val.upper() not in ("", "ALL", "SELECT MAKE"):
+            val = (opt.get("value") or "").strip()
+            if val and val.upper() not in ("ANY", "ALL", "SELECT MAKE") and val not in makes:
                 makes.append(val)
 
     if not makes:
