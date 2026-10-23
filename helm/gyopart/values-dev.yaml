@@ -121,7 +121,7 @@ scraping:
       jobs:
         stricker-auto-parts: {pool: junkyard-inventory, suspend: true}
     midway-upull:
-      image: dwilson2547/gyopart-scraper-midway-upull@sha256:40db41d24ce049c0156b5df861e94eb5a69f3fa8fd059dddd17e717d45680edd
+      image: dwilson2547/gyopart-scraper-midway-upull@sha256:61339bbfe47cff4a87ed460664edde114ecd390e6aa0095538f527fc8183ac11
       timeout: 3h
       jobs:
         midway-upull: {pool: junkyard-inventory, suspend: true}
