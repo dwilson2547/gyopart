@@ -177,7 +177,9 @@ written to webcache, and a webcache hit that fails validation is deleted (alread
 
 | Condition | Action | Exit |
 |---|---|---|
-| maintenance page, 5xx, Cloudflare challenge that doesn't clear | stop the run at once; the in-flight vehicle stays `pending` | 75 (operator retries later) |
+| maintenance page, Cloudflare challenge that doesn't clear | stop the run at once; the in-flight vehicle stays `pending` | 75 (operator retries later) |
+| one page times out or answers 5xx | retry after 30 s and 2 min, then skip it: a part is recorded `skipped`, a category/vehicle page fails that vehicle; continue | — |
+| 5 pages in a row still failing that way | stop the run; the in-flight vehicle stays `pending` | 75 |
 | 403 / 429 | stop the run | 65 (blocked: no quick retry; counts toward suspension) |
 | one vehicle's page fails to parse | target `failed` + `last_error`; continue | — |
 | 5 consecutive vehicle failures | stop the run | 65 |
