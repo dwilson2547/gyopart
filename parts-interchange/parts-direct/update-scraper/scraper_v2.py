@@ -5,7 +5,8 @@ A run: VPN check → one stealth browser context → claim a vehicle from scrape
 one transaction → pause → next, until the deadline, the queue is empty, or a stop condition.
 
 Stop conditions raise RunStopped with an exit code for scrape-job-manager:
-  75 transient — site unavailable (maintenance / 5xx / challenge that doesn't clear), VPN down
+  75 transient — site unavailable (maintenance / challenge that doesn't clear / several pages in a row
+     timing out or 5xx after retries), VPN down
   65 blocked/broken — 403/429, or 5 vehicles in a row failed
 """
 from __future__ import annotations
@@ -55,6 +56,12 @@ IMAGE_WORKERS = 8  # background image downloads per run
 PROXY_ERRORS = ("ERR_PROXY_CONNECTION_FAILED", "ERR_TUNNEL_CONNECTION_FAILED", "ERR_PROXY_AUTH",
                 "ERR_NO_SUPPORTED_PROXIES", "ERR_MANDATORY_PROXY_CONFIGURATION_FAILED")
 INITIAL_VEHICLE_ESTIMATE_S = 30 * 60  # until this run has timed a vehicle itself
+# One page that times out or answers 5xx (Cloudflare's 520 on a single part) is not the site being down:
+# until 2026-10-24 it stopped the whole run, so runs died at their first flaky page out of thousands and
+# five sites ended up suspended. Retry it after these pauses, then skip it like a 404, as the original
+# scraper did. Only a streak of pages failing that way stops the run.
+FETCH_RETRY_WAITS_S = (30, 120)
+MAX_FAILED_FETCHES_IN_ROW = 5
 
 
 def canonical_part_url(url: str) -> str:
@@ -140,6 +147,11 @@ class RunStopped(Exception):
 
 class PageCrashed(Exception):
     """The tab's renderer died (Playwright "Page crashed" / "Target crashed"); the browser is fine."""
+
+
+class PageFetchError(SiteUnavailableError):
+    """One navigation timed out or answered 5xx. get_page retries it and then skips the page; where a
+    single page decides the run (session start, discovery) it stays a SiteUnavailableError."""
 
 
 class SiteMoved(Exception):
@@ -231,6 +243,7 @@ class UpdaterV2:
         self._page_navigations = 0
         self._page_crashes = 0
         self._vehicle_seconds: list[float] = []
+        self._failed_fetches_in_row = 0
 
     # ── session ────────────────────────────────────────────────────────────────────────────────
 
@@ -352,7 +365,7 @@ class UpdaterV2:
             except PlaywrightTimeout as ex:
                 # A challenge that never settles looks like this; so does a slow tunnel. Transient.
                 permit.set_status(0)
-                raise SiteUnavailableError(f"navigation timed out: {url}") from ex
+                raise PageFetchError(f"navigation timed out: {url}") from ex
             except PlaywrightError as ex:
                 permit.set_status(0)
                 if "crashed" in str(ex).lower():
@@ -366,7 +379,7 @@ class UpdaterV2:
         if final and final != domain:
             raise SiteMoved(f"{domain} redirects to {final}")
         if resp is not None and resp.status >= 500:
-            raise SiteUnavailableError(f"HTTP {resp.status} for {url}")
+            raise PageFetchError(f"HTTP {resp.status} for {url}")
         return resp
 
     # ── pages ──────────────────────────────────────────────────────────────────────────────────
@@ -415,7 +428,7 @@ class UpdaterV2:
                 print(f"webcache delete failed ({type(ex).__name__})")
 
         for attempt in (1, 2):
-            resp = self._navigate(url)
+            resp = self._navigate_retrying(url)
             self.last_final_url = self._page.url
             if resp is not None and resp.status == 404:
                 raise PageRetrievalError(f"404: {url}")
@@ -436,6 +449,27 @@ class UpdaterV2:
         except Exception as ex:  # noqa: BLE001
             print(f"webcache store failed ({type(ex).__name__}), continuing: {url}")
         return content
+
+    def _navigate_retrying(self, url: str):
+        """_navigate, retrying a timeout/5xx after FETCH_RETRY_WAITS_S pauses. A page that still fails is
+        skipped (PageRetrievalError: a part is recorded as skipped, a category page fails its vehicle);
+        MAX_FAILED_FETCHES_IN_ROW such pages in a row mean the site or tunnel really is down."""
+        for wait in (*FETCH_RETRY_WAITS_S, None):
+            try:
+                resp = self._navigate(url)
+            except PageFetchError as ex:
+                if wait is not None:
+                    print(f"  {ex}; retrying in {wait}s", flush=True)
+                    time.sleep(wait)
+                    continue
+                self._failed_fetches_in_row += 1
+                if self._failed_fetches_in_row >= MAX_FAILED_FETCHES_IN_ROW:
+                    raise SiteUnavailableError(
+                        f"{self._failed_fetches_in_row} pages in a row failed; last: {ex}") from ex
+                print(f"  skipping page after {len(FETCH_RETRY_WAITS_S) + 1} tries: {ex}", flush=True)
+                raise PageRetrievalError(str(ex)) from ex
+            self._failed_fetches_in_row = 0
+            return resp
 
     def _with_retries(self, what: str, fn, attempts: int = 3):
         """Retry transient connection trouble: Privoxy's intermittent CONNECT 500s, and imgcache
