@@ -10,11 +10,17 @@ from __future__ import annotations
 
 import ipaddress
 import os
+import time
 
 import requests
 
 IP_URL = "https://api.ipify.org"
 CHECK_EVERY = 50
+# The VPN exit rotates about every 20 minutes and the proxy is unreachable for 30 s to 1 min while it
+# does (user, 2026-10-25). Each rotation stopped the run it hit (GM, Honda, Mazda on 2026-10-24); a drop
+# is waited out for up to RECOVER_WAIT_S before it counts as the VPN being down.
+RECOVER_WAIT_S = 180
+RECOVER_POLL_S = 15
 
 
 class VpnUnavailable(Exception):
@@ -49,3 +55,16 @@ def check(timeout: float = 20.0) -> str:
     if exit_ip == home_ip:
         raise VpnUnavailable(f"traffic through the proxy leaves on the home IP {home_ip}")
     return exit_ip
+
+
+def wait_until_up(max_wait_s: float = RECOVER_WAIT_S, poll_s: float = RECOVER_POLL_S) -> str:
+    """check(), retried every poll_s for up to max_wait_s: rides out an exit rotation. Raises the last
+    VpnUnavailable if the proxy is still down after that."""
+    deadline = time.monotonic() + max_wait_s
+    while True:
+        try:
+            return check()
+        except VpnUnavailable:
+            if time.monotonic() + poll_s > deadline:
+                raise
+            time.sleep(poll_s)
