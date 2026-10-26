@@ -62,6 +62,10 @@ INITIAL_VEHICLE_ESTIMATE_S = 30 * 60  # until this run has timed a vehicle itsel
 # scraper did. Only a streak of pages failing that way stops the run.
 FETCH_RETRY_WAITS_S = (30, 120)
 MAX_FAILED_FETCHES_IN_ROW = 5
+# The homepage at session start can land on a VPN exit rotation too (Honda, VW 2026-10-25): try again
+# after SESSION_START_WAIT_S before calling the site unavailable.
+SESSION_START_ATTEMPTS = 3
+SESSION_START_WAIT_S = 60
 
 
 def canonical_part_url(url: str) -> str:
@@ -332,6 +336,16 @@ class UpdaterV2:
         self._page_navigations = 0
 
     def _navigate(self, url: str):
+        """One navigation; a proxy drop (the VPN exit rotating) is waited out and the page tried again.
+        Still down after vpn.RECOVER_WAIT_S raises VpnUnavailable, which stops the run."""
+        try:
+            return self._navigate_in_tab(url)
+        except vpn.VpnUnavailable as ex:
+            print(f"  {ex}; waiting for the VPN proxy to come back", flush=True)
+            print(f"  VPN back (exit ip {vpn.wait_until_up()}), retrying: {url}", flush=True)
+            return self._navigate_in_tab(url)
+
+    def _navigate_in_tab(self, url: str):
         if self._page_navigations >= PAGE_RECYCLE_EVERY:
             self._new_page()
         try:
@@ -637,9 +651,23 @@ class UpdaterV2:
             return False
         return True
 
+    def _start_session(self) -> None:
+        """Open the session on the homepage and check it (challenge/block/maintenance?), retrying a
+        timeout, 5xx or uncleared challenge SESSION_START_ATTEMPTS times."""
+        for attempt in range(1, SESSION_START_ATTEMPTS + 1):
+            try:
+                self._open_session()
+                self.parser.check_page(self._content())
+                return
+            except (SiteUnavailableError, vpn.VpnUnavailable) as ex:
+                if attempt == SESSION_START_ATTEMPTS:
+                    raise
+                print(f"session start failed ({ex}); trying again in {SESSION_START_WAIT_S}s", flush=True)
+                time.sleep(SESSION_START_WAIT_S)
+
     def run(self) -> RunStats:
         try:
-            print(f"VPN ok, exit ip {vpn.check()}")
+            print(f"VPN ok, exit ip {vpn.wait_until_up()}")
         except vpn.VpnUnavailable as ex:
             raise RunStopped(75, str(ex)) from ex
 
@@ -672,8 +700,7 @@ class UpdaterV2:
         self._connect_browser()
         try:
             try:
-                self._open_session()
-                self.parser.check_page(self._content())  # homepage: challenge/block/maintenance?
+                self._start_session()
             except (SiteUnavailableError, vpn.VpnUnavailable) as ex:
                 raise RunStopped(75, f"site unavailable at session start: {ex}") from ex
             except (Browser403Error, Browser429Error) as ex:
@@ -684,7 +711,7 @@ class UpdaterV2:
             while self._time_left_for_another():
                 if (self.stats.vehicles_done + self.stats.no_catalog) % vpn.CHECK_EVERY == 0 and self.stats.vehicles_done:
                     try:
-                        vpn.check()
+                        vpn.wait_until_up()
                     except vpn.VpnUnavailable as ex:
                         raise RunStopped(75, str(ex)) from ex
                 with conn.cursor() as cur:

@@ -265,6 +265,10 @@ one replica — every concurrent job shares one exit IP).
   run also checks positively: the exit IP through the proxy must be a real IP and differ from the
   direct (home) IP; repeated every 50 vehicles, and the run exits 75 if it fails. (NordVPN's
   `vpn/check/full` endpoint now only answers `{"status": "deprecated"}`, ✅ 2026-10-11.)
+- **Exit rotation:** the exit rotates about every 20 min and the proxy is unreachable for 30 s – 1 min
+  meanwhile (user, 2026-10-25). A proxy error mid-run, or a failed check, polls the check every 15 s for
+  up to 3 min and retries the page; only a proxy still down after that exits 75. The homepage at session
+  start is tried 3 times, 60 s apart, for the same reason.
 - **Stuck tunnel:** ✅ 2026-10-11 the proxy sat on a dead server for an unknown time: OpenVPN soft-restarts
   against the same server forever, and the load-check cron ignores a server whose stats are empty.
   Deleting the pod picks a fresh recommended server. Durable fix tracked separately.
