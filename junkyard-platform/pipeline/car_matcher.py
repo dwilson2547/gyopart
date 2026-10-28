@@ -2,7 +2,8 @@
 Narrow an NHTSA VIN decode to the parts_interchange cars it can be.
 
 A catalogue car is year + make + model + trim + engine. The decode always gives year/make/model; it usually
-gives engine displacement and cylinders, often fuel, sometimes a trim that matches the catalogue's. Each filter
+gives engine displacement and cylinders, often fuel, sometimes a trim the catalogue's can be read from
+(pipeline.trim_match). Each filter
 is applied only when it keeps at least one car, so a sparse decode leaves a wider candidate set instead of an
 empty one. One candidate left = exact match; more = "likely" (the vehicle is one of these).
 
@@ -21,6 +22,7 @@ from sqlalchemy.engine import Engine
 from pipeline.pi_schema import (
     pi_car_table, pi_engine_table, pi_make_table, pi_model_table, pi_trim_table, pi_year_table,
 )
+from pipeline.trim_match import trims_meant
 
 # Catalogue engine names: "2.4L L4 - Gas", "3.5L V6 - Electric/Gas", "1.8L L4 - FULL HYBRID EV-GAS (FHEV)"
 _ENGINE_RE = re.compile(r"^\s*(\d+(?:\.\d+)?)L\s+[A-Z]+(\d+)\s*-\s*(.+?)\s*$", re.IGNORECASE)
@@ -194,8 +196,9 @@ def _why_unmatched(conn, makes: set[str], pairs: set[tuple[str, str]], year_had_
     return MODEL_NOT_IN_CATALOGUE
 
 
-def match_decoded(raw: dict, pi_engine: Engine, mappings=()) -> CarMatch:
-    """Candidate car ids for a decoded VIN. Empty (with `reason`) when no catalogue car fits."""
+def match_decoded(raw: dict, pi_engine: Engine, mappings=(), yard_trim: str | None = None) -> CarMatch:
+    """Candidate car ids for a decoded VIN. Empty (with `reason`) when no catalogue car fits. `yard_trim` is the
+    yard's own trim for the vehicle, a fallback for decodes without one."""
     year = (raw.get("ModelYear") or "").strip()
     make = (raw.get("Make") or "").strip()
     model = (raw.get("Model") or "").strip()
@@ -239,9 +242,15 @@ def match_decoded(raw: dict, pi_engine: Engine, mappings=()) -> CarMatch:
     if want.fuel:
         rows = _narrow(rows, lambda r: specs[r.id].fuel == want.fuel, "fuel", match)
 
-    trims = {t.strip().lower() for t in (raw.get("Trim"), raw.get("Series")) if t and t.strip()}
-    if trims:
-        rows = _narrow(rows, lambda r: (r.trim or "").strip().lower() in trims, "trim", match)
+    # Trim text in order of trust: the decode's Trim, its Series, then the yard's trim, which is only used when the
+    # decode has no trim text at all (matching-v2-design §2.1). The first text that means something narrows.
+    decode_texts = [t for t in (raw.get("Trim"), raw.get("Series")) if t and t.strip()]
+    texts = decode_texts or ([yard_trim] if yard_trim and yard_trim.strip() else [])
+    for text in texts:
+        meant = trims_meant(text, {r.trim for r in rows})
+        if meant:
+            rows = _narrow(rows, lambda r: r.trim in meant, "trim", match)
+            break
 
     match.candidates = sorted(r.id for r in rows)
     return match

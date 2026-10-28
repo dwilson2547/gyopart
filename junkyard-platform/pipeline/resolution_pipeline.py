@@ -117,7 +117,7 @@ def resolve_vehicle(
         for column, value in decoded_vehicle_fields(raw).items():
             if getattr(vehicle, column) is None:
                 setattr(vehicle, column, value)
-        match = match_decoded(raw, pi_engine, mappings)
+        match = match_decoded(raw, pi_engine, mappings, vehicle.trim)
         if match.candidates:
             exact = match.exact
             _set_match(vehicle, match.candidates, "vin_exact" if exact else "vin_candidates",

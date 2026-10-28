@@ -83,24 +83,25 @@ def _decode_where(make: str, model: str, series: str | None, year_from, year_to,
     return conds
 
 
-def mapping_vehicles(session: Session, req: MappingRequest) -> list[tuple[int, dict]]:
-    """Open, unmatched vehicles this mapping covers, with their cached decodes."""
-    q = (select(V.id, VinCache.raw).join(D, D.vehicle_id == V.id).join(VinCache, VinCache.vin == V.vin)
+def mapping_vehicles(session: Session, req: MappingRequest) -> list[tuple[int, dict, str | None]]:
+    """Open, unmatched vehicles this mapping covers, with their cached decodes and the yard's trim."""
+    q = (select(V.id, VinCache.raw, V.trim).join(D, D.vehicle_id == V.id).join(VinCache, VinCache.vin == V.vin)
          .where(V.is_active.is_(True), V.car_id_resolved.is_(False), D.status != IGNORED,
                 D.reason.notin_(YARD_REASONS),
                 *_decode_where(req.make, req.model, req.series, req.year_from, req.year_to,
                                sql_key(D.nhtsa_make), sql_key(D.nhtsa_model), sql_key(D.nhtsa_series),
                                sql_year(D.nhtsa_year))))
-    return [(vid, raw or {}) for vid, raw in session.execute(q)]
+    return [(vid, raw or {}, trim) for vid, raw, trim in session.execute(q)]
 
 
-def simulate_mapping(pi, raws: list[dict], mappings: list[Mapping]) -> dict:
+def simulate_mapping(pi, raws: list[dict], mappings: list[Mapping], yard_trims: list[str | None] | None = None) -> dict:
+    """Run the matcher over decodes (with the yards' trims, in the same order, when given) as the worker would."""
     memo: dict[tuple, object] = {}
     tally: Counter = Counter()
-    for raw in raws:
-        k = tuple(raw.get(f) for f in _MATCH_FIELDS)
+    for raw, yard_trim in zip(raws, yard_trims or [None] * len(raws)):
+        k = (*(raw.get(f) for f in _MATCH_FIELDS), yard_trim)
         if k not in memo:
-            memo[k] = match_decoded(raw, pi, mappings)
+            memo[k] = match_decoded(raw, pi, mappings, yard_trim)
         m = memo[k]
         if m.candidates:
             tally["match"] += 1
@@ -118,7 +119,8 @@ def preview_mapping(req: MappingRequest, eng=Depends(engines)):
     with Session(ji) as s:
         rows = mapping_vehicles(s, req)
         existing = load_mappings(s)
-    return simulate_mapping(pi, [raw for _, raw in rows], existing + req.mappings())
+    return simulate_mapping(pi, [raw for _, raw, _ in rows], existing + req.mappings(),
+                            [trim for _, _, trim in rows])
 
 
 @router.post("/mappings")
@@ -145,7 +147,7 @@ def save_mapping(eng, req: MappingRequest, by: str) -> dict:
                                 catalogue_model=m.catalogue_model, created_by=by[:100], created_at=now))
         s.add_all(rows)
         s.flush()
-        requeued = requeue(s, [vid for vid, _ in mapping_vehicles(s, req)])
+        requeued = requeue(s, [vid for vid, *_ in mapping_vehicles(s, req)])
         s.commit()
         return {"created": len(rows), "ids": [r.id for r in rows], "requeued": requeued}
 
