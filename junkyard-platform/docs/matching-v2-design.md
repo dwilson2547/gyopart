@@ -1,6 +1,6 @@
 # VIN matching v2 (trims) and the fix-suggestion agent — design
 
-Status: **planned** (user, 2026-10-27). Nothing here is built. §1 is verified against the code on `dev` (731cd38)
+Status: **phase 1 in dev** (2026-10-27, §4); the rest is planned (user, 2026-10-27). §1 is verified against the code on `dev` (731cd38)
 and read-only queries against the **dev** databases on 2026-10-27; the §2.1 numbers come from a throwaway
 prototype of the normaliser run over the same data. Prod numbers have not been measured for this.
 
@@ -185,7 +185,13 @@ call after the bake-off.
 ## 4. Phases
 
 1. **Trim normaliser** (§2.1) + table-driven tests from real decodes, reviewed sample, re-match of `vin_candidates`.
-   Dev, then prod.
+   Dev, then prod. **In dev 2026-10-27** (gyopart 3fb7021; admin-api and vin-resolver `sha-3fb7021f7cd5` in
+   `values-dev.yaml`): `pipeline/trim_match.py`, 38 cases from real decodes in `tests/test_trim_match.py`. Two rules
+   beyond §2.1 came out of the review: a list narrows only when *every* member is a catalogue trim (`Sport, SXT`
+   without an SXT says nothing), and dropped option text blocks a trim that has a longer sibling (`EX with leather` vs
+   EX / EX-L). A 40-vehicle sample of new exacts read right after that. Dev re-match of every `vin_candidates`
+   vehicle: `vin_exact` 60,000 → 69,352, `vin_candidates` 59,192 → 49,840, total matched unchanged (126,836). Prod not
+   shipped.
 2. **Trim mappings** (§2.2) + Trims tab + MCP tools + `narrowed_by` on the vehicle page (§2.3).
 3. **Suggestions table and review page** (§3.2–3.3), first fed by MCP sessions only.
 4. **Text adapter + bake-off** in the GPU scheduler (§3.5).
