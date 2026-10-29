@@ -192,7 +192,7 @@ scraping:
     # Fenix U-Pull, 4 yards (NY/GA): location x make x model (~1,940 requests on a full crawl). Skips the
     # full crawl when every recent arrival is already known, reporting the known total.
     fenix-upull:
-      image: dwilson2547/gyopart-scraper-fenix-upull@sha256:d87d42fabd5f75dd1743c44e237bfc9f9cce831a6cf7e6a4ad1ae923a795440e
+      image: dwilson2547/gyopart-scraper-fenix-upull@sha256:168e56720c989fc9610ec3165283efa149861b411f606a23df9f065bd662ff32
       timeout: 4h
       jobs:
         fenix-upull: {pool: junkyard-inventory}
