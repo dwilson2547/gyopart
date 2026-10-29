@@ -5,6 +5,7 @@
 # Dedup key: VIN (stored as source_key); stock_number → extras["stock_number"]
 # Source identifier: "fenix_upull"
 
+import json
 import logging
 import sys
 from pathlib import Path
@@ -147,6 +148,11 @@ def _fetch(
     return resp.text
 
 
+def _parse_models(body: str) -> list[str]:
+    # A make with nothing in stock (FIAT, since 2026-10) comes back as 200 with an empty body, not [].
+    return json.loads(body) if body.strip() else []
+
+
 def _fetch_models(
     http: requests.Session,
     web_cache: WebCacheClient,
@@ -156,8 +162,7 @@ def _fetch_models(
     url = f"{MODELS_URL}?make={make}"
     entry = web_cache.get(url, max_age=CACHE_MAX_AGE_SECONDS)
     if entry:
-        import json
-        return json.loads(entry["content"])
+        return _parse_models(entry["content"])
 
     logger.debug("GET models for %s", make)
     with request_auth.acquire(DOMAIN) as permit:
@@ -169,7 +174,7 @@ def _fetch_models(
         resp.raise_for_status()
 
     web_cache.store(url, resp.text, CLIENT_NAME)
-    return resp.json()
+    return _parse_models(resp.text)
 
 
 def _parse_inventory_table(html: str, location_id: int, slug: str) -> list[dict]:
