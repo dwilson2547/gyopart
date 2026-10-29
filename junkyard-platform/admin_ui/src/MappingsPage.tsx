@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { del, get } from "./api.ts";
-import type { MappingRow, RuleRow } from "./types.ts";
+import type { MappingRow, RuleRow, TrimMappingRow } from "./types.ts";
 import { Link } from "./router.tsx";
 import { Empty, ErrorBanner, Loading, decodeEntities, fmtInt, useLoad, useToast, years } from "./util.tsx";
 
@@ -8,6 +8,7 @@ import { Empty, ErrorBanner, Loading, decodeEntities, fmtInt, useLoad, useToast,
 export function MappingsPage() {
   const mappings = useLoad(() => get<MappingRow[]>("/api/mappings"), "mappings");
   const rules = useLoad(() => get<RuleRow[]>("/api/rules"), "rules");
+  const trimMappings = useLoad(() => get<TrimMappingRow[]>("/api/trim-mappings"), "trim-mappings");
   const [q, setQ] = useState("");
   const toast = useToast();
   const needle = q.trim().toLowerCase();
@@ -31,6 +32,14 @@ export function MappingsPage() {
     mappings.setData((mappings.data ?? []).filter((x) => x.id !== m.id));
     toast(`Deleted ${m.nhtsaMake} ${m.nhtsaModel} → ${decodeEntities(m.model)}. ${fmtInt(r.requeued)} cars re-matching.`);
     mappings.reload();
+  };
+  const shownTrims = (trimMappings.data ?? []).filter((m) =>
+    !needle || `${m.nhtsaMake} ${m.nhtsaModel ?? ""} ${m.trim} ${m.trims.join(" ")}`.toLowerCase().includes(needle));
+  const removeTrimMapping = async (m: TrimMappingRow) => {
+    const r = await del<{ requeued: number }>(`/api/trim-mappings/${m.id}`);
+    trimMappings.setData((trimMappings.data ?? []).filter((x) => x.id !== m.id));
+    toast(`Deleted ${m.nhtsaMake} “${m.trim}”. ${fmtInt(r.requeued)} cars re-matching.`);
+    trimMappings.reload();
   };
   const removeRule = async (rule: RuleRow) => {
     const r = await del<{ requeued: number }>(`/api/rules/${rule.id}`);
@@ -73,6 +82,35 @@ export function MappingsPage() {
                   <td className="nowrap"><ConfirmDelete what={`${decodeEntities(m.model)} mapping`} cars={m.vehicles} onDelete={() => removeMapping(m)} /></td>
                 </tr>
               )))}
+            </tbody>
+          </table>
+        )}
+      </section>
+
+      <section className="panel stack">
+        <div>
+          <h2>Trim mappings</h2>
+          <p className="muted small" style={{ margin: 0 }}>What a trim text in a decode (or a yard listing) means, or that it is noise. Cars counts are VIN-matched cars with that text now.</p>
+        </div>
+        {trimMappings.error && <ErrorBanner error={`Trim mappings didn't load: ${trimMappings.error}`} onRetry={trimMappings.reload} />}
+        {trimMappings.data == null ? (trimMappings.error ? null : <Loading />) : shownTrims.length === 0 ? (
+          <Empty>{needle ? "No trim mapping matches the filter." : <>No trim mappings yet. Create them from the <Link to="/?tab=trims">Trims</Link> tab.</>}</Empty>
+        ) : (
+          <table className="list">
+            <thead><tr><th>Decode · trim text</th><th>Means</th><th className="num">Cars</th><th>Added</th><th /></tr></thead>
+            <tbody>
+              {shownTrims.map((m) => (
+                <tr key={m.id}>
+                  <td>
+                    <div className="gname">{m.nhtsaMake} {m.nhtsaModel ?? <span className="muted">(every model)</span>} · “{m.trim}”</div>
+                    <div className="muted small">{m.yearFrom || m.yearTo ? years(m.yearFrom, m.yearTo) : "all years"}</div>
+                  </td>
+                  <td>{m.action === "noise" ? <span className="muted">noise</span> : m.trims.map(decodeEntities).join(" / ")}</td>
+                  <td className="num">{fmtInt(m.vehicles)}</td>
+                  <td className="muted small nowrap">{m.createdBy} · {m.createdAt.slice(0, 10)}</td>
+                  <td className="nowrap"><ConfirmDelete what="trim mapping" cars={m.vehicles ?? null} onDelete={() => removeTrimMapping(m)} /></td>
+                </tr>
+              ))}
             </tbody>
           </table>
         )}

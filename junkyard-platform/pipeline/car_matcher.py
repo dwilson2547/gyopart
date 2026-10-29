@@ -46,9 +46,16 @@ MODEL_YEAR_GAP = "model_year_gap"                  # the model exists for the ma
 @dataclass
 class CarMatch:
     candidates: list[int] = field(default_factory=list)
-    narrowed_by: list[str] = field(default_factory=list)  # which filters cut the set: engine, fuel, trim
+    narrowed_by: list[str] = field(default_factory=list)  # which filters cut the set: engine, fuel, trim, trim_mapping
     reason: str | None = None   # set when candidates is empty
     mapped: bool = False        # a decode mapping supplied the matching name
+    trim_noise: bool = False    # some trim text was only noise, or a trim mapping said so
+    trim_unread: str | None = None  # trim text nobody could read while the candidates' trims still differ
+
+    @property
+    def steps(self) -> list[str]:
+        """What vehicles.car_id_match_steps stores."""
+        return [*self.narrowed_by, *(["trim_noise"] if self.trim_noise else [])]
 
     @property
     def exact(self) -> bool:
@@ -70,6 +77,23 @@ class Mapping:
     def of(cls, row) -> "Mapping":
         return cls(row.make_key, row.model_key, row.series_key, row.year_from, row.year_to,
                    row.catalogue_make, row.catalogue_model)
+
+
+@dataclass(frozen=True)
+class TrimMapping:
+    """What the matcher needs of a TrimMapping row (matching-v2-design §2.2)."""
+    make_key: str
+    model_key: str | None       # None = every model of the make
+    trim_key: str
+    year_from: int | None
+    year_to: int | None
+    action: str                 # map | noise
+    catalogue_trims: tuple[str, ...] = ()
+
+    @classmethod
+    def of(cls, row) -> "TrimMapping":
+        return cls(row.make_key, row.model_key, row.trim_key, row.year_from, row.year_to, row.action,
+                   tuple(row.catalogue_trims or ()))
 
 
 def parse_catalogue_engine(name: str | None) -> EngineSpec:
@@ -167,6 +191,22 @@ def applicable_mappings(raw: dict, mappings) -> list[Mapping]:
     return out
 
 
+def _year(raw: dict) -> int | None:
+    try:
+        return int((raw.get("ModelYear") or "").strip())
+    except ValueError:
+        return None
+
+
+def trim_mapping_for(raw: dict, text: str, trim_mappings) -> TrimMapping | None:
+    """The trim mapping covering this text for this decode: one for the decode's model before a make-wide one."""
+    make, model, key, year = name_key(raw.get("Make")), name_key(raw.get("Model")), name_key(text), _year(raw)
+    hits = [m for m in trim_mappings
+            if m.make_key == make and m.trim_key == key and m.model_key in (None, model)
+            and not (year is not None and ((m.year_from and year < m.year_from) or (m.year_to and year > m.year_to)))]
+    return min(hits, key=lambda m: m.model_key is None, default=None)
+
+
 def _narrow(rows: list, keep, label: str, match: CarMatch) -> list:
     kept = [r for r in rows if keep(r)]
     if kept and len(kept) < len(rows):
@@ -196,9 +236,11 @@ def _why_unmatched(conn, makes: set[str], pairs: set[tuple[str, str]], year_had_
     return MODEL_NOT_IN_CATALOGUE
 
 
-def match_decoded(raw: dict, pi_engine: Engine, mappings=(), yard_trim: str | None = None) -> CarMatch:
+def match_decoded(raw: dict, pi_engine: Engine, mappings=(), yard_trim: str | None = None,
+                  trim_mappings=()) -> CarMatch:
     """Candidate car ids for a decoded VIN. Empty (with `reason`) when no catalogue car fits. `yard_trim` is the
-    yard's own trim for the vehicle, a fallback for decodes without one."""
+    yard's own trim for the vehicle, a fallback for decodes without one; `trim_mappings` settle trim texts the
+    normaliser can't read."""
     year = (raw.get("ModelYear") or "").strip()
     make = (raw.get("Make") or "").strip()
     model = (raw.get("Model") or "").strip()
@@ -244,13 +286,29 @@ def match_decoded(raw: dict, pi_engine: Engine, mappings=(), yard_trim: str | No
 
     # Trim text in order of trust: the decode's Trim, its Series, then the yard's trim, which is only used when the
     # decode has no trim text at all (matching-v2-design §2.1). The first text that means something narrows.
-    decode_texts = [t for t in (raw.get("Trim"), raw.get("Series")) if t and t.strip()]
-    texts = decode_texts or ([yard_trim] if yard_trim and yard_trim.strip() else [])
-    for text in texts:
-        meant = trims_meant(text, {r.trim for r in rows})
-        if meant:
-            rows = _narrow(rows, lambda r: r.trim in meant, "trim", match)
+    # A trim mapping for a text comes first. Text that is only noise is passed over; text in doubt is passed
+    # over too but remembered, so the Trims tab can show it (only while the candidates' trims still differ).
+    decode_texts = [t.strip() for t in (raw.get("Trim"), raw.get("Series")) if t and t.strip()]
+    texts = decode_texts or ([yard_trim.strip()] if yard_trim and yard_trim.strip() else [])
+    trims = {r.trim for r in rows}
+    unread = None
+    if len({t for t in trims if t}) > 1:
+        for text in texts:
+            mapping = trim_mapping_for(raw, text, trim_mappings)
+            if mapping and mapping.action == "noise":
+                match.trim_noise = True
+                continue
+            meant, label = (set(mapping.catalogue_trims), "trim_mapping") if mapping else (trims_meant(text, trims), "trim")
+            if meant is None:
+                unread = unread or text
+                continue
+            if not meant:
+                match.trim_noise = True
+                continue
+            rows = _narrow(rows, lambda r: r.trim in meant, label, match)
             break
+        else:
+            match.trim_unread = unread[:200] if unread else None
 
     match.candidates = sorted(r.id for r in rows)
     return match

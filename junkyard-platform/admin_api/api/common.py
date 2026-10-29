@@ -56,7 +56,8 @@ def requeue(session: Session, vehicle_ids: list[int], include_matched: bool = Fa
     stmt = update(Vehicle).where(Vehicle.id.in_(vehicle_ids))
     if include_matched:
         stmt = stmt.values(car_id_resolved=False, car_id=None, car_id_method=None, car_id_confidence=None,
-                           car_id_candidates=None, resolve_attempted_at=None)
+                           car_id_candidates=None, car_id_match_steps=None, car_id_trim_unread=None,
+                           resolve_attempted_at=None)
     else:
         stmt = stmt.where(Vehicle.car_id_resolved.is_(False)).values(resolve_attempted_at=None)
     return session.execute(stmt).rowcount or 0

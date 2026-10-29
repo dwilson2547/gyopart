@@ -1,10 +1,11 @@
 // API shapes, one-to-one with admin_api/api/*.py.
 
-export type Tab = "fixable" | "gaps" | "nodecode" | "ignored";
+export type Tab = "fixable" | "gaps" | "nodecode" | "trims" | "ignored";
 
 export type GroupKey = {
-  kind: "decode" | "yard";
+  kind: "decode" | "yard" | "trim";
   make: string | null; model: string | null; series: string | null; source: string | null;
+  trim?: string | null; // trim groups: the trim text the matcher couldn't read
 };
 
 export type Group = {
@@ -18,7 +19,7 @@ export type Count = { value: string | number | null; vehicles: number };
 export type Sample = {
   id: number; vin: string | null; source: string; stock: string; year: number | null; make: string | null;
   model: string | null; trim: string | null; row: string | null; arrived: string | null; location: string;
-  reason: string;
+  reason: string; series?: string | null;
 };
 export type ModelOption = { name: string; years: number[]; yearsInRange: number; score?: number };
 export type MakeOption = { name: string; yearMin: number; yearMax: number };
@@ -36,6 +37,20 @@ export type GroupDetail = {
   // yard groups
   makeSuggestions?: { name: string; score: number }[]; modelSuggestions?: ModelOption[];
   modelSuggestionsMake?: string | null;
+  // trim groups
+  candidateTrims?: CandidateTrim[]; trimMappings?: TrimMappingRow[];
+};
+
+// ── matching v2: trims ────────────────────────────────────────────────────────────────────────
+
+export type CandidateTrim = { name: string; vehicles: number; models: string[]; years: number[] };
+export type TrimPreview = {
+  vehicles: number; exact: number; exactBefore: number; narrower: number; unchanged: number; wider: number;
+};
+export type TrimMappingRow = {
+  id: number; nhtsaMake: string; nhtsaModel: string | null; trim: string; yearFrom: number | null;
+  yearTo: number | null; action: "map" | "noise"; trims: string[]; createdBy: string; createdAt: string;
+  vehicles?: number;
 };
 
 export type Preview = { vehicles: number; wouldMatch: number; exact?: number; unmatched: Record<string, number> };
@@ -58,6 +73,7 @@ export const REASON_LABEL: Record<string, string> = {
   model_year_gap: "model not in catalogue that year",
   no_vin: "no VIN",
   decode_failed: "VIN didn't decode",
+  trim_unread: "trim text not understood",
 };
 
 // ── phase 3: vehicles ─────────────────────────────────────────────────────────────────────────
@@ -72,7 +88,8 @@ export type VehicleDetail = VehicleHit & {
   yard: Record<string, string | number>;
   extras: Record<string, unknown>;
   match: { resolved: boolean; method: string | null; confidence: number | null; carId: number | null;
-    attemptedAt: string | null; candidates: CatCar[]; candidateCount: number };
+    attemptedAt: string | null; candidates: CatCar[]; candidateCount: number;
+    steps: string[]; trimUnread: string | null };
   discrepancy: { reason: string | null; status: string; nhtsaYear: string | null; nhtsaMake: string | null;
     nhtsaModel: string | null; nhtsaSeries: string | null } | null;
   decode: { error: string | null; fetchedAt: string; raw: Record<string, string | null> } | null;
@@ -82,6 +99,11 @@ export type ScrapeJobInfo = {
   job?: { name: string; namespace: string; phase: string; suspended: boolean; running: boolean;
     lastRun: { result: string; reason: string | null; items: number | null; finishedAt: string | null; trigger: string } | null;
     lastSuccessAt: string | null; nextRunAt: string | null; runNowRequested: boolean };
+};
+
+export const STEP_LABEL: Record<string, string> = {
+  engine: "engine", fuel: "fuel", trim: "trim (read from the decode)", trim_mapping: "trim (trim mapping)",
+  trim_noise: "trim text is noise",
 };
 
 export const METHOD_LABEL: Record<string, string> = {

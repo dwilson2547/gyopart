@@ -5,6 +5,7 @@ import { REASON_LABEL } from "./types.ts";
 import { MapPanel } from "./MapPanel.tsx";
 import { Link } from "./router.tsx";
 import { RulePanel } from "./RulePanel.tsx";
+import { TrimPanel } from "./TrimPanel.tsx";
 import { Empty, ErrorBanner, Loading, fmtInt, keyLabel, useLoad, years } from "./util.tsx";
 
 export type Resolved = (key: GroupKey, message: string) => void;
@@ -35,7 +36,8 @@ export function GroupPanel({ groupKey, status, tab, yard, onResolved }: {
 
       {status === "open" && groupKey.kind === "decode" && <MapPanel d={d} onResolved={onResolved} />}
       {status === "open" && groupKey.kind === "yard" && <RulePanel d={d} onResolved={onResolved} />}
-      <StatusActions d={d} onResolved={onResolved} />
+      {groupKey.kind === "trim" && <TrimPanel d={d} onResolved={onResolved} />}
+      {groupKey.kind !== "trim" && <StatusActions d={d} onResolved={onResolved} />}
 
       <Coverage d={d} tab={tab} />
       <div className="grid2">
@@ -145,13 +147,14 @@ function Samples({ d }: { d: GroupDetail }) {
     <details open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
       <summary>Sample cars ({d.samples.length} newest of {fmtInt(d.vehicles)})</summary>
       <table className="list small">
-        <thead><tr><th>Yard</th><th>Year</th><th>Yard says</th><th>VIN</th><th>Stock / row</th></tr></thead>
+        <thead><tr><th>Yard</th><th>Year</th><th>Yard says</th>{d.key.kind === "trim" && <th>NHTSA series</th>}<th>VIN</th><th>Stock / row</th></tr></thead>
         <tbody>
           {d.samples.map((s) => (
             <tr key={s.id}>
               <td><Link to={`/vehicles/${s.id}`}>{s.location}</Link><div className="muted">{s.source}</div></td>
               <td>{s.year ?? "—"}</td>
               <td>{[s.make, s.model, s.trim].filter(Boolean).join(" ")}</td>
+              {d.key.kind === "trim" && <td className="muted">{s.series ?? "—"}</td>}
               <td className="mono">{s.vin ?? <span className="muted">none</span>}</td>
               <td className="muted">{s.stock}{s.row ? ` · row ${s.row}` : ""}</td>
             </tr>

@@ -1,6 +1,6 @@
 """Discrepancy groups (design §2.3). Vehicles with a usable decode group by what NHTSA said (make, model,
 series); vehicles without one (no_vin, decode_failed) group by yard + the yard's own make/model strings,
-since those are fixed with yard rules."""
+since those are fixed with yard rules. The trims tab lists matched-but-ambiguous vehicles instead (trims.py)."""
 from __future__ import annotations
 
 from typing import Literal
@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from junkyard_common.models import DecodeMapping, Location, MappingDiscrepancy, Vehicle
 from pipeline.car_matcher import decoded_model_keys, name_key
 
-from . import catalogue
+from . import catalogue, trims
 from .common import BUCKETS, IGNORED, YARD_REASONS, engines, open_discrepancies, sql_year
 
 router = APIRouter(prefix="/api", tags=["discrepancies"])
@@ -22,12 +22,16 @@ PAGE = 50
 D, V = MappingDiscrepancy, Vehicle
 
 
+TRIMS = "trims"   # the tab of trim groups (trims.py): ambiguous matches, not discrepancies
+
+
 class GroupKey(BaseModel):
-    kind: Literal["decode", "yard"]
-    make: str | None = None    # NHTSA make (decode) or the yard's raw make (yard)
+    kind: Literal["decode", "yard", "trim"]
+    make: str | None = None    # NHTSA make (decode, trim) or the yard's raw make (yard)
     model: str | None = None
     series: str | None = None  # decode groups only
     source: str | None = None  # yard groups only
+    trim: str | None = None    # trim groups only: the trim text the matcher couldn't read
 
 
 def key_filter(key: GroupKey):
@@ -80,11 +84,13 @@ def groups(session: Session, tab: str, yard=None, make=None, search=None, page: 
         rows = (_group_rows(session, "decode", [r for b in ("fixable", "gaps") for r in BUCKETS[b]], IGNORED,
                             yard, make, search)
                 + _group_rows(session, "yard", YARD_REASONS, IGNORED, yard, make, search))
+    elif tab == TRIMS:
+        rows = trims.groups(session, yard=yard, make=make, search=search)
     elif tab in BUCKETS:
         kind = "yard" if tab == "nodecode" else "decode"
         rows = _group_rows(session, kind, BUCKETS[tab], "open", yard, make, search)
     else:
-        raise HTTPException(422, f"tab must be one of {sorted([*BUCKETS, IGNORED])}")
+        raise HTTPException(422, f"tab must be one of {sorted([*BUCKETS, TRIMS, IGNORED])}")
     rows.sort(key=lambda g: (-g["vehicles"], str(g["key"])))
     pages = max(1, -(-len(rows) // PAGE))
     page = min(max(page, 1), pages)
@@ -95,13 +101,15 @@ def groups(session: Session, tab: str, yard=None, make=None, search=None, page: 
 def summary(session: Session, yard=None, search=None) -> dict:
     """Groups and vehicles per tab, under the same filters as the lists."""
     out = {}
-    for tab in [*BUCKETS, IGNORED]:
+    for tab in [*BUCKETS, TRIMS, IGNORED]:
         g = groups(session, tab, yard=yard, search=search)
         out[tab] = {"groups": g["total"], "vehicles": g["vehicles"]}
     return out
 
 
 def detail(session: Session, pi, key: GroupKey, status: str = "open") -> dict:
+    if key.kind == "trim":
+        return trims.detail(session, pi, key.make, key.model, key.trim)
     year = sql_year(D.nhtsa_year) if key.kind == "decode" else V.year
 
     def counts(col):
@@ -167,6 +175,8 @@ def detail(session: Session, pi, key: GroupKey, status: str = "open") -> dict:
 
 
 def set_status(session: Session, key: GroupKey, ignore: bool) -> int:
+    if key.kind == "trim":
+        raise HTTPException(422, "trim groups aren't ignored: map the text as noise instead")
     ids = select(D.id).join(V, V.id == D.vehicle_id).where(key_filter(key))
     ids = open_discrepancies(ids, "open" if ignore else IGNORED)
     return session.execute(update(D).where(D.id.in_(ids)).values(status=IGNORED if ignore else "unresolved")

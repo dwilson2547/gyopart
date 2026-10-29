@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.engine import Engine
 
 from pipeline.car_matcher import name_key
-from pipeline.pi_schema import pi_car_table, pi_make_table, pi_model_table, pi_year_table
+from pipeline.pi_schema import pi_car_table, pi_make_table, pi_model_table, pi_trim_table, pi_year_table
 
 from .common import engines
 
@@ -63,6 +63,11 @@ def model_exists(pi: Engine, make: str, model: str) -> bool:
             .where(func.lower(pi_make_table.c.name) == make.strip().lower(), pi_model_table.c.name == model)
             .limit(1)
         ).first() is not None
+
+
+def trim_exists(pi: Engine, name: str) -> bool:
+    with pi.connect() as conn:
+        return conn.execute(select(pi_trim_table.c.id).where(pi_trim_table.c.name == name).limit(1)).first() is not None
 
 
 def _in_range(years: list[int], lo: int | None, hi: int | None) -> int:

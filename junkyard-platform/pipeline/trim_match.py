@@ -71,7 +71,8 @@ def _one_alternative(text: str, optional: list[str], trims: dict[str, set[str]],
 
 
 def trims_meant(text: str | None, catalogue_trims) -> set[str] | None:
-    """The catalogue trims `text` means, or None when it says nothing usable or anything is in doubt."""
+    """The catalogue trims `text` means; an empty set when it is only noise (it says nothing about the trim);
+    None when anything is in doubt, which is what a person or a trim mapping has to settle."""
     names = {t for t in catalogue_trims if t and t.strip()}
     if not text or not text.strip() or not names:
         return None
@@ -97,7 +98,7 @@ def trims_meant(text: str | None, catalogue_trims) -> set[str] | None:
         if any(not _is_noise(_effective(t, vocab), vocab) for t in _tokens(alt)):
             alternatives.append(alt)
     if not alternatives:
-        return None                             # noise only: "1500", "ACV40L/GSV40L"
+        return set()                            # noise only: "1500", "ACV40L/GSV40L"
     meant: set[str] = set()
     for alt in alternatives:
         hit = _one_alternative(alt, optional, trims, vocab)

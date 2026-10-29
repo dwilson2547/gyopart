@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ApiError, get, post, qs } from "./api.ts";
 import type { CatCar, GroupKey, ScrapeJobInfo, VehicleDetail } from "./types.ts";
-import { METHOD_LABEL, REASON_LABEL } from "./types.ts";
+import { METHOD_LABEL, REASON_LABEL, STEP_LABEL } from "./types.ts";
 import { Link } from "./router.tsx";
 import { Combobox } from "./Combobox.tsx";
 import { Empty, ErrorBanner, Loading, decodeEntities, fmtInt, keyLabel, useLoad, useToast } from "./util.tsx";
@@ -107,6 +107,13 @@ function MatchCard({ d, reload }: { d: VehicleDetail; reload: () => Promise<void
             </table>
           )}
           {m.candidateCount > m.candidates.length && <span className="muted small">first {m.candidates.length} shown</span>}
+          {(m.steps.length > 0 || m.trimUnread) && (
+            <div className="small muted">
+              {m.steps.length > 0 && <>Narrowed by: {m.steps.map((s) => STEP_LABEL[s] ?? s).join(", ")}. </>}
+              {m.trimUnread && <>Trim text “{m.trimUnread}” wasn't understood: <Link to={`/?tab=trims&g=${encodeURIComponent(JSON.stringify(
+                { kind: "trim", make: d.decode?.raw.Make ?? null, model: d.decode?.raw.Model ?? null, series: null, source: null, trim: m.trimUnread }))}`}>settle it →</Link></>}
+            </div>
+          )}
         </>
       ) : (
         <div className="stack" style={{ gap: 6 }}>

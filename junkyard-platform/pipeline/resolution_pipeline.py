@@ -23,8 +23,9 @@ from sqlalchemy.orm import Session
 
 from junkyard_common.db import get_engine, get_session
 from junkyard_common.models import DecodeMapping, Location, MappingDiscrepancy, MappingRule, Vehicle
+from junkyard_common.models import TrimMapping as TrimMappingRow
 from pipeline.rule_engine import apply_rules
-from pipeline.car_matcher import DECODE_FAILED, Mapping, decoded_vehicle_fields, match_decoded
+from pipeline.car_matcher import DECODE_FAILED, Mapping, TrimMapping, decoded_vehicle_fields, match_decoded
 from pipeline.vin_decoder import decode_vin, warm_vin_cache_bulk
 from pipeline.ymmt_matcher import YmmtMatch, match_car
 
@@ -62,6 +63,11 @@ def load_mappings(session: Session) -> list[Mapping]:
     return [Mapping.of(r) for r in session.execute(select(DecodeMapping)).scalars()]
 
 
+def load_trim_mappings(session: Session) -> list[TrimMapping]:
+    """Every trim mapping, likewise."""
+    return [TrimMapping.of(r) for r in session.execute(select(TrimMappingRow)).scalars()]
+
+
 def _clear_discrepancy(vehicle: Vehicle, session: Session, dry_run: bool) -> None:
     """A vehicle that matches has no discrepancy any more (a manual one included: matched is matched)."""
     if not dry_run:
@@ -91,17 +97,20 @@ def resolve_vehicle(
     decoded: dict | None = None,
     commit: bool = True,
     mappings: list[Mapping] = (),
+    trim_mappings: list[TrimMapping] = (),
 ) -> str:
     """
     Attempt to resolve the catalogue cars a yard vehicle can be. Returns one of:
     "already_resolved" | "vin_exact" | "vin_candidates" | "ymmt_match" | "rule_applied" | "discrepancy"
 
     `decoded` is the VIN decode when the caller already has it (the worker decodes in batches); otherwise the
-    VIN is decoded here, cache-first. `mappings` are the decode mappings (load_mappings).
+    VIN is decoded here, cache-first. `mappings` are the decode mappings (load_mappings), `trim_mappings` the
+    trim mappings (load_trim_mappings).
     """
     if vehicle.car_id_resolved:
         return "already_resolved"
     now = datetime.now(timezone.utc).replace(tzinfo=None)
+    vehicle.car_id_match_steps = vehicle.car_id_trim_unread = None
 
     def done(result: str) -> str:
         if commit and not dry_run:
@@ -117,11 +126,13 @@ def resolve_vehicle(
         for column, value in decoded_vehicle_fields(raw).items():
             if getattr(vehicle, column) is None:
                 setattr(vehicle, column, value)
-        match = match_decoded(raw, pi_engine, mappings, vehicle.trim)
+        match = match_decoded(raw, pi_engine, mappings, vehicle.trim, trim_mappings)
         if match.candidates:
             exact = match.exact
             _set_match(vehicle, match.candidates, "vin_exact" if exact else "vin_candidates",
                        1.0 if exact else round(1.0 / len(match.candidates), 4), now)
+            vehicle.car_id_match_steps = match.steps
+            vehicle.car_id_trim_unread = None if exact else match.trim_unread
             _clear_discrepancy(vehicle, session, dry_run)
             return done("vin_exact" if exact else "vin_candidates")
 

@@ -93,6 +93,11 @@ class Vehicle(Base):
     car_id_candidates    = Column(ARRAY(Integer), nullable=True)
     # Set when the resolver worker has processed the vehicle; NULL + car_id_resolved false = queued.
     resolve_attempted_at = Column(DateTime,       nullable=True)
+    # How a VIN match was narrowed (pipeline.car_matcher.CarMatch): engine, fuel, trim, trim_mapping, trim_noise.
+    car_id_match_steps   = Column(ARRAY(String(20)), nullable=True)
+    # The trim text (decode or yard) the matcher couldn't read while candidates still differ: what the Trims tab
+    # groups by, and what a trim mapping settles (matching-v2-design §2.2).
+    car_id_trim_unread   = Column(String(200),    nullable=True)
 
     # Bookkeeping
     is_active     = Column(Boolean,  nullable=False, default=True)
@@ -191,6 +196,34 @@ class DecodeMapping(Base):
     year_to         = Column(Integer,     nullable=True)
     catalogue_make  = Column(String(120), nullable=False)
     catalogue_model = Column(String(120), nullable=False)
+    created_by      = Column(String(100), nullable=False)
+    created_at      = Column(DateTime,    nullable=False)
+
+
+class TrimMapping(Base):
+    """What an NHTSA (or yard) trim string means for a make/model (matching-v2-design §2.2).
+
+    Matched on loose name keys (pipeline.car_matcher.name_key) of the decode's make and model (model null =
+    every model of the make) and of the trim text, within an optional year range. `map` narrows the candidates
+    to `catalogue_trims` (picked from the catalogue, never typed); `noise` says the text carries no trim, so it
+    stops being shown.
+    """
+    __tablename__ = "trim_mappings"
+    __table_args__ = (
+        Index("ix_trim_mappings_key", "make_key", "trim_key"),
+    )
+
+    id              = Column(Integer,     primary_key=True, autoincrement=True)
+    nhtsa_make      = Column(String(100), nullable=False)
+    nhtsa_model     = Column(String(200), nullable=True)   # null = every model of the make
+    trim_text       = Column(String(200), nullable=False)
+    make_key        = Column(String(100), nullable=False)
+    model_key       = Column(String(200), nullable=True)
+    trim_key        = Column(String(200), nullable=False)
+    year_from       = Column(Integer,     nullable=True)   # null = open-ended
+    year_to         = Column(Integer,     nullable=True)
+    action          = Column(String(10),  nullable=False)  # map | noise
+    catalogue_trims = Column(ARRAY(String(120)), nullable=True)  # for map
     created_by      = Column(String(100), nullable=False)
     created_at      = Column(DateTime,    nullable=False)
 

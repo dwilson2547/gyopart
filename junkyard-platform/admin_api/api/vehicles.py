@@ -90,6 +90,7 @@ def vehicle(vehicle_id: int, eng=Depends(engines)):
             "carId": v.car_id, "attemptedAt": _iso(v.resolve_attempted_at),
             "candidates": describe_cars(pi, list(v.car_id_candidates or [])[:50]),
             "candidateCount": len(v.car_id_candidates or []),
+            "steps": list(v.car_id_match_steps or []), "trimUnread": v.car_id_trim_unread,
         },
         "discrepancy": None if d is None else {
             "reason": d.reason, "status": d.status, "nhtsaYear": d.nhtsa_year, "nhtsaMake": d.nhtsa_make,

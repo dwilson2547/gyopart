@@ -12,8 +12,9 @@ export function decodeEntities(s: string | null | undefined): string {
   return _txt.value;
 }
 
-export function keyLabel(k: { make: string | null; model: string | null; series: string | null }): string {
+export function keyLabel(k: { make: string | null; model: string | null; series: string | null; trim?: string | null }): string {
   const name = [k.make, k.model].filter(Boolean).join(" ") || "(blank)";
+  if (k.trim) return `${name} · “${k.trim}”`;
   return k.series ? `${name} · ${k.series}` : name;
 }
 

@@ -11,6 +11,7 @@ const TABS: { id: Tab; label: string; help: string }[] = [
   { id: "fixable", label: "Fixable", help: "NHTSA's name isn't the catalogue's: map it." },
   { id: "gaps", label: "Catalogue gaps", help: "The catalogue doesn't cover these years yet. Shows yard trends." },
   { id: "nodecode", label: "No decode", help: "No usable VIN decode: fix with a yard rule on the yard's own strings." },
+  { id: "trims", label: "Trims", help: "Matched to several cars that differ by trim, and the trim text wasn't understood: say what it means, or that it's noise." },
   { id: "ignored", label: "Ignored", help: "Groups you set aside." },
 ];
 
@@ -18,6 +19,7 @@ const EMPTY: Record<Tab, string> = {
   fixable: "Nothing to fix here: every decode name matches the catalogue.",
   gaps: "No catalogue gaps.",
   nodecode: "Every unmatched vehicle has a usable VIN decode.",
+  trims: "Every trim text the matcher met is understood or settled.",
   ignored: "Nothing ignored.",
 };
 
@@ -113,7 +115,7 @@ export function DiscrepanciesPage() {
           ) : (
             <>
               <table className="list">
-                <thead><tr><th>{tab === "nodecode" ? "Yard says" : "NHTSA decode"}</th><th>Years</th><th className="num">Cars</th><th className="num">Yards</th></tr></thead>
+                <thead><tr><th>{tab === "nodecode" ? "Yard says" : tab === "trims" ? "NHTSA decode · trim text" : "NHTSA decode"}</th><th>Years</th><th className="num">Cars</th><th className="num">Yards</th></tr></thead>
                 <tbody>
                   {groups.map((g) => <GroupRow key={JSON.stringify(g.key)} g={g} selected={key != null && sameKey(key, g.key)}
                                                onSelect={() => set({ g: JSON.stringify(g.key) })} />)}
