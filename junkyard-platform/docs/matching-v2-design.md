@@ -1,6 +1,7 @@
 # VIN matching v2 (trims) and the fix-suggestion agent — design
 
-Status: **phase 1 in dev** (2026-10-27, §4); the rest is planned (user, 2026-10-27). §1 is verified against the code on `dev` (731cd38)
+Status: **phases 1–2 in dev** (2026-10-27/28, §4); the rest is planned (user, 2026-10-27). Prod waits for the whole
+system (user, 2026-10-28). §1 is verified against the code on `dev` (731cd38)
 and read-only queries against the **dev** databases on 2026-10-27; the §2.1 numbers come from a throwaway
 prototype of the normaliser run over the same data. Prod numbers have not been measured for this.
 
@@ -192,7 +193,19 @@ call after the bake-off.
    EX / EX-L). A 40-vehicle sample of new exacts read right after that. Dev re-match of every `vin_candidates`
    vehicle: `vin_exact` 60,000 → 69,352, `vin_candidates` 59,192 → 49,840, total matched unchanged (126,836). Prod not
    shipped.
-2. **Trim mappings** (§2.2) + Trims tab + MCP tools + `narrowed_by` on the vehicle page (§2.3).
+2. **Trim mappings** (§2.2) + Trims tab + MCP tools + `narrowed_by` on the vehicle page (§2.3). **In dev 2026-10-28**
+   (gyopart c6a7bb7; images `sha-c6a7bb79b120`; dev DB at migration 0007, applied by hand). Built differently from
+   §2.3 in one respect: ambiguous matches have no discrepancy rows, so the worker records on each vehicle which
+   steps narrowed it (`car_id_match_steps`: engine, fuel, trim, trim_mapping, trim_noise) and the trim text it
+   couldn't read while the candidates' trims still differ (`car_id_trim_unread`); the Trims tab groups by
+   (decode make, model, that text). Noise-only text is recorded as `trim_noise` and never listed. A trim mapping
+   for a text beats the normaliser; one for the decode's model beats a make-wide one; duplicates are refused
+   (edit = delete + create). Preview counts the covered VIN-matched vehicles that end exact / narrower /
+   unchanged / wider. Dev after the re-match: 21,699 vehicles over 1,634 groups (1,223 distinct texts); 9,616
+   vehicles' text recorded as noise. Verified against dev: list 0.23 s, previews 0.1–1.1 s, a noise and a map
+   round trip (create → worker re-match → delete) left no mappings behind. MCP: `preview_trim_mapping`,
+   `create_trim_mapping`, `delete_trim_mapping` (agent-made only), `list_trim_mappings`; the group tools take
+   `kind: "trim"` keys.
 3. **Suggestions table and review page** (§3.2–3.3), first fed by MCP sessions only.
 4. **Text adapter + bake-off** in the GPU scheduler (§3.5).
 5. **Suggester job** (§3.4) in dev, then prod, decode groups first.
