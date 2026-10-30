@@ -76,6 +76,22 @@ SESSION_START_ATTEMPTS = 3
 SESSION_START_WAIT_S = 60
 
 
+# The image CDNs are Cloudflare in front of these origins, which serve the same files (byte-identical,
+# checked 2026-10-30) without Cloudflare. Image downloads were most of the traffic and came from a non-browser
+# client; on Ford and Subaru the CDN's 403s came just before the exit IP was banned from every site.
+IMAGE_ORIGINS = {
+    "cdn-product-images.revolutionparts.io": "https://s3.amazonaws.com/rp-part-images",
+    "cdn-illustrations.revolutionparts.io": "https://dz310nzuyimx0.cloudfront.net",
+}
+
+
+def image_origin_url(url: str) -> Optional[str]:
+    """The same image from its origin, bypassing Cloudflare; None for hosts without a known origin."""
+    parts = urlparse(url)
+    origin = IMAGE_ORIGINS.get(parts.netloc)
+    return f"{origin}{parts.path}" if origin else None
+
+
 def canonical_part_url(url: str) -> str:
     """Part links carry a per-vehicle context query (?c=<base64 of category/vehicle/position>), so one
     part has a different URL on every diagram. The page is the same without it — the 2024 scrape
@@ -533,14 +549,25 @@ class UpdaterV2:
                 print(f"retrying {what} after {type(ex).__name__} ({attempt}/{attempts - 1})", flush=True)
 
     def _fetch_image(self, url: str, proxies) -> bytes:
+        # From the origin when there is one (IMAGE_ORIGINS); the CDN URL only if the origin doesn't have it.
+        origin = image_origin_url(url)
+        if origin:
+            resp = self._get_image(origin, proxies)
+            if resp.ok:
+                return resp.content
+            print(f"image origin {resp.status_code}, trying the CDN: {url}")
+        resp = self._get_image(url, proxies)
+        resp.raise_for_status()
+        return resp.content
+
+    def _get_image(self, url: str, proxies):
         # Through request-auth like every page fetch, so image traffic is paced, backed off and visible
-        # in its admin panel. The CDN domains get a larger pool there (docs/design-v2.md §3.8b); with the
+        # in its admin panel. The image domains get a larger pool there (docs/design-v2.md §3.8b); with the
         # default pool of 1 the parallel downloads would serialise again.
         with self.request_auth.acquire(urlparse(url).netloc) as permit:
             resp = requests.get(url, timeout=30, proxies=proxies)
             permit.set_status(resp.status_code)
-        resp.raise_for_status()
-        return resp.content
+        return resp
 
     def _stored_hash(self, key: str):
         """None if the object isn't in the bucket; else its BLAKE3 hash from the object metadata, or True for

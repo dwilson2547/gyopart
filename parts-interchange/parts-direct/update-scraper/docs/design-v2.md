@@ -273,8 +273,10 @@ one replica — every concurrent job shares one exit IP).
   run also checks positively: the exit IP through the proxy must be a real IP and differ from the
   direct (home) IP; repeated every 50 vehicles, and the run exits 75 if it fails. (NordVPN's
   `vpn/check/full` endpoint now only answers `{"status": "deprecated"}`, ✅ 2026-10-11.)
-- **Exit rotation:** the exit rotates about every 20 min and the proxy is unreachable for 30 s – 1 min
-  meanwhile (user, 2026-10-25). A proxy error mid-run, or a failed check, polls the check every 15 s for
+- **Exit rotation:** the proxy moves to a different server every 20 min (`ROTATE_CRON`, nordvpn-proxy
+  `e02dd66`), picked from NordVPN's top 20 recommendations; a reconnect took about 5 s (✅ 56 rotations,
+  2026-10-29/30). Before that the exit changed only when the tunnel died, and one IP lasted days until
+  Cloudflare banned it (`docs/issues/2026_10_29_parts_direct_cloudflare_ban_one_vpn_exit.md`). A proxy error mid-run, or a failed check, polls the check every 15 s for
   up to 3 min and retries the page; only a proxy still down after that exits 75. The homepage at session
   start is tried 3 times, 60 s apart, for the same reason.
 - **Stuck tunnel:** ✅ 2026-10-11 the proxy sat on a dead server for an unknown time: OpenVPN soft-restarts
@@ -307,6 +309,13 @@ one replica — every concurrent job shares one exit IP).
   (✅ dev and prod, 2026-10-11): `cdn-product-images.revolutionparts.io`,
   `cdn-illustrations.revolutionparts.io`, `s3.amazonaws.com`, `dz310nzuyimx0.cloudfront.net` — pool 8,
   base delay 200 ms.
+- Where they come from (2026-10-30, ⬜ not yet in an image): the origin behind each CDN, not the CDN.
+  `cdn-product-images.revolutionparts.io` and `cdn-illustrations.revolutionparts.io` are Cloudflare in front of
+  `s3.amazonaws.com/rp-part-images` and `dz310nzuyimx0.cloudfront.net` (same paths, byte-identical files,
+  ✅ 2026-10-30), which aren't behind Cloudflare. The CDN URL is used only when the origin doesn't have the
+  file. Image downloads were most of the traffic and came from `requests`, not a browser, and on 2026-10-29 the
+  CDN's 403s came just before the exit IP was banned from every RevolutionParts site
+  (`docs/issues/2026_10_29_parts_direct_cloudflare_ban_one_vpn_exit.md`). The image row keeps the page's URL.
 - Where they go (2026-10-17, ⬜ dev, not yet prod): straight to the `part-images` bucket on AIStor, at the key
   the image row's `bucket_path` already names (`<config>/images/<name>`, the layout the original scraper used).
   An object already there is not downloaded again. A stored image gets `saved = uploaded = true` and its BLAKE3
