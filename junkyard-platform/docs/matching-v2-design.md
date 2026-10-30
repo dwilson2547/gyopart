@@ -1,6 +1,6 @@
 # VIN matching v2 (trims) and the fix-suggestion agent — design
 
-Status: **phases 1–2 in dev** (2026-10-27/28, §4); the rest is planned (user, 2026-10-27). Prod waits for the whole
+Status: **phases 1–3 in dev** (2026-10-27/28/30, §4); the rest is planned (user, 2026-10-27). Prod waits for the whole
 system (user, 2026-10-28). §1 is verified against the code on `dev` (731cd38)
 and read-only queries against the **dev** databases on 2026-10-27; the §2.1 numbers come from a throwaway
 prototype of the normaliser run over the same data. Prod numbers have not been measured for this.
@@ -206,6 +206,25 @@ call after the bake-off.
    round trip (create → worker re-match → delete) left no mappings behind. MCP: `preview_trim_mapping`,
    `create_trim_mapping`, `delete_trim_mapping` (agent-made only), `list_trim_mappings`; the group tools take
    `kind: "trim"` keys.
-3. **Suggestions table and review page** (§3.2–3.3), first fed by MCP sessions only.
+3. **Suggestions table and review page** (§3.2–3.3), first fed by MCP sessions only. **In dev 2026-10-30** (gyopart
+   e5393de; images `sha-e5393debac7c`; dev DB at migration 0008, applied by hand). `admin_api/api/suggestions.py`,
+   page `/suggestions` (Waiting / Approved / Rejected / Stale), MCP `suggest_fix` and `list_suggestions`; no approve
+   on the MCP. As built, beyond §3.2–3.3:
+   - Filing refuses a proposal that isn't for its group (decode, trim text or yard strings must be the key's;
+     `ignore_group` only for decode and yard groups), a group that already has one waiting, a fix rejected for that
+     group before (matched on a hash of kind + group + normalised proposal), and a preview that would do nothing:
+     no open vehicles, no matches (decode / yard), or any `wider` (trim).
+   - Stale = the group has no open vehicles left; checked whenever suggestions are listed or a card's live preview
+     runs. A group that only changed shows up as the live preview differing from the filed one: Approve then asks
+     again, and the server refuses an approve whose preview no longer holds.
+   - Tweak opens the group's own fix form (MapPanel, TrimPanel, RulePanel) filled from the proposal and saves
+     through the suggestion's approve; `edited` keeps the final kind, proposal and preview in `final`. The created
+     fix's `created_by` reads `agent-suggested:<model> (approved by <user>)`, or `(edited by <user>)`; not the MCP's
+     `agent:` prefix, so agent delete tools can't remove it.
+   - The group panel on the discrepancies page links to a waiting suggestion; the nav shows how many wait.
+   Verified against dev with a script in the admin pod: filed → duplicate refused → live preview equal → approve with
+   altered numbers refused → approved (173 Sonatas exact via the worker) → mapping removed (all 173 back); an edited
+   approval; reject, then the same fix refused; a stale one after settling its group directly. Verification rows and
+   mappings deleted; Trims tab back to 21,699 / 1,634. The SPA was type-checked and built, not clicked through.
 4. **Text adapter + bake-off** in the GPU scheduler (§3.5).
 5. **Suggester job** (§3.4) in dev, then prod, decode groups first.
