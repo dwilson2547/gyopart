@@ -1,17 +1,20 @@
 import { useMemo, useState } from "react";
 import { ApiError, get, post, qs } from "./api.ts";
-import type { GroupDetail, MakeOption, ModelOption, Preview } from "./types.ts";
+import type { GroupDetail, MakeOption, ModelOption, Preview, Suggestion } from "./types.ts";
 import { Combobox } from "./Combobox.tsx";
 import type { Resolved } from "./GroupPanel.tsx";
+import { proposalFor, saveFix } from "./suggestions.ts";
 import { decodeEntities, fmtInt, useLoad, yearSpans } from "./util.tsx";
 
 /** Yard rule for a group with no usable VIN decode: the yard's own make/model text (from the group) means this
- *  catalogue make/model (picked). Scope: this yard only, or every yard. */
-export function RulePanel({ d, onResolved }: { d: GroupDetail; onResolved: Resolved }) {
+ *  catalogue make/model (picked). Scope: this yard only, or every yard.
+ *  `from`: tweaking a suggestion, so start from its proposal and save through its approve. */
+export function RulePanel({ d, onResolved, from }: { d: GroupDetail; onResolved: Resolved; from?: Suggestion }) {
   const k = d.key;
-  const [make, setMake] = useState<string | null>(d.catalogueMake ?? d.makeSuggestions?.[0]?.name ?? null);
-  const [model, setModel] = useState<string | null>(null);
-  const [everyYard, setEveryYard] = useState(false);
+  const init = proposalFor(from, "yard_rule");
+  const [make, setMake] = useState<string | null>(init?.make ?? d.catalogueMake ?? d.makeSuggestions?.[0]?.name ?? null);
+  const [model, setModel] = useState<string | null>(init?.model ?? null);
+  const [everyYard, setEveryYard] = useState(!!init && !init.source);
   const [allYears, setAllYears] = useState(false);
   const [preview, setPreview] = useState<{ result: Preview; inputs: string } | null>(null);
   const [error, setError] = useState<{ field: string | null; message: string } | null>(null);
@@ -48,7 +51,7 @@ export function RulePanel({ d, onResolved }: { d: GroupDetail; onResolved: Resol
   const confirm = async () => {
     setBusy("confirm"); setError(null);
     try {
-      const r = await post<{ created: number; requeued: number }>("/api/rules", body());
+      const r = await saveFix("/api/rules", "yard_rule", body(), preview!.result, from);
       onResolved(k, `Rule saved: ${k.make} ${k.model ?? ""} → ${make} ${model ? decodeEntities(model) : ""}. ${fmtInt(r.requeued)} cars re-matching.`);
     } catch (e) { fail(e); setBusy(null); }
   };

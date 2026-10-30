@@ -24,7 +24,7 @@ from junkyard_common.models import Location, MappingDiscrepancy, Vehicle, VinCac
 from pipeline.pi_schema import (pi_car_table, pi_engine_table, pi_make_table, pi_model_table, pi_trim_table,
                                 pi_year_table)
 
-from ..api import catalogue, discrepancies, fixes, trims, vehicles
+from ..api import catalogue, discrepancies, fixes, suggestions, trims, vehicles
 from ..api.common import BUCKETS, IGNORED, engines, open_discrepancies, sql_year
 from ..api.discrepancies import GroupKey, key_filter
 from . import oauth
@@ -70,6 +70,12 @@ Workflow:
 - delete_mapping / delete_trim_mapping only work on mappings agents made. Mappings the user made are theirs to
   change.
 - When unsure, stop and ask the user rather than creating a doubtful mapping.
+
+Suggesting instead of fixing: when the user asks for suggestions (or isn't there to confirm), use suggest_fix.
+It files the fix, with its preview and your rationale, for the user to approve, tweak or reject on the admin
+UI's Suggestions page, and changes nothing until they do. You can't approve suggestions. One suggestion waits
+per group at a time; a fix the user rejected for a group is never filed again. list_suggestions shows what is
+waiting and how earlier ones were reviewed (rejection reasons say what the user disagreed with).
 """
 
 SCHEME = "Bearer"
@@ -498,6 +504,36 @@ def build(public_url: str) -> tuple[MCPServer, ASGIApp]:
                 s.commit()
             return {"updated": n, "status": IGNORED if ignore else "open"}
         return run(ctx, go, write=True)
+
+    # ── suggestions (filed for review; only a person approves them, in the admin UI) ──────────────────────
+
+    @server.tool()
+    def list_suggestions(
+            ctx: Context,
+            view: Annotated[Literal["pending", "reviewed", "rejected", "stale"], Field(description=(
+                "pending = waiting for review; reviewed = approved or edited; stale = the group emptied first"))]
+            = "pending",
+            kind: suggestions.Kind | None = None) -> dict:
+        """Fix suggestions with their proposal, the preview they were filed under, rationale and review outcome
+        (who, when, the reject reason, or what the user changed before approving), plus counts per view."""
+        return run(ctx, lambda eng: suggestions.list_suggestions(eng, view, kind))
+
+    @server.tool()
+    def suggest_fix(
+            ctx: Context, kind: suggestions.Kind, key: GroupKey,
+            proposal: Annotated[dict, Field(description=(
+                "Exactly the arguments the matching create tool takes, for this group. decode_mapping: make, "
+                "model, series?, year_from?, year_to?, targets [{make, model}]. trim_mapping: make, model?, trim, "
+                "action map|noise, trims [catalogue trim names], year_from?, year_to?. yard_rule: make, model?, "
+                "raw_make, raw_model, source?. ignore_group: {}."))],
+            rationale: Annotated[str, Field(min_length=1, max_length=2000, description=(
+                "Why: the evidence from the group (decodes, catalogue years, candidates) the user will check"))]) -> dict:
+        """File a fix for the user to review instead of making it. Checked like a create (targets must exist in
+        the catalogue, the fix must be for this group's decode / trim text / yard strings) and previewed; refused
+        when the preview shows it would match nothing, when the group already has a suggestion waiting, or when
+        the user rejected this same fix for it before. Writes no mapping and requeues nothing."""
+        return run(ctx, lambda eng, who: suggestions.file_suggestion(
+            eng, kind, key, proposal, rationale, model=who.client_name, filed_by=who.created_by), write=True)
 
     host = public_url.split("://", 1)[-1].split("/", 1)[0]
     security = TransportSecuritySettings(

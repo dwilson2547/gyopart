@@ -228,6 +228,38 @@ class TrimMapping(Base):
     created_at      = Column(DateTime,    nullable=False)
 
 
+class FixSuggestion(Base):
+    """A proposed fix for one discrepancy or trim group, waiting for a person (matching-v2-design §3.2-3.3).
+
+    `proposal` holds exactly the arguments the fix's create function takes, `preview` what its preview said when it
+    was filed. Nothing is written or requeued until someone approves it in the admin UI; `final` is what they
+    confirmed when they changed it first (status `edited`), `result` what the create returned.
+    """
+    __tablename__ = "fix_suggestions"
+    __table_args__ = (
+        Index("ix_fix_suggestions_group", "group_ref", "status"),
+    )
+
+    id            = Column(Integer,     primary_key=True, autoincrement=True)
+    kind          = Column(String(20),  nullable=False)   # decode_mapping | trim_mapping | yard_rule | ignore_group
+    group_key     = Column(JSONB,       nullable=False)   # the GroupKey, as the API takes it
+    group_ref     = Column(String(64),  nullable=False)   # hash of group_key, for lookups
+    proposal_ref  = Column(String(64),  nullable=False)   # hash of kind + group + proposal: rejected ones stay rejected
+    proposal      = Column(JSONB,       nullable=False)
+    preview       = Column(JSONB,       nullable=False)
+    rationale     = Column(String(2000), nullable=True)
+    model         = Column(String(100), nullable=False)   # what proposed it: a checkpoint, or the MCP client's name
+    prompt        = Column(String(50),  nullable=True)    # prompt version, for the suggester job
+    filed_by      = Column(String(100), nullable=False)
+    filed_at      = Column(DateTime,    nullable=False)
+    status        = Column(String(10),  nullable=False, default="pending")  # pending|approved|edited|rejected|stale
+    reviewed_by   = Column(String(100), nullable=True)
+    reviewed_at   = Column(DateTime,    nullable=True)
+    reject_reason = Column(String(500), nullable=True)
+    final         = Column(JSONB,       nullable=True)
+    result        = Column(JSONB,       nullable=True)
+
+
 class ScrapeRun(Base):
     __tablename__ = "scrape_runs"
 

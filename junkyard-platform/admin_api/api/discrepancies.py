@@ -205,8 +205,9 @@ class DetailRequest(BaseModel):
 
 @router.post("/discrepancies/group")
 def post_detail(body: DetailRequest, eng=Depends(engines)):
+    from .suggestions import pending_for   # suggestions builds on this module
     with Session(eng[0]) as s:
-        return detail(s, eng[1], body.key, body.status)
+        return {**detail(s, eng[1], body.key, body.status), "pendingSuggestion": pending_for(s, body.key)}
 
 
 class StatusRequest(BaseModel):

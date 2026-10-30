@@ -39,6 +39,7 @@ export type GroupDetail = {
   modelSuggestionsMake?: string | null;
   // trim groups
   candidateTrims?: CandidateTrim[]; trimMappings?: TrimMappingRow[];
+  pendingSuggestion?: Suggestion | null;
 };
 
 // ── matching v2: trims ────────────────────────────────────────────────────────────────────────
@@ -109,4 +110,30 @@ export const STEP_LABEL: Record<string, string> = {
 export const METHOD_LABEL: Record<string, string> = {
   vin_exact: "VIN decode → exactly one car", vin_candidates: "VIN decode → several possible cars",
   ymmt_match: "yard make/model (fuzzy)", rule_applied: "yard rule + make/model", manual: "picked by hand",
+};
+
+// ── matching v2: fix suggestions ──────────────────────────────────────────────────────────────
+
+export type SuggestionKind = "decode_mapping" | "trim_mapping" | "yard_rule" | "ignore_group";
+export type SuggestionView = "pending" | "reviewed" | "rejected" | "stale";
+/** The proposal is the create request for its kind, in the API's snake_case. */
+export type Proposal = {
+  make?: string; model?: string | null; series?: string | null; year_from?: number | null; year_to?: number | null;
+  targets?: { make: string; model: string }[];
+  trim?: string; action?: "map" | "noise"; trims?: string[];
+  source?: string | null; raw_make?: string | null; raw_model?: string | null;
+};
+export type AnyPreview = Partial<Preview> & Partial<TrimPreview> & { vehicles: number };
+export type Suggestion = {
+  id: number; kind: SuggestionKind; key: GroupKey; proposal: Proposal; preview: AnyPreview; rationale: string | null;
+  model: string; prompt: string | null; filedBy: string; filedAt: string;
+  status: "pending" | "approved" | "edited" | "rejected" | "stale";
+  reviewedBy: string | null; reviewedAt: string | null; rejectReason: string | null;
+  final: { kind: SuggestionKind; proposal: Proposal; preview: AnyPreview } | null;
+  result: Record<string, unknown> | null;
+};
+export type SuggestionList = { suggestions: Suggestion[]; counts: Record<SuggestionView, number> };
+
+export const KIND_LABEL: Record<SuggestionKind, string> = {
+  decode_mapping: "decode mapping", trim_mapping: "trim mapping", yard_rule: "yard rule", ignore_group: "ignore",
 };

@@ -125,3 +125,11 @@ details summary { cursor: pointer; color: var(--muted); }
 .vsearch .combo-list { top: 100%; left: auto; right: 0; width: 420px; }
 .tag.ok-tag { color: var(--ok); border-color: var(--ok); }
 .tag.err-tag { color: var(--danger); border-color: var(--danger); }
+
+/* matching v2: fix suggestions */
+.badge { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 9px; font-size: 11px;
+  background: var(--accent); color: #fff; }
+.sugg.open { border-color: var(--accent); }
+.rationale { white-space: pre-wrap; }
+textarea { width: 100%; background: var(--panel2); color: var(--fg); border: 1px solid var(--border); border-radius: 6px;
+  padding: 6px 8px; font: inherit; }

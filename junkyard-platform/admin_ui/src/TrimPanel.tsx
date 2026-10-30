@@ -1,19 +1,22 @@
 import { useState } from "react";
 import { ApiError, post } from "./api.ts";
-import type { GroupDetail, TrimPreview } from "./types.ts";
+import type { GroupDetail, Suggestion, TrimPreview } from "./types.ts";
 import type { Resolved } from "./GroupPanel.tsx";
+import { proposalFor, saveFix } from "./suggestions.ts";
 import { decodeEntities, fmtInt, yearSpans } from "./util.tsx";
 
 /** Settle a trim text (matching-v2-design §2.2): it means these catalogue trims (picked from the trims the
- *  group's cars could be), or it's noise. For this model or every model of the make; preview, then confirm. */
-export function TrimPanel({ d, onResolved }: { d: GroupDetail; onResolved: Resolved }) {
+ *  group's cars could be), or it's noise. For this model or every model of the make; preview, then confirm.
+ *  `from`: tweaking a suggestion, so start from its proposal and save through its approve. */
+export function TrimPanel({ d, onResolved, from }: { d: GroupDetail; onResolved: Resolved; from?: Suggestion }) {
   const k = d.key;
+  const init = proposalFor(from, "trim_mapping");
   const options = d.candidateTrims ?? [];
-  const [action, setAction] = useState<"map" | "noise">("map");
-  const [picked, setPicked] = useState<string[]>([]);
-  const [everyModel, setEveryModel] = useState(false);
-  const [yearFrom, setYearFrom] = useState("");
-  const [yearTo, setYearTo] = useState("");
+  const [action, setAction] = useState<"map" | "noise">(init?.action ?? "map");
+  const [picked, setPicked] = useState<string[]>(init?.trims ?? []);
+  const [everyModel, setEveryModel] = useState(!!init && !init.model);
+  const [yearFrom, setYearFrom] = useState(init?.year_from ? String(init.year_from) : "");
+  const [yearTo, setYearTo] = useState(init?.year_to ? String(init.year_to) : "");
   const [preview, setPreview] = useState<{ result: TrimPreview; inputs: string } | null>(null);
   const [error, setError] = useState<{ field: string | null; message: string } | null>(null);
   const [busy, setBusy] = useState<"preview" | "confirm" | null>(null);
@@ -37,7 +40,7 @@ export function TrimPanel({ d, onResolved }: { d: GroupDetail; onResolved: Resol
   const confirm = async () => {
     setBusy("confirm"); setError(null);
     try {
-      const r = await post<{ created: number; requeued: number }>("/api/trim-mappings", body());
+      const r = await saveFix("/api/trim-mappings", "trim_mapping", body(), p!, from);
       onResolved(k, action === "noise"
         ? `“${k.trim}” is noise for ${k.make}${everyModel ? "" : ` ${k.model}`}: ${fmtInt(r.requeued)} cars re-matching.`
         : `“${k.trim}” → ${picked.join(" / ")}: ${fmtInt(r.requeued)} cars re-matching, ${fmtInt(p!.exact)} expected exact.`);

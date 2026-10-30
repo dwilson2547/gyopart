@@ -6,6 +6,7 @@ import { MapPanel } from "./MapPanel.tsx";
 import { Link } from "./router.tsx";
 import { RulePanel } from "./RulePanel.tsx";
 import { TrimPanel } from "./TrimPanel.tsx";
+import { describeProposal } from "./suggestions.ts";
 import { Empty, ErrorBanner, Loading, fmtInt, keyLabel, useLoad, years } from "./util.tsx";
 
 export type Resolved = (key: GroupKey, message: string) => void;
@@ -34,6 +35,12 @@ export function GroupPanel({ groupKey, status, tab, yard, onResolved }: {
         )}
       </div>
 
+      {d.pendingSuggestion && (
+        <div className="callout">
+          An agent suggested a fix for this group: {describeProposal(d.pendingSuggestion.kind, d.pendingSuggestion.proposal)}.{" "}
+          <Link to={`/suggestions?id=${d.pendingSuggestion.id}`}>Review it</Link>
+        </div>
+      )}
       {status === "open" && groupKey.kind === "decode" && <MapPanel d={d} onResolved={onResolved} />}
       {status === "open" && groupKey.kind === "yard" && <RulePanel d={d} onResolved={onResolved} />}
       {groupKey.kind === "trim" && <TrimPanel d={d} onResolved={onResolved} />}
