@@ -6,9 +6,9 @@ domain: gyopart-dev.local
 
 # Dev-only image overrides (merged over values.yaml's images:). Move to values.yaml once proven here.
 images:
-  # matching-v2 phase 2: trim mappings + Trims tab (junkyard-platform/docs/matching-v2-design.md), c6a7bb7. Needs DB 0007.
-  adminApi: dwilson2547/admin-api:sha-c6a7bb79b120
-  vinResolver: dwilson2547/vin-resolver:sha-c6a7bb79b120
+  # matching-v2 phase 3: fix suggestions + review page (junkyard-platform/docs/matching-v2-design.md), e5393de. Needs DB 0008.
+  adminApi: dwilson2547/admin-api:sha-e5393debac7c
+  vinResolver: dwilson2547/vin-resolver:sha-e5393debac7c
 
 imagePullPolicy: Always
 
