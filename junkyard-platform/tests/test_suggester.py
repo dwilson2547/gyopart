@@ -40,3 +40,9 @@ def test_messages_name_every_candidate_and_the_reply_shape():
     assert sys_msg["role"] == "system" and '"decision"' in sys_msg["content"]
     assert all(f'"{c["model"]}"' in user["content"] for c in BUNDLE["candidates"])
     assert decode.spans([2001, 2002, 2003, 2007]) == "2001–2003, 2007"
+
+
+def test_every_prompt_version_renders():
+    for version in decode.PROMPTS:
+        assert decode.messages(BUNDLE, version)[0]["content"] == decode.PROMPTS[version]
+    assert decode.PROMPT in decode.PROMPTS

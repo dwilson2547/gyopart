@@ -1,6 +1,6 @@
 # VIN matching v2 (trims) and the fix-suggestion agent — design
 
-Status: **phases 1–3 in dev** (2026-10-27/28/30, §4); the rest is planned (user, 2026-10-27). Prod waits for the whole
+Status: **phases 1–3 in dev** (2026-10-27/28/30), **phase 4 bake-off done** (2026-10-30, §4); the rest is planned (user, 2026-10-27). Prod waits for the whole
 system (user, 2026-10-28). §1 is verified against the code on `dev` (731cd38)
 and read-only queries against the **dev** databases on 2026-10-27; the §2.1 numbers come from a throwaway
 prototype of the normaliser run over the same data. Prod numbers have not been measured for this.
@@ -226,5 +226,30 @@ call after the bake-off.
    altered numbers refused → approved (173 Sonatas exact via the worker) → mapping removed (all 173 back); an edited
    approval; reject, then the same fix refused; a stale one after settling its group directly. Verification rows and
    mappings deleted; Trims tab back to 21,699 / 1,634. The SPA was type-checked and built, not clicked through.
-4. **Text adapter + bake-off** in the GPU scheduler (§3.5).
+4. **Text adapter + bake-off** in the GPU scheduler (§3.5). **Done 2026-10-30, decode groups only** (gyopart
+   3e675f3 and the commit recording this). The GPU service gained a text endpoint (chat in, greedy reply and its
+   JSON out); its Qwen3-VL-4B adapter answers text-only jobs on the loaded model, and a generic adapter loads
+   Qwen3-8B 4-bit (NF4). The suggester's decode piece is `admin_api/suggester/decode.py` (bundle: the decode's cars
+   and up to 15 same-make catalogue candidates, each previewed alone; versioned prompt; check) and the harness
+   `admin_api/suggester/bakeoff.py`.
+   - **Labels were scarce.** Decodes mapped by a person: 9 in dev, 1 in prod (prod's other one, E-Class, came
+     from an MCP session; it duplicates dev's). Prod has one active yard rule and no trim mappings. A second,
+     easier key was added: 34 decodes the matcher already resolves to a differently named catalogue model (Ram +
+     1500 -> "Ram 1500"), right answer = the models the cars matched. 45 cases in all, each previewed against the
+     dev databases with its own mapping hidden.
+   - **Method:** both models over every case on a 16 GB workstation GPU; prompts written against a fixed "tune"
+     half (hash of the case id, 28 cases) and scored once on the "test" half (17). decode-v1 told the model to
+     pick every candidate the decode can be, and both models took whole families (Express 1500 -> 1500, 2500 and
+     3500). decode-v2 says the model + series name one model, adds the plain model for variant series, and
+     takes all variants only for a bare family name.
+   - **Test half, decode-v2:** Qwen3-VL-4B 15 exact, 2 subset (left out a second target), 0 wrong; Qwen3-8B
+     8 exact, 1 subset, 8 wrong (19 extra picks that match cars); no-model baseline (top-ranked candidate) 12
+     exact, 3 subset, 2 wrong. Every reply was valid JSON. Qwen3-VL-4B: 1.6 s a case at batch 4, 9.9 GB peak;
+     Qwen3-8B NF4: 1.9 s, 7.7 GB. **Picked: Qwen3-VL-4B with decode-v2** (also needs no model swap: it is
+     the model that captions photos).
+   - **Not shown by this:** the matcher-derived cases are easier than real fixable groups (the matcher already
+     solves them), and decodes recur across the halves with small spelling changes ("1/2 Ton" / "1/2 ton").
+     `make_not_in_catalogue` groups (197 of dev's 409 fixable groups) get no candidates from decode-v2 (same
+     make only), so it can only say unsure there. Trim groups and yard rules were not tested: there are no
+     labels for them. The approve / edited / rejected history after launch is the real score (§3.5).
 5. **Suggester job** (§3.4) in dev, then prod, decode groups first.

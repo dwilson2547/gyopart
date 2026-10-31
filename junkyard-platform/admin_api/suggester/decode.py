@@ -18,7 +18,6 @@ from ..api import catalogue
 from ..api.common import sql_key, sql_year
 from ..api.fixes import simulate_mapping
 
-PROMPT = "decode-v1"
 MAX_CANDIDATES = 15
 MAX_NEW_TOKENS = 300
 _EMPTY = {"", "Not Applicable", "null", "None"}
@@ -26,7 +25,7 @@ _EMPTY = {"", "Not Applicable", "null", "None"}
 _FIELDS = ("Trim", "BodyClass", "DriveType", "FuelTypePrimary")
 _TOP = 5
 
-SYSTEM = """\
+_V1 = """\
 You map car names between two databases for a junkyard parts search. NHTSA's VIN decoder names a car one way \
 (make, model, series); the parts catalogue names it another way. A decode mapping says which catalogue model or \
 models an NHTSA decode is, so the cars that carry it can be matched to catalogue cars and their parts.
@@ -49,6 +48,42 @@ wrong parts to buyers; "unsure" costs nothing.
 
 Reply with JSON only, no other text: \
 {"decision": "map" or "unsure", "targets": ["candidate name", ...], "reason": "one sentence"}"""
+
+# Prompts by version; a suggestion records the one that made it. v1 (2026-10-30 bake-off) read "pick every
+# candidate the decode can be" as licence to take whole families (Express 1500 -> 1500, 2500 and 3500).
+_V2 = """\
+You map car names between two databases for a junkyard parts search. NHTSA's VIN decoder names a car one way \
+(make, model, series); the parts catalogue names it another way. A decode mapping says which catalogue model or \
+models an NHTSA decode is, so the cars that carry it can be matched to catalogue cars and their parts.
+
+You get one NHTSA decode, what its cars' decodes say, and a numbered list of candidate catalogue models. Each \
+candidate has the years it exists in the catalogue and how many of these cars it would match on its own (the \
+matcher also checks year, engine and fuel, so a wrong model can still match many cars). Decide which candidates \
+this decode is.
+
+Rules:
+- Pick only from the candidates, using their exact names.
+- The model and series together usually name one catalogue model: "Express" with series "1500 (1/2 Ton)" is \
+"Express 1500"; "Transit" with series "250" is "Transit-250"; "Ram" with series "2500" is "Ram 2500". Pick that \
+one. Words like "1/2 Ton", "3/4 Ton" or "Single Rear Wheel" only say which number it is. Never add the other \
+numbers (2500, 3500) or a heavier "HD" model unless the decode says HD.
+- When the series names a variant of the model ("Envoy" with series "XL", "Trailblazer" with "EXT", "E-150" with \
+"Econoline"), pick the variant, and the plain model too if it is a candidate: the catalogue sometimes lists the \
+variant's years under the plain name.
+- When there is no series and the model names a family that the catalogue lists by variant ("C-Class" is "C 230", \
+"C 240", "C 320" and so on), pick every variant that exists in the cars' years.
+- Never pick a different car that only shares a number or letters with the decode: "Express 3500" is not \
+"Silverado 3500 HD", "Sprinter 3500" or "LCF 3500"; "Transit-350" is not "Transit-350 HD".
+- A candidate counts only if it exists in the catalogue in the cars' years.
+- If no candidate is this car, or you can't tell, the decision is "unsure". A wrong mapping makes cars show the \
+wrong parts to buyers; "unsure" costs nothing.
+
+Reply with JSON only, no other text: \
+{"decision": "map" or "unsure", "targets": ["candidate name", ...], "reason": "one sentence"}"""
+
+# v2 won the bake-off with Qwen3-VL-4B (docs/matching-v2-design.md §4, phase 4).
+PROMPTS = {"decode-v1": _V1, "decode-v2": _V2}
+PROMPT = "decode-v2"
 
 
 def spans(years: list[int]) -> str:
@@ -123,7 +158,7 @@ def bundle(pi, make: str, model: str, series: str | None, year_from: int | None,
             "fields": {k: v for k, v in fields.items() if v}, "catalogueMake": cat, "candidates": cands}
 
 
-def messages(b: dict) -> list[dict]:
+def messages(b: dict, prompt: str = PROMPT) -> list[dict]:
     d = b["decode"]
     lines = [f'NHTSA decode: make "{d["make"]}", model "{d["model"]}", '
              + (f'series "{d["series"]}"' if d["series"] else "any series"),
@@ -140,7 +175,7 @@ def messages(b: dict) -> list[dict]:
                          f'{b["vehicles"]} cars ({c["exact"]} to exactly one car)')
         if not b["candidates"]:
             lines.append("(none with a similar name)")
-    return [{"role": "system", "content": SYSTEM}, {"role": "user", "content": "\n".join(lines)}]
+    return [{"role": "system", "content": PROMPTS[prompt]}, {"role": "user", "content": "\n".join(lines)}]
 
 
 def check(pi, b: dict, reply: dict | None, rows=None, mappings=None) -> dict:

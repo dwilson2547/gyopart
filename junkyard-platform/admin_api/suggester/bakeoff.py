@@ -3,15 +3,25 @@ mapping hidden, and score what a model would have suggested against what the per
 
     # where the databases are (the admin pod): one case per labelled decode, as JSON lines
     python -m admin_api.suggester.bakeoff export [labels.json] > cases.jsonl
+    python -m admin_api.suggester.bakeoff matched > cases-matched.jsonl
     # anywhere with a GPU: run each case's "input" (chat messages, JSON reply) through a model -> replies JSON lines
     #   {"id": ..., "result": {"text": ..., "json": {...}}}
     # anywhere: score
-    python -m admin_api.suggester.bakeoff score cases.jsonl qwen3vl=replies-a.jsonl qwen3-8b=replies-b.jsonl
+    python -m admin_api.suggester.bakeoff score cases.jsonl qwen3vl=replies-a.jsonl qwen3-8b=replies-b.jsonl [--half tune|test]
+    # another prompt version over the same bundles (no database needed)
+    python -m admin_api.suggester.bakeoff inputs cases.jsonl decode-v2 > cases-v2.jsonl
+
+Prompts are written against the "tune" half of the cases only (a fixed split by a hash of the case id) and
+judged on the "test" half, so a prompt isn't scored on the cases it was fitted to.
 
 Labels: a mapping whose created_by doesn't start with "agent" was made by a person in the admin UI; "agent" ones
 were made in an MCP session the person was running. They are scored separately. By default the labels are this
 database's decode_mappings; labels.json (a list of decode_mappings rows as dicts) brings another environment's, e.g.
 prod's, replayed against this database's cars and catalogue.
+
+`matched` builds a second, easier answer key without anyone's labels: decodes the matcher already resolves (from
+model + series) to catalogue models named differently from NHTSA's model, e.g. Ram + series 1500 -> "Ram 1500".
+The cars' matches say which models are right; the model is shown the same bundle a fixable group would get.
 """
 from __future__ import annotations
 
@@ -81,6 +91,53 @@ def export(labels_path: str | None = None, out=sys.stdout) -> None:
     print(json.dumps(dict(stats)), file=sys.stderr)
 
 
+MIN_MATCHED_CARS = 10
+
+
+def matched(out=sys.stdout) -> None:
+    from collections import Counter as C
+
+    from sqlalchemy import create_engine, select
+    from sqlalchemy.orm import Session
+
+    from junkyard_common.models import Vehicle, VinCache
+    from pipeline.pi_schema import pi_car_table, pi_make_table, pi_model_table
+    from pipeline.resolution_pipeline import load_mappings
+
+    ji, pi = create_engine(os.environ["JUNKYARD_DATABASE_URL"]), create_engine(os.environ["PARTS_DATABASE_URL"])
+    with pi.connect() as conn:
+        car = {i: (mk, md) for i, mk, md in conn.execute(
+            select(pi_car_table.c.id, pi_make_table.c.name, pi_model_table.c.name)
+            .join(pi_model_table, pi_model_table.c.id == pi_car_table.c.model_id)
+            .join(pi_make_table, pi_make_table.c.id == pi_car_table.c.make_id))}
+    with Session(ji) as s:
+        every = load_mappings(s)
+        mapped = {(m.make_key, m.model_key) for m in every}
+        q = (select(VinCache.make, VinCache.model, VinCache.raw["Series"].astext, Vehicle.car_id_candidates)
+             .join(VinCache, VinCache.vin == Vehicle.vin)
+             .where(Vehicle.is_active.is_(True), Vehicle.car_id_method.in_(("vin_exact", "vin_candidates"))))
+        decodes: dict[tuple, C] = defaultdict(C)
+        for mk, md, se, cands in s.execute(q):
+            for t in {car[c] for c in (cands or []) if c in car}:
+                decodes[(mk, md, se or None)][t] += 1
+        stats = C()
+        for (mk, md, se), targets in sorted(decodes.items(), key=lambda kv: str(kv[0])):
+            if (name_key(mk), name_key(md)) in mapped or all(name_key(m) == name_key(md) for _, m in targets):
+                continue          # a person's mapping covers it (scored as theirs), or no renaming to find
+            cars = decode.decode_rows(s, mk, md, se, None, None, unmatched_only=False)
+            if len(cars) < MIN_MATCHED_CARS:
+                continue
+            b = decode.bundle(pi, mk, md, se, None, None, cars, every)
+            truth = sorted(targets)
+            offered = {_truth_key(c["make"], c["model"]) for c in b["candidates"]}
+            stats["cases"] += 1
+            stats["every target among candidates"] += all(_truth_key(*t) in offered for t in truth)
+            case = {"id": f"matched:{mk}|{md}|{se or ''}", "source": "matcher", "truth": truth, "bundle": b,
+                    "input": {"messages": decode.messages(b), "json": True, "max_new_tokens": decode.MAX_NEW_TOKENS}}
+            out.write(json.dumps(case) + "\n")
+    print(json.dumps(dict(stats)), file=sys.stderr)
+
+
 def outcome(case: dict, reply: dict | None) -> tuple[str, list, int]:
     """Score one reply (the model's parsed JSON) against the person's targets: the outcome, the picked names, and
     how many picks the person didn't make that would match some of the cars (an extra pick that matches none of
@@ -106,8 +163,23 @@ def baseline_top1(case: dict) -> dict:
     return {"decision": "unsure"}
 
 
-def score(cases_path: str, runs: list[str], out=sys.stdout) -> None:
+def half(case_id: str) -> str:
+    import hashlib
+    return "tune" if hashlib.sha256(case_id.encode()).digest()[0] % 2 == 0 else "test"
+
+
+def inputs(cases_path: str, prompt: str, out=sys.stdout) -> None:
+    for line in open(cases_path):
+        c = json.loads(line)
+        c["input"]["messages"] = decode.messages(c["bundle"], prompt)
+        c["prompt"] = prompt
+        out.write(json.dumps(c) + "\n")
+
+
+def score(cases_path: str, runs: list[str], out=sys.stdout, only: str | None = None) -> None:
     cases = [json.loads(line) for line in open(cases_path)]
+    if only:
+        cases = [c for c in cases if half(c["id"]) == only]
     results = {"baseline: top candidate": {c["id"]: baseline_top1(c) for c in cases}}
     for run in runs:
         name, path = run.split("=", 1)
@@ -141,9 +213,15 @@ def score(cases_path: str, runs: list[str], out=sys.stdout) -> None:
 
 
 if __name__ == "__main__":
-    if sys.argv[1:2] == ["export"]:
+    if sys.argv[1:2] == ["matched"]:
+        matched()
+    elif sys.argv[1:2] == ["export"]:
         export(sys.argv[2] if len(sys.argv) > 2 else None)
+    elif sys.argv[1:2] == ["inputs"] and len(sys.argv) == 4:
+        inputs(sys.argv[2], sys.argv[3])
     elif sys.argv[1:2] == ["score"] and len(sys.argv) >= 3:
-        score(sys.argv[2], sys.argv[3:])
+        args = sys.argv[3:]
+        only = args[args.index("--half") + 1] if "--half" in args else None
+        score(sys.argv[2], [a for a in args if "=" in a], only=only)
     else:
         raise SystemExit(__doc__)
