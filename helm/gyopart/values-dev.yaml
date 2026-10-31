@@ -6,11 +6,15 @@ domain: gyopart-dev.local
 
 # Dev-only image overrides (merged over values.yaml's images:). Move to values.yaml once proven here.
 images:
-  # matching-v2 phase 3: fix suggestions + review page (junkyard-platform/docs/matching-v2-design.md), e5393de. Needs DB 0008.
-  adminApi: dwilson2547/admin-api:sha-e5393debac7c
-  vinResolver: dwilson2547/vin-resolver:sha-e5393debac7c
+  # matching-v2 phase 5: fix suggester job + Run now (junkyard-platform/docs/matching-v2-design.md), e088826. Needs DB 0009.
+  adminApi: dwilson2547/admin-api:sha-e088826337e7
+  vinResolver: dwilson2547/vin-resolver:sha-e088826337e7
 
 imagePullPolicy: Always
+
+# Fix suggester on in dev only (matching-v2 phase 5). Needs DB 0009 and Secret gyopart-suggester.
+fixSuggester:
+  enabled: true
 
 # Admin sign-in (phase 4): authentik app gyopart-admin (infra/cluster-config/authentik/blueprints/gyopart-admin.yaml),
 # group gyopart-admin. The LAN host admin.gyopart-dev.local redirects page loads here.
