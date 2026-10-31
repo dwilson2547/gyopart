@@ -1,6 +1,6 @@
 # VIN matching v2 (trims) and the fix-suggestion agent — design
 
-Status: **phases 1–5 in dev** (2026-10-27 to 2026-10-31; phase 4 = bake-off, §4); the rest is planned (user, 2026-10-27). Prod waits for the whole
+Status: **phases 1–5 in prod** (2026-10-31, gyopart main 55c7378; built and proven in dev 2026-10-27 to 2026-10-31; phase 4 = bake-off, §4); the rest is planned (user, 2026-10-27). Prod waits for the whole
 system (user, 2026-10-28). §1 is verified against the code on `dev` (731cd38)
 and read-only queries against the **dev** databases on 2026-10-27; the §2.1 numbers come from a throwaway
 prototype of the normaliser run over the same data. Prod numbers have not been measured for this.
@@ -270,6 +270,8 @@ call after the bake-off.
    11 refused, no GPU errors; a following export found exactly the 71 groups the limit had left. Trim and yard
    groups are not suggested yet (no labels to test prompts against).
 
-**Prod promotion** (the whole system, user's call): migrations 0007–0009 on the prod DB; image pins and
-`fixSuggester` (with its Secret in `gyopart`) into `values.yaml` / `values-prod.yaml` on main; `--requeue
-vin_candidates` in prod for the trim normaliser.
+**Prod promotion, 2026-10-31:** migrations 0007–0009 on the prod DB; image pins (`sha-e088826337e7`) in `values.yaml`
+and `fixSuggester` on in `values-prod.yaml` on main (55c7378; dev's scraper digests and browserless logging stayed on
+dev); Secret `gyopart-suggester` in `gyopart` (the same GPU-queue client token as dev). The pins went out before the
+migrations had run (docs/issues/2026_10_31_matching_v2_promote_migrations_skipped.md). Prod `--requeue
+vin_candidates`: 59,076 vehicles, now 9,893 `vin_exact` and 49,183 `vin_candidates`, none dropped to a discrepancy.
