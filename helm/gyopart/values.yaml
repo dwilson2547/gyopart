@@ -10,9 +10,11 @@ images:
   gyopartApi: dwilson2547/gyopart-api:3.0.8  # needs the DB at alembic 0003 (image.content_hash)
   gyopartUi: dwilson2547/gyopart-ui:3.0.7
   inventoryApi: dwilson2547/inventory-api:3.0.2
-  # Admin rewrite (junkyard-platform/docs/admin-rewrite-design.md), verified in dev 2026-10-15.
-  adminApi: dwilson2547/admin-api:sha-59f05d45036c
-  vinResolver: dwilson2547/vin-resolver:sha-f9c82e4c01a3
+  # Admin rewrite (junkyard-platform/docs/admin-rewrite-design.md) + matching v2: trim matching, trim mappings, fix
+  # suggestions and the suggester (junkyard-platform/docs/matching-v2-design.md), verified in dev 2026-10-31.
+  # Needs junkyard DB 0009.
+  adminApi: dwilson2547/admin-api:sha-e088826337e7
+  vinResolver: dwilson2547/vin-resolver:sha-e088826337e7
 
 imagePullPolicy: Always
 
@@ -62,6 +64,16 @@ catalogueGapRecheck:
   enabled: true
   schedule: "30 3 * * *"
   timeZone: America/New_York
+
+# Fix suggester (templates/fix-suggester.yaml): files suggestions for review, never fixes. Off by default; turned on
+# per environment. Needs junkyard migrations 0008-0009 and the Secret below.
+fixSuggester:
+  enabled: false
+  schedule: "0 4 * * *"
+  timeZone: America/New_York
+  limit: 200            # groups per run, biggest first
+  model: qwen3vl        # the GPU queue's model name
+  secret: gyopart-suggester
 
 
 # Scraper fleet run by scrape-job-manager (templates/scrapers.yaml). Off by default: Helm layers every

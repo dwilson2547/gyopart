@@ -247,3 +247,8 @@ scraping:
       timeout: 4h  # first sweep is ~2,100 searches (41 min in dev); later runs reuse the week's empty models
       jobs:
         chesterfield-auto: {pool: junkyard-inventory}
+
+# Fix suggester (matching-v2 phase 5): nightly suggestions on the admin's Suggestions page. Needs Secret
+# gyopart-suggester in this namespace.
+fixSuggester:
+  enabled: true
