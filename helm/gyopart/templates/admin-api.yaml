@@ -1,5 +1,6 @@
 # The admin can request a yard re-scrape: Run now on the yard's ScrapeJob (scrape-job-manager's run-now
-# annotation). Read + annotate ScrapeJobs in this namespace only.
+# annotation). Read + annotate ScrapeJobs in this namespace only; with the fix suggester on, also start a Job from its
+# CronJob.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -19,6 +20,16 @@ rules:
   - apiGroups: [scrape.danwils.com]
     resources: [scrapejobs]
     verbs: [get, list, patch]
+  {{- if .Values.fixSuggester.enabled }}
+  # Suggestions page "Run now": read the fix-suggester CronJob, create a Job from it.
+  - apiGroups: [batch]
+    resources: [cronjobs]
+    resourceNames: [fix-suggester]
+    verbs: [get]
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [create]
+  {{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

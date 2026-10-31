@@ -41,6 +41,12 @@ export function GroupPanel({ groupKey, status, tab, yard, onResolved }: {
           <Link to={`/suggestions?id=${d.pendingSuggestion.id}`}>Review it</Link>
         </div>
       )}
+      {!d.pendingSuggestion && d.suggesterAttempt && d.suggesterAttempt.outcome !== "filed" && (
+        <div className="small muted">
+          Suggester ({new Date(d.suggesterAttempt.at + "Z").toLocaleDateString()}, {d.suggesterAttempt.prompt}): {d.suggesterAttempt.outcome}
+          {d.suggesterAttempt.reason ? `: ${d.suggesterAttempt.reason}` : ""}
+        </div>
+      )}
       {status === "open" && groupKey.kind === "decode" && <MapPanel d={d} onResolved={onResolved} />}
       {status === "open" && groupKey.kind === "yard" && <RulePanel d={d} onResolved={onResolved} />}
       {groupKey.kind === "trim" && <TrimPanel d={d} onResolved={onResolved} />}

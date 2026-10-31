@@ -205,9 +205,11 @@ class DetailRequest(BaseModel):
 
 @router.post("/discrepancies/group")
 def post_detail(body: DetailRequest, eng=Depends(engines)):
-    from .suggestions import pending_for   # suggestions builds on this module
+    from .suggester import last_attempt                  # both build on this module
+    from .suggestions import group_ref, pending_for
     with Session(eng[0]) as s:
-        return {**detail(s, eng[1], body.key, body.status), "pendingSuggestion": pending_for(s, body.key)}
+        return {**detail(s, eng[1], body.key, body.status), "pendingSuggestion": pending_for(s, body.key),
+                "suggesterAttempt": last_attempt(s, group_ref(body.key))}
 
 
 class StatusRequest(BaseModel):

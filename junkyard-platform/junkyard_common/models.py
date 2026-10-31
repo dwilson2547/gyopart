@@ -260,6 +260,42 @@ class FixSuggestion(Base):
     result        = Column(JSONB,       nullable=True)
 
 
+class SuggesterRun(Base):
+    """One run of the fix suggester (matching-v2-design §3.4): nightly or "run now"."""
+    __tablename__ = "suggester_runs"
+
+    id          = Column(Integer,     primary_key=True, autoincrement=True)
+    trigger     = Column(String(20),  nullable=False)   # schedule | manual
+    started_at  = Column(DateTime,    nullable=False)
+    finished_at = Column(DateTime,    nullable=True)
+    status      = Column(String(10),  nullable=False)   # running | done | failed
+    counts      = Column(JSONB,       nullable=True)    # outcome -> groups
+    error       = Column(String(1000), nullable=True)
+
+
+class SuggesterAttempt(Base):
+    """What the suggester made of one group in one run: a filed suggestion, or why there is none. A group is asked
+    again only when its open vehicles, the model or the prompt change."""
+    __tablename__ = "suggester_attempts"
+    __table_args__ = (
+        Index("ix_suggester_attempts_group", "group_ref", "id"),
+    )
+
+    id            = Column(Integer,     primary_key=True, autoincrement=True)
+    run_id        = Column(Integer,     ForeignKey("suggester_runs.id"), nullable=False)
+    kind          = Column(String(20),  nullable=False)
+    group_key     = Column(JSONB,       nullable=False)
+    group_ref     = Column(String(64),  nullable=False)
+    vehicles      = Column(Integer,     nullable=False)
+    model         = Column(String(100), nullable=False)
+    prompt        = Column(String(50),  nullable=False)
+    outcome       = Column(String(10),  nullable=False)   # filed | unsure | refused | invalid | error
+    reason        = Column(String(1000), nullable=True)
+    reply         = Column(JSONB,       nullable=True)    # the model's parsed reply, as given
+    suggestion_id = Column(Integer,     nullable=True)
+    at            = Column(DateTime,    nullable=False)
+
+
 class ScrapeRun(Base):
     __tablename__ = "scrape_runs"
 

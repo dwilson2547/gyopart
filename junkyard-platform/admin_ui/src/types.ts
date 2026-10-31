@@ -40,6 +40,7 @@ export type GroupDetail = {
   // trim groups
   candidateTrims?: CandidateTrim[]; trimMappings?: TrimMappingRow[];
   pendingSuggestion?: Suggestion | null;
+  suggesterAttempt?: SuggesterAttempt | null;
 };
 
 // ── matching v2: trims ────────────────────────────────────────────────────────────────────────
@@ -133,6 +134,16 @@ export type Suggestion = {
   result: Record<string, unknown> | null;
 };
 export type SuggestionList = { suggestions: Suggestion[]; counts: Record<SuggestionView, number> };
+
+export type SuggesterAttempt = {
+  at: string; outcome: "filed" | "unsure" | "refused" | "invalid" | "error"; reason: string | null; model: string;
+  prompt: string; vehicles: number; suggestionId: number | null;
+};
+export type SuggesterRun = {
+  id: number; trigger: "schedule" | "manual"; startedAt: string; finishedAt: string | null;
+  status: "running" | "done" | "failed"; counts: Record<string, number>; error: string | null;
+};
+export type SuggesterStatus = { runs: SuggesterRun[]; running: boolean; runNow: boolean; schedule: string | null; reason?: string };
 
 export const KIND_LABEL: Record<SuggestionKind, string> = {
   decode_mapping: "decode mapping", trim_mapping: "trim mapping", yard_rule: "yard rule", ignore_group: "ignore",

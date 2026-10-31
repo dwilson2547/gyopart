@@ -1,0 +1,58 @@
+{{- if .Values.fixSuggester.enabled }}
+# The fix suggester (junkyard-platform/docs/matching-v2-design.md §3.4): one local-model call per open fixable decode
+# group, through the cluster's GPU job queue; what passes the code check is filed on the admin's Suggestions page for
+# review. It changes no mapping and re-matches no car. The admin's "Run now" creates a Job from this CronJob.
+# The queue's URL and client token come from the Secret named in fixSuggester.secret (SUGGESTER_GPU_URL,
+# SUGGESTER_GPU_TOKEN), hand-applied like the other secrets.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: fix-suggester
+  namespace: {{ include "gyopart.namespace" . }}
+  labels:
+    app: fix-suggester
+    {{- include "gyopart.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.fixSuggester.schedule | quote }}
+  timeZone: {{ .Values.fixSuggester.timeZone | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0                    # a failed run is recorded as failed; the next night tries again
+      activeDeadlineSeconds: 7200
+      ttlSecondsAfterFinished: 172800
+      template:
+        metadata:
+          labels:
+            app: fix-suggester
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: suggester
+              image: {{ .Values.images.adminApi }}
+              imagePullPolicy: {{ .Values.imagePullPolicy }}
+              command: ["python", "-m", "admin_api.suggester.run", "--limit", {{ .Values.fixSuggester.limit | quote }}]
+              args: ["--trigger", "schedule"]
+              env:
+                - name: JUNKYARD_USER
+                  valueFrom: {secretKeyRef: {name: {{ .Values.postgres.junkyardSecret }}, key: JUNKYARD_USER}}
+                - name: JUNKYARD_PASSWORD
+                  valueFrom: {secretKeyRef: {name: {{ .Values.postgres.junkyardSecret }}, key: JUNKYARD_PASSWORD}}
+                - name: JUNKYARD_DATABASE_URL
+                  value: "postgresql://$(JUNKYARD_USER):$(JUNKYARD_PASSWORD)@{{ .Values.postgres.host }}:5432/junkyard_inventory"
+                - name: PARTS_USER
+                  valueFrom: {secretKeyRef: {name: {{ .Values.postgres.partsSecret }}, key: PARTS_USER}}
+                - name: PARTS_PASSWORD
+                  valueFrom: {secretKeyRef: {name: {{ .Values.postgres.partsSecret }}, key: PARTS_PASSWORD}}
+                - name: PARTS_DATABASE_URL
+                  value: "postgresql://$(PARTS_USER):$(PARTS_PASSWORD)@{{ .Values.postgres.host }}:5432/parts_interchange"
+                - name: SUGGESTER_GPU_MODEL
+                  value: {{ .Values.fixSuggester.model | quote }}
+              envFrom:
+                - secretRef: {name: {{ .Values.fixSuggester.secret }}}
+              resources:
+                requests: {cpu: 100m, memory: 256Mi}
+                limits: {memory: 1Gi}
+{{- end }}

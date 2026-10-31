@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ApiError, get, post, qs } from "./api.ts";
-import type { AnyPreview, GroupDetail, GroupKey, Suggestion, SuggestionList, SuggestionView } from "./types.ts";
+import type { AnyPreview, GroupDetail, GroupKey, Suggestion, SuggesterStatus, SuggestionList, SuggestionView } from "./types.ts";
 import { KIND_LABEL } from "./types.ts";
 import { MapPanel } from "./MapPanel.tsx";
 import { RulePanel } from "./RulePanel.tsx";
@@ -44,6 +44,7 @@ export function SuggestionsPage() {
 
   return (
     <div className="stack">
+      <SuggesterStrip onRan={list.reload} />
       <div className="tabs" role="tablist">
         {VIEWS.map((v) => (
           <button key={v.id} role="tab" aria-selected={v.id === view} className={v.id === view ? "tab on" : "tab"}
@@ -64,6 +65,43 @@ export function SuggestionsPage() {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/** The suggester's last run and Run now. Runs take a few minutes; the strip refreshes while one is going. */
+function SuggesterStrip({ onRan }: { onRan: () => void }) {
+  const toast = useToast();
+  const st = useLoad(() => get<SuggesterStatus>("/api/suggester"), "suggester");
+  const [busy, setBusy] = useState(false);
+  const running = st.data?.running ?? false;
+  useEffect(() => {
+    if (!running) return;
+    const t = window.setInterval(() => { st.reload(); onRan(); }, 15000);
+    return () => window.clearInterval(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [running]);
+  if (st.error) return <ErrorBanner error={`Suggester status didn't load: ${st.error}`} onRetry={st.reload} />;
+  if (!st.data) return null;
+  const last = st.data.runs[0];
+  const counts = last ? Object.entries(last.counts).map(([k, n]) => `${n} ${k}`).join(", ") : "";
+  const runNow = async () => {
+    setBusy(true);
+    try { await post("/api/suggester/run"); toast("Suggester started; new suggestions appear here as it files them."); st.reload(); }
+    catch (e) { toast(e instanceof Error ? e.message : String(e), true); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className="row small muted">
+      <span className="grow">
+        Suggester{st.data.schedule ? ` (cron ${st.data.schedule})` : ""}:{" "}
+        {running ? <strong>running…</strong> : last
+          ? <>last run {when(last.startedAt)} ({last.trigger}), {last.status}{counts ? `: ${counts}` : ""}{last.error ? ` · ${last.error}` : ""}</>
+          : "no runs yet"}
+      </span>
+      <button disabled={busy || running || !st.data.runNow} onClick={runNow} title={st.data.reason ?? ""}>
+        {busy ? "Starting…" : "Run now"}
+      </button>
     </div>
   );
 }

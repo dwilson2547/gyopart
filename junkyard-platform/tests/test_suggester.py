@@ -46,3 +46,66 @@ def test_every_prompt_version_renders():
     for version in decode.PROMPTS:
         assert decode.messages(BUNDLE, version)[0]["content"] == decode.PROMPTS[version]
     assert decode.PROMPT in decode.PROMPTS
+
+
+def test_other_make_candidates_need_the_make_to_tell_names_apart():
+    b = {**BUNDLE, "catalogueMake": None, "decode": {**BUNDLE["decode"], "make": "RAM", "model": "1500"},
+         "candidates": [
+             {"make": "Dodge", "model": "Ram 1500", "years": "1994–2023", "yearsInRange": 1, "score": 1.0, "wouldMatch": 9, "exact": 9},
+             {"make": "Dodge", "model": "1500", "years": "1990–1993", "yearsInRange": 1, "score": 0.9, "wouldMatch": 1, "exact": 1},
+             {"make": "Chevrolet", "model": "1500", "years": "1988–1999", "yearsInRange": 1, "score": 0.9, "wouldMatch": 1, "exact": 1}]}
+    r = decode.check(None, b, {"decision": "map", "targets": ["Ram 1500"]})
+    assert r["targets"] == [{"make": "Dodge", "model": "Ram 1500"}]
+    assert decode.check(None, b, {"decision": "map", "targets": ["1500"]})["decision"] == "refused"   # which make?
+    assert decode.check(None, b, {"decision": "map", "targets": ["Chevrolet 1500"]})["targets"][0]["make"] == "Chevrolet"
+    user = decode.messages(b)[1]["content"]
+    assert 'Dodge "Ram 1500"' in user and "no cars of make" in user
+    assert "another brand" in decode.PROMPTS["decode-v3"] and "another brand" not in decode.PROMPTS["decode-v2"]
+
+
+def test_numbers_in_the_names_must_agree():
+    nc = decode.number_conflict
+    assert nc({"model": "Silverado", "series": "3/4 Ton"}, "Silverado 3500 HD")
+    assert nc({"model": "GMT-400", "series": "1 Ton Nominal"}, "C1500")
+    assert nc({"model": "Silverado", "series": "3/4 Ton"}, "Silverado 2500 HD") is None
+    assert nc({"model": "Express", "series": "1500 (1/2 Ton)"}, "Express 1500") is None
+    assert nc({"model": "F-550", "series": None}, "F-350 Super Duty")
+    assert nc({"model": "E-450", "series": "Econoline"}, "E-150 Econoline")
+    assert nc({"model": "525iA", "series": None}, "525i") is None
+    assert nc({"model": "S-Class", "series": None}, "S 550") is None          # no number in the decode
+    assert nc({"model": "Ram", "series": "DR (1500)"}, "Ram 1500") is None
+    assert nc({"model": "GMT-400", "series": "1/2 Ton Nominal"}, "C1500") is None    # a platform code, not a model
+
+
+def test_gpu_client_waits_for_the_batch_and_keeps_order():
+    import httpx
+    from admin_api.suggester.gpu import GpuClient, GpuUnavailable
+    polls = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        assert req.headers["authorization"] == "Bearer t"
+        if req.method == "POST":
+            body = __import__("json").loads(req.content)
+            assert body["model"] == "qwen3vl" and len(body["inputs"]) == 2
+            return httpx.Response(202, json={"batch_id": "b1", "job_ids": ["j1", "j2"]})
+        polls.append(1)
+        done = len(polls) > 1
+        return httpx.Response(200, json={"complete": done, "jobs": [
+            {"status": "done" if done else "running", "result": {"json": {"decision": "unsure"}}, "error": None},
+            {"status": "failed" if done else "queued", "result": None, "error": "boom"}]})
+
+    c = GpuClient("http://q", "t", transport=httpx.MockTransport(handler))
+    out = c.run("qwen3vl", [{"messages": []}, {"messages": []}], poll_seconds=0)
+    assert out == [{"result": {"json": {"decision": "unsure"}}}, {"error": "boom"}] and len(polls) == 2
+    down = GpuClient("http://q", "t", transport=httpx.MockTransport(lambda r: httpx.Response(503)))
+    import pytest
+    with pytest.raises(GpuUnavailable):
+        down.run("qwen3vl", [{"messages": []}])
+
+
+def test_suggested_mapping_covers_the_groups_decode_for_all_years():
+    from admin_api.suggester.run import proposal
+    from admin_api.api.discrepancies import GroupKey
+    p = proposal(GroupKey(kind="decode", make="RAM", model="1500", series=""), [{"make": "Dodge", "model": "Ram 1500"}])
+    assert p == {"make": "RAM", "model": "1500", "series": None, "year_from": None, "year_to": None,
+                 "targets": [{"make": "Dodge", "model": "Ram 1500"}]}
