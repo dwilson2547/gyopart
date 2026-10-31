@@ -1,6 +1,6 @@
 # VIN matching v2 (trims) and the fix-suggestion agent — design
 
-Status: **phases 1–3 in dev** (2026-10-27/28/30), **phase 4 bake-off done** (2026-10-30, §4); the rest is planned (user, 2026-10-27). Prod waits for the whole
+Status: **phases 1–5 in dev** (2026-10-27 to 2026-10-31; phase 4 = bake-off, §4); the rest is planned (user, 2026-10-27). Prod waits for the whole
 system (user, 2026-10-28). §1 is verified against the code on `dev` (731cd38)
 and read-only queries against the **dev** databases on 2026-10-27; the §2.1 numbers come from a throwaway
 prototype of the normaliser run over the same data. Prod numbers have not been measured for this.
@@ -252,4 +252,24 @@ call after the bake-off.
      `make_not_in_catalogue` groups (197 of dev's 409 fixable groups) get no candidates from decode-v2 (same
      make only), so it can only say unsure there. Trim groups and yard rules were not tested: there are no
      labels for them. The approve / edited / rejected history after launch is the real score (§3.5).
-5. **Suggester job** (§3.4) in dev, then prod, decode groups first.
+5. **Suggester job** (§3.4) in dev, then prod, decode groups first. **In dev 2026-10-31** (gyopart e088826; images
+   `sha-e088826337e7`; dev DB at 0009, applied by hand; CronJob `fix-suggester` nightly 04:00, chart `fixSuggester`,
+   on in dev only). `admin_api/suggester/run.py`: open fixable decode groups with 2+ cars, biggest first, up to 200 a
+   run, one queue job each; checked replies are filed with `file_suggestion`, the rest recorded in
+   `suggester_attempts` (shown on the group). A group is due when it has no suggestion waiting or rejected and its
+   last attempt was with another model, prompt or car count. Run now on the Suggestions page creates a Job from the
+   CronJob (admin-api Role: get that CronJob, create Jobs). The GPU queue's URL and client token come from Secret
+   `gyopart-suggester`. As built, beyond §3.4:
+   - Decodes whose make the catalogue lacks get candidates of every make, ranked on make + model (RAM is Dodge
+     "Ram 1500" there). Prompt decode-v3 = v2 + "only a rebadge or successor brand"; same bake-off scores as v2.
+   - Two number checks in code, from a dry run over dev's 271 due groups (the model's systematic errors there):
+     a weight class in the series must agree with the target's 1500/2500/3500, and a lettered model number must
+     agree with the target's of the same letters (an F-550 isn't an F-250 Super Duty; GMT-400 is not compared).
+   - Text jobs run at most 4 per generate on the GPU (8 peaked at 11.4 GB on a 16 GB card; the cluster's has 12).
+   First run (manual, 2026-10-31): 200 groups in 248 s, 63 filed (1,451 open cars, 1,042 would match), 126 unsure,
+   11 refused, no GPU errors; a following export found exactly the 71 groups the limit had left. Trim and yard
+   groups are not suggested yet (no labels to test prompts against).
+
+**Prod promotion** (the whole system, user's call): migrations 0007–0009 on the prod DB; image pins and
+`fixSuggester` (with its Secret in `gyopart`) into `values.yaml` / `values-prod.yaml` on main; `--requeue
+vin_candidates` in prod for the trim normaliser.
