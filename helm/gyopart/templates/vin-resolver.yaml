@@ -24,6 +24,7 @@ spec:
         {{- include "gyopart.labels" . | nindent 8 }}
     spec:
       terminationGracePeriodSeconds: 60  # lets the current batch finish
+      automountServiceAccountToken: false
       containers:
         - name: vin-resolver
           image: {{ .Values.images.vinResolver }}

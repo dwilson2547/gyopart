@@ -17,6 +17,7 @@ spec:
         app: gyopart-ui
         {{- include "gyopart.labels" . | nindent 8 }}
     spec:
+      automountServiceAccountToken: false
       containers:
         - name: gyopart-ui
           image: {{ .Values.images.gyopartUi }}

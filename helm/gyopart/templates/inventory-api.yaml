@@ -17,6 +17,7 @@ spec:
         app: inventory-api
         {{- include "gyopart.labels" . | nindent 8 }}
     spec:
+      automountServiceAccountToken: false
       containers:
         - name: inventory-api
           image: {{ .Values.images.inventoryApi }}
