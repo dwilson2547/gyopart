@@ -168,7 +168,7 @@ scraping:
     # Year/make/model search matrix, then a detail call per new vehicle.
     u-pull-n-save:
       image: dwilson2547/gyopart-scraper-u-pull-n-save@sha256:3f313479a51f90ef9477fc25503bb14e89d4f54442b2e3fb268bb1cf71b25667
-      timeout: 8h  # first sweep is ~20k requests; later runs reuse the week's empty combos
+      timeout: 3h  # ~1.9k searches + the weekly year/make/model lists: 79 min in dev 2026-11-08
       jobs:
         u-pull-n-save: {pool: junkyard-inventory, suspend: true}
     fenix-upull:

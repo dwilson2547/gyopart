@@ -25,7 +25,7 @@ scrape-job-manager.
 | `ipullupull/` | `ipullupull` | [x] | [x] | First prod run 2026-10-13: 4,069 |
 | `utpap/` | `utpap` | [x] | [x] | First prod run 2026-10-13: 1,806 |
 | `wrenchapart/` | `wrenchapart` | [x] | [x] | First prod run 2026-10-13: 11,139 |
-| `u-pull-n-save/` | `u_pull_n_save` | [x] | [ ] | Year×make×model matrix (~20k searches); lists and empty results reused for a week, 8 h timeout for the first sweep. Dev 2026-10-14: 1,148. In prod; first run in progress 2026-10-14 |
+| `u-pull-n-save/` | `u_pull_n_save` | [x] | [x] | One search per make/model name (~1.9k), since the search's year only gates the name; lists and empty results reused for a week; full crawl every run. Dev 2026-11-08: 1,134 in 79 min (was 6.5 h). Prod failed 10-26 to 11-06 (one bad response among ~20k ended the run) |
 | `fenixupull/` | `fenix_upull` | [x] | [x] | Full crawl per location via the `fnx_location` cookie; 4 h timeout. First prod run 2026-10-13: 5,351 |
 | `tearapart/` | `tear_a_part` | [x] | [x] | First prod run 2026-10-13: 1,624 |
 | `pull-n-save/` | `pull_n_save` | [x] | [x] | Honest UA, as above; yard ZIPs set in `_STORE_DEFS`; 3 h timeout. First prod run 2026-10-13: 11,402 |
