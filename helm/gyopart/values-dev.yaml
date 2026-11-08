@@ -167,7 +167,7 @@ scraping:
         wrenchapart: {pool: junkyard-inventory, suspend: true}
     # Year/make/model search matrix, then a detail call per new vehicle.
     u-pull-n-save:
-      image: dwilson2547/gyopart-scraper-u-pull-n-save@sha256:ec33a3f1649a5a17678d0c827d3667ba91fcb09ab7c4353a2b8df58f5526a319
+      image: dwilson2547/gyopart-scraper-u-pull-n-save@sha256:3f313479a51f90ef9477fc25503bb14e89d4f54442b2e3fb268bb1cf71b25667
       timeout: 8h  # first sweep is ~20k requests; later runs reuse the week's empty combos
       jobs:
         u-pull-n-save: {pool: junkyard-inventory, suspend: true}
