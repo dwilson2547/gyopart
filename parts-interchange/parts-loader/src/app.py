@@ -80,7 +80,7 @@ def split_tree_on_years(tree_file: str, year_dir_path: str):
 
 def create_session():
     db_user = 'test'
-    db_pass = 'dw31571102'
+    db_pass = os.environ.get('DB_PASS', '')
     db_url = 'localhost:3306/parts-interchange'
 
     engine = create_engine(get_db_url(db_user, db_pass, db_url))
