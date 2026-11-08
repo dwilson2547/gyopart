@@ -25,7 +25,7 @@ scrape-job-manager.
 | `ipullupull/` | `ipullupull` | [ ] | [ ] | |
 | `utpap/` | `utpap` | [ ] | [ ] | |
 | `wrenchapart/` | `wrenchapart` | [ ] | [ ] | |
-| `u-pull-n-save/` | `u_pull_n_save` | [ ] | [ ] | |
+| `u-pull-n-save/` | `u_pull_n_save` | [x] | [x] | One search per make/model name (~1.9k), since the search's year only gates the name; lists and empty results reused for a week; full crawl every run. Dev 2026-11-08: 1,134 in 79 min (was 6.5 h). Prod failed 10-26 to 11-06 (one bad response among ~20k ended the run) |
 | `fenixupull/` | `fenix_upull` | [ ] | [ ] | |
 | `tearapart/` | `tear_a_part` | [ ] | [ ] | |
 | `pull-n-save/` | `pull_n_save` | [ ] | [ ] | |
