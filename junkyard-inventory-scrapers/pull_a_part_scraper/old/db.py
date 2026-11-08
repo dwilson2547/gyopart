@@ -1,3 +1,4 @@
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from urllib.parse import quote_plus
@@ -11,7 +12,7 @@ class DB:
 
     def create_session(self):
         db_user = 'test'
-        db_pass = 'dw31571102'
+        db_pass = os.environ.get('DB_PASS', '')
         db_url = 'localhost:3306/parts-interchange'
 
         engine = create_engine(self.get_db_url(db_user, db_pass, db_url))
