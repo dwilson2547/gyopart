@@ -93,6 +93,11 @@ class Vehicle(Base):
     car_id_candidates    = Column(ARRAY(Integer), nullable=True)
     # Set when the resolver worker has processed the vehicle; NULL + car_id_resolved false = queued.
     resolve_attempted_at = Column(DateTime,       nullable=True)
+    # How a VIN match was narrowed (pipeline.car_matcher.CarMatch): engine, fuel, trim, trim_mapping, trim_noise.
+    car_id_match_steps   = Column(ARRAY(String(20)), nullable=True)
+    # The trim text (decode or yard) the matcher couldn't read while candidates still differ: what the Trims tab
+    # groups by, and what a trim mapping settles (matching-v2-design §2.2).
+    car_id_trim_unread   = Column(String(200),    nullable=True)
 
     # Bookkeeping
     is_active     = Column(Boolean,  nullable=False, default=True)
@@ -193,6 +198,102 @@ class DecodeMapping(Base):
     catalogue_model = Column(String(120), nullable=False)
     created_by      = Column(String(100), nullable=False)
     created_at      = Column(DateTime,    nullable=False)
+
+
+class TrimMapping(Base):
+    """What an NHTSA (or yard) trim string means for a make/model (matching-v2-design §2.2).
+
+    Matched on loose name keys (pipeline.car_matcher.name_key) of the decode's make and model (model null =
+    every model of the make) and of the trim text, within an optional year range. `map` narrows the candidates
+    to `catalogue_trims` (picked from the catalogue, never typed); `noise` says the text carries no trim, so it
+    stops being shown.
+    """
+    __tablename__ = "trim_mappings"
+    __table_args__ = (
+        Index("ix_trim_mappings_key", "make_key", "trim_key"),
+    )
+
+    id              = Column(Integer,     primary_key=True, autoincrement=True)
+    nhtsa_make      = Column(String(100), nullable=False)
+    nhtsa_model     = Column(String(200), nullable=True)   # null = every model of the make
+    trim_text       = Column(String(200), nullable=False)
+    make_key        = Column(String(100), nullable=False)
+    model_key       = Column(String(200), nullable=True)
+    trim_key        = Column(String(200), nullable=False)
+    year_from       = Column(Integer,     nullable=True)   # null = open-ended
+    year_to         = Column(Integer,     nullable=True)
+    action          = Column(String(10),  nullable=False)  # map | noise
+    catalogue_trims = Column(ARRAY(String(120)), nullable=True)  # for map
+    created_by      = Column(String(100), nullable=False)
+    created_at      = Column(DateTime,    nullable=False)
+
+
+class FixSuggestion(Base):
+    """A proposed fix for one discrepancy or trim group, waiting for a person (matching-v2-design §3.2-3.3).
+
+    `proposal` holds exactly the arguments the fix's create function takes, `preview` what its preview said when it
+    was filed. Nothing is written or requeued until someone approves it in the admin UI; `final` is what they
+    confirmed when they changed it first (status `edited`), `result` what the create returned.
+    """
+    __tablename__ = "fix_suggestions"
+    __table_args__ = (
+        Index("ix_fix_suggestions_group", "group_ref", "status"),
+    )
+
+    id            = Column(Integer,     primary_key=True, autoincrement=True)
+    kind          = Column(String(20),  nullable=False)   # decode_mapping | trim_mapping | yard_rule | ignore_group
+    group_key     = Column(JSONB,       nullable=False)   # the GroupKey, as the API takes it
+    group_ref     = Column(String(64),  nullable=False)   # hash of group_key, for lookups
+    proposal_ref  = Column(String(64),  nullable=False)   # hash of kind + group + proposal: rejected ones stay rejected
+    proposal      = Column(JSONB,       nullable=False)
+    preview       = Column(JSONB,       nullable=False)
+    rationale     = Column(String(2000), nullable=True)
+    model         = Column(String(100), nullable=False)   # what proposed it: a checkpoint, or the MCP client's name
+    prompt        = Column(String(50),  nullable=True)    # prompt version, for the suggester job
+    filed_by      = Column(String(100), nullable=False)
+    filed_at      = Column(DateTime,    nullable=False)
+    status        = Column(String(10),  nullable=False, default="pending")  # pending|approved|edited|rejected|stale
+    reviewed_by   = Column(String(100), nullable=True)
+    reviewed_at   = Column(DateTime,    nullable=True)
+    reject_reason = Column(String(500), nullable=True)
+    final         = Column(JSONB,       nullable=True)
+    result        = Column(JSONB,       nullable=True)
+
+
+class SuggesterRun(Base):
+    """One run of the fix suggester (matching-v2-design §3.4): nightly or "run now"."""
+    __tablename__ = "suggester_runs"
+
+    id          = Column(Integer,     primary_key=True, autoincrement=True)
+    trigger     = Column(String(20),  nullable=False)   # schedule | manual
+    started_at  = Column(DateTime,    nullable=False)
+    finished_at = Column(DateTime,    nullable=True)
+    status      = Column(String(10),  nullable=False)   # running | done | failed
+    counts      = Column(JSONB,       nullable=True)    # outcome -> groups
+    error       = Column(String(1000), nullable=True)
+
+
+class SuggesterAttempt(Base):
+    """What the suggester made of one group in one run: a filed suggestion, or why there is none. A group is asked
+    again only when its open vehicles, the model or the prompt change."""
+    __tablename__ = "suggester_attempts"
+    __table_args__ = (
+        Index("ix_suggester_attempts_group", "group_ref", "id"),
+    )
+
+    id            = Column(Integer,     primary_key=True, autoincrement=True)
+    run_id        = Column(Integer,     ForeignKey("suggester_runs.id"), nullable=False)
+    kind          = Column(String(20),  nullable=False)
+    group_key     = Column(JSONB,       nullable=False)
+    group_ref     = Column(String(64),  nullable=False)
+    vehicles      = Column(Integer,     nullable=False)
+    model         = Column(String(100), nullable=False)
+    prompt        = Column(String(50),  nullable=False)
+    outcome       = Column(String(10),  nullable=False)   # filed | unsure | refused | invalid | error
+    reason        = Column(String(1000), nullable=True)
+    reply         = Column(JSONB,       nullable=True)    # the model's parsed reply, as given
+    suggestion_id = Column(Integer,     nullable=True)
+    at            = Column(DateTime,    nullable=False)
 
 
 class ScrapeRun(Base):

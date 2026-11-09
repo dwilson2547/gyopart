@@ -161,7 +161,7 @@ def get_or_create_image(
     conn: Connection,
     name: str, url: str, manufacturer_id: int,
     alt_text: str | None = None, saved: bool = False, uploaded: bool = False,
-    imgcache_hash: str | None = None, imgcache_bucket: str | None = None,
+    content_hash: str | None = None, imgcache_bucket: str | None = None,
 ) -> int:
     existing = conn.execute(
         select(image_table.c.id).where(image_table.c.name == name)
@@ -172,7 +172,7 @@ def get_or_create_image(
         image_table.insert().values(
             name=name, url=url, manufacturer_id=manufacturer_id,
             alt_text=alt_text, saved=saved, uploaded=uploaded,
-            imgcache_hash=imgcache_hash, imgcache_bucket=imgcache_bucket,
+            content_hash=content_hash, imgcache_bucket=imgcache_bucket,
         ).returning(image_table.c.id)
     ).scalar_one()
 
@@ -256,7 +256,7 @@ def write_car_data(
     diagrams_data: list,
     parts_data: dict,
     manufacturer_id: int,
-    imgcache_hashes: dict | None = None,
+    content_hashes: dict | None = None,
 ) -> None:
     """Write all structured data for one engine config to parts_interchange.
 
@@ -264,9 +264,9 @@ def write_car_data(
                       trim_url, trim_name, engine_url, engine_name, base_url
     diagrams_data: list of parsed_diagrams dicts from process_car_data
     parts_data: {part_number: part_data dict}
-    imgcache_hashes: {image_url: content_hash} from _cache_image calls
+    content_hashes: {image_url: content_hash} from _cache_image calls
     """
-    hashes = imgcache_hashes or {}
+    hashes = content_hashes or {}
     with engine.begin() as conn:
         year_id = get_or_create_year(conn, str(car_context["year"]))
         make_id = get_or_create_make(conn, car_context["make_name"], car_context["make_url"])
@@ -297,7 +297,7 @@ def write_car_data(
                     img_id = get_or_create_image(
                         conn, img_name, full_img_url, manufacturer_id,
                         alt_text=diagram.get("alt_text"),
-                        imgcache_hash=hashes.get(full_img_url),
+                        content_hash=hashes.get(full_img_url),
                         imgcache_bucket=Config.IMG_BUCKET if hashes.get(full_img_url) else None,
                     )
 
@@ -338,7 +338,7 @@ def write_car_data(
                                 pi_id = get_or_create_image(
                                     conn, fname, full_url, manufacturer_id,
                                     alt_text=slot_data.get("alt_text"),
-                                    imgcache_hash=hashes.get(full_url),
+                                    content_hash=hashes.get(full_url),
                                     imgcache_bucket=Config.IMG_BUCKET if hashes.get(full_url) else None,
                                 )
                                 link_part_image(conn, part_id, pi_id, slot)

@@ -121,7 +121,7 @@ class Journal:
             "source_url": diagram.url, "scraped_at": datetime.now(timezone.utc).isoformat(),
         }
         metadata = diagram.metadata()
-        metadata["image"].update({"imgcache_hash": image_hash, "imgcache_bucket": bucket if image_hash else None})
+        metadata["image"].update({"content_hash": image_hash, "imgcache_bucket": bucket if image_hash else None})
         self.append({**common, "record_type": "diagram", "part_rows": len(diagram.parts), **metadata})
         for row in diagram.parts:
             source = asdict(row)

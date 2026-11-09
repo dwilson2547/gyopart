@@ -17,7 +17,8 @@ All endpoints are unauthenticated. Base URL: `https://www.u-pullandsave.com`
 GET /api/vehicles/recent/{storeId}
 ```
 
-Returns the most recently added vehicles (ordered by yard entry date). Fast change-detection signal.
+Returns the most recently added vehicles (ordered by yard entry date). Not used by the scraper: a run that
+only checks it can't tell which cars have left the yard.
 
 **Example:** `GET /api/vehicles/recent/105`
 
@@ -90,7 +91,12 @@ GET /api/vehicles/search/?store={storeId}&year={year}&make={make}&model={model}
 
 Returns vehicles currently in the yard matching the given criteria. **All three of `year`, `make`, and `model` are required** — omitting any returns `[]`.
 
-The `year` parameter acts as an interchange year, so a search for `2010/Honda/Civic` may return Civics from adjacent model years with compatible parts.
+The `year` only has to be one where the catalogue lists that model name (`/api/vehicles/model/{year}/{make}`):
+the search then returns **every** car of that make and model in the yard, whatever its model year. Checked
+2026-11-08: Impala for every year from 1985 to 2020 gives the same 45 cars (2002–2013), Civic for 1990/2005/2015 the
+same 10. `2005/Chevrolet/Malibu` gives `[]` because 2005 lists it as "Malibu - New Style" and "Mailbu - Old Style"
+(sic), which also give `[]`; `2018/Chevrolet/Malibu` gives all 47 Malibus, a 2003 and a 2006 among them. A year
+outside the catalogue (`year=1`) gives `[]`.
 
 **Example:** `GET /api/vehicles/search/?store=105&year=2010&make=Honda&model=Civic`
 
@@ -238,42 +244,17 @@ Returns Hollander interchange numbers for a specific part across engine/trim var
 
 ## Scraping Strategy
 
-The search endpoint requires all three of `year`, `make`, and `model`. There is no "dump all inventory" endpoint. The recommended approach is a two-pass strategy:
+The search endpoint requires all three of `year`, `make`, and `model`. There is no "dump all inventory" endpoint.
 
-### Pass 1 — Build the Year/Make/Model Matrix (cache, refresh weekly)
+1. For each year 1985 to next year: `GET /api/vehicles/make/{year}`, then `GET /api/vehicles/model/{year}/{make}`
+   for each make. These lists are reused for a week.
+2. Search each distinct (make, model) name once, at the first year it is listed under. Searching it again for
+   another year returns the same cars. Empty results are reused for a week, the rest are asked again each run.
+3. Diff the returned `vehicleID`s against the database: new ones get `GET /api/vehicles/{vehicleID}` (the only
+   place the VIN is), still-present ones get `last_seen_at`, missing ones are marked inactive. A vehicle's detail is
+   fetched only once: its `vehicleID` and `stockID` are kept in `extras`.
 
-1. For each year in the range (e.g. 1985–2027):
-   - `GET /api/vehicles/make/{year}` → collect all makes
-2. For each `(year, make)` pair:
-   - `GET /api/vehicles/model/{year}/{make}` → collect all models
-3. Store the full `(year, make, model)` combination table locally
-
-Estimated API calls: ~2,000–4,000 total. Rarely changes.
-
-### Pass 2 — Poll for Inventory (daily/nightly sweep)
-
-For every `(year, make, model)` combo in the matrix:
-```
-GET /api/vehicles/search/?store=105&year={year}&make={make}&model={model}
-```
-
-Diff the returned `vehicleID` list against the previous run to detect:
-- **New vehicles** (present now, not before) → fetch full detail via `GET /api/vehicles/{vehicleID}`
-- **Removed vehicles** (were present, now gone) → mark as pulled/sold
-
-### Pass 2b — Fast Change Detection (every few hours)
-
-Poll `/api/vehicles/recent/105` as a lightweight signal. If new `vehicleID`s appear that aren't in the local DB, fetch their detail immediately without waiting for the full nightly sweep.
-
-### Suggested Polling Schedule
-
-| Job | Endpoint | Frequency |
-|---|---|---|
-| Change detection | `/api/vehicles/recent/105` | Every 2–4 hours |
-| Full inventory sweep | `/api/vehicles/search/` (all combos) | Nightly |
-| Matrix refresh | `/api/vehicles/make/{year}` + `/model/` | Weekly |
-
----
+Every run is a full crawl. A car whose model name isn't in the catalogue's lists can't be found.
 
 ## Notes
 

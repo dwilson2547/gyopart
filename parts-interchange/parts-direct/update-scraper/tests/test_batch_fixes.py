@@ -2,6 +2,7 @@
 per-vehicle skip (no browser, no network, no database)."""
 import os
 import sys
+from datetime import datetime, timedelta, timezone
 
 import psycopg2
 import pytest
@@ -10,7 +11,7 @@ from playwright.sync_api import Error as PlaywrightError
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import discovery  # noqa: E402
 import scraper_v2  # noqa: E402
-from scraper_v2 import CONTENT_ATTEMPTS, NotOem, UpdaterV2  # noqa: E402
+from scraper_v2 import CONTENT_ATTEMPTS, NotOem, RunStats, UpdaterV2  # noqa: E402
 from writer import Target  # noqa: E402
 
 NAVIGATING = "Page.content: Unable to retrieve content because the page is navigating and changing the content."
@@ -224,3 +225,24 @@ def test_no_deadline_never_stops():
     u = bare_updater()
     u.deadline = None
     u._check_deadline()
+
+
+def _timed_updater(minutes_left: float):
+    u = bare_updater()
+    u.max_vehicles = None
+    u.stats = RunStats()
+    u.deadline = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(minutes=minutes_left)
+    return u
+
+
+def test_starts_another_vehicle_with_less_left_than_a_vehicle_takes():
+    # 40 min left, vehicles taking ~2 h: start anyway — if the deadline cuts it off it is released and
+    # resumes from webcache next run, instead of the window sitting idle.
+    u = _timed_updater(40)
+    assert u._time_left_for_another()
+
+
+def test_stops_starting_vehicles_in_the_last_minutes():
+    u = _timed_updater(2)
+    assert not u._time_left_for_another()
+    assert u.stats.stop_reason == "deadline"

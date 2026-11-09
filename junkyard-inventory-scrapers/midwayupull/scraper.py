@@ -2,7 +2,9 @@
 # Site:     Midway U Pull (https://midwayupull.com)
 # Platform: URG iis-pro-upull (U-Pull variant of IIS Pro v2)
 # Strategy: parse makes from /search-inventory/ HTML → POST admin-ajax.php for models
-#           → GET /inventory/{MAKE}/{MODEL}/ → regex parse .car-details-uPull cards
+#           → GET /inventory/{MAKE}/{MODEL}/?id={YARD} per yard → regex parse .car-details-uPull cards
+# The unfiltered model page (and ?id=ANY) drops Tulsa's cars whenever another yard has that
+# model, so each yard is fetched by its own id and the results merged by VIN.
 # No /latest-arrivals/ — always full crawl; deactivate removed vehicles on each run.
 # Dedup key: VIN (stored as source_key); stock_number stored in extras.
 # Source identifier: "midway_upull"
@@ -26,7 +28,7 @@ from request_auth_client import RequestAuthClient
 
 # scrape_contract.py lives one level up in the repo and next to scraper.py in the image.
 sys.path.append(str(Path(__file__).resolve().parent.parent))
-from scrape_contract import Broken, run  # noqa: E402
+from scrape_contract import Broken, run, with_retries  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -56,6 +58,7 @@ HEADERS = {
 _LOCATION_NAME_TO_YARD: dict[str, str] = {
     "Liberty U-Pull": "MO09",
     "Muncie U-Pull":  "MO38",
+    "Tulsa U-Pull":   "OO95",
 }
 
 _LOCATION_DEFS = {
@@ -77,6 +80,15 @@ _LOCATION_DEFS = {
         "zip_code": "66111",
         "phone":    "913-287-6185",
     },
+    "OO95": {
+        "source_location_id": "OO95",
+        "name":     "Midway U Pull — Tulsa, OK",
+        "address":  "13802 E Apache St, Tulsa, OK 74116",
+        "city":     "Tulsa",
+        "state":    "OK",
+        "zip_code": "74116",
+        "phone":    "918-234-4444",
+    },
     "UNKNOWN": {
         "source_location_id": "UNKNOWN",
         "name":     "Midway U Pull — Location Unknown",
@@ -87,6 +99,9 @@ _LOCATION_DEFS = {
         "phone":    None,
     },
 }
+
+
+_YARD_IDS = [y for y in _LOCATION_DEFS if y != "UNKNOWN"]
 
 
 def _utcnow() -> datetime:
@@ -109,13 +124,19 @@ def _fetch(
         return entry["content"]
 
     logger.info("GET %s", url)
-    with request_auth.acquire(DOMAIN) as permit:
-        resp = http.get(url, headers=HEADERS, timeout=60)
-        permit.set_status(resp.status_code)
-        if resp.status_code == 429:
-            logger.error("429 received — aborting run")
-            raise Broken(f"429 rate limited by {SOURCE}")
-        resp.raise_for_status()
+
+    def get():
+        with request_auth.acquire(DOMAIN) as permit:
+            resp = http.get(url, headers=HEADERS, timeout=120)
+            permit.set_status(resp.status_code)
+            return resp
+
+    # The server sometimes stalls for a minute or more on a page that loads in seconds a moment later.
+    resp = with_retries(get, url)
+    if resp.status_code == 429:
+        logger.error("429 received — aborting run")
+        raise Broken(f"429 rate limited by {SOURCE}")
+    resp.raise_for_status()
 
     web_cache.store(url, resp.text, CLIENT_NAME)
     return resp.text
@@ -128,18 +149,29 @@ def _post_ajax(
     params: dict,
 ) -> dict:
     """POST to admin-ajax.php; returns parsed JSON. Not cached (small, fast responses)."""
-    with request_auth.acquire(DOMAIN) as permit:
-        resp = http.post(
-            AJAX_URL,
-            data={"action": action, **params},
-            headers={**HEADERS, "Content-Type": "application/x-www-form-urlencoded"},
-            timeout=30,
-        )
-        permit.set_status(resp.status_code)
-        if resp.status_code == 429:
-            logger.error("429 received — aborting run")
-            raise Broken(f"429 rate limited by {SOURCE}")
-        resp.raise_for_status()
+    def post():
+        with request_auth.acquire(DOMAIN) as permit:
+            resp = http.post(
+                AJAX_URL,
+                data={"action": action, **params},
+                headers={**HEADERS, "Content-Type": "application/x-www-form-urlencoded"},
+                timeout=60,
+            )
+            permit.set_status(resp.status_code)
+        # The server sometimes stalls and then answers 200 with an empty body; retry that like a
+        # dropped connection rather than failing the whole crawl on a JSONDecodeError.
+        if resp.status_code == 200:
+            try:
+                resp.json()
+            except ValueError:
+                raise requests.ConnectionError(f"non-JSON body ({len(resp.content)} bytes)")
+        return resp
+
+    resp = with_retries(post, f"{action} {params}")
+    if resp.status_code == 429:
+        logger.error("429 received — aborting run")
+        raise Broken(f"429 rate limited by {SOURCE}")
+    resp.raise_for_status()
     return resp.json()
 
 
@@ -238,15 +270,14 @@ def _fetch_makes(
     html = _fetch(http, web_cache, request_auth, BASE_URL + "search-inventory/")
     soup = BeautifulSoup(html, "html.parser")
 
-    select = soup.find("select", attrs={"name": re.compile(r"make", re.I)})
-    if not select:
-        select = soup.find("select", id=re.compile(r"make", re.I))
+    # The make <select> has no name or id, only the class upullsimpleMake.
+    select = soup.find("select", class_="upullsimpleMake")
 
     makes = []
     if select:
         for opt in select.find_all("option"):
-            val = opt.get("value", "").strip()
-            if val and val.upper() not in ("", "ALL", "SELECT MAKE"):
+            val = (opt.get("value") or "").strip()
+            if val and val.upper() not in ("ANY", "ALL", "SELECT MAKE") and val not in makes:
                 makes.append(val)
 
     if not makes:
@@ -292,10 +323,11 @@ def _full_crawl(
         if not models:
             continue
         for model_slug in models:
-            url = BASE_URL + f"inventory/{make_slug}/{model_slug}/"
-            html = _fetch(http, web_cache, request_auth, url)
-            for card in _parse_vehicle_cards(html):
-                vehicles[card["vin"]] = card
+            for yard_id in _YARD_IDS:
+                url = BASE_URL + f"inventory/{make_slug}/{model_slug}/?id={yard_id}"
+                html = _fetch(http, web_cache, request_auth, url)
+                for card in _parse_vehicle_cards(html):
+                    vehicles[card["vin"]] = card
         logger.info("  %s: %d unique vehicles so far", make, len(vehicles))
     logger.info("Full crawl complete: %d unique vehicles", len(vehicles))
     return list(vehicles.values())

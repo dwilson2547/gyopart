@@ -28,14 +28,22 @@ Replace the JSON state files with database writes and a work queue; add outage h
 | bmw, ford, gm, honda, hyundai, infiniti, jaguar, kia, mercedes, mini, mitsubishi, nissan, subaru, toyota, volvo | `refresh: false`, `discovery_interval_days: 30` | new vehicles only (§3.8d); mini also checked with a full discovery + 2026 cars written |
 | fiat (Mopar's full catalogue) | `discovery_interval_days: 30`, refresh on | 3,493-vehicle backlog; dev pilot ran here first |
 
-- **Held back** (no job):
+- **New domains, prod jobs 2026-10-16** (`refresh: false`, `discovery_interval_days: 30`; image built from main
+  `fda4744`). Each first ran in dev (one manual run, capped at 2 h) through the VPN:
 
-| Site | Finding (2026-10-11) |
-|---|---|
-| audi, acura, porsche | moved to `<make>.oempartsonline.com` — a different platform: vehicle URLs redirect to a model page, the picker AJAX answers 403 even after the warm-up |
-| vw | `volkswagenpartsdirect.com` redirects to a dealer site, `hewlettvw.com` |
-| mazda | Cloudflare interstitial never cleared from the VPN (> 45 s, twice) |
-| suzuki | `suzukicarparts.com` serves an expired TLS certificate |
+| Site config | Domain (was) | Dev run 2026-10-16 |
+|---|---|---|
+| vw | `www.vwdirectparts.com` (volkswagenpartsdirect.com, now a dealer redirect) | 275 listed, 123 new; 16 cars written |
+| mazda | `www.mazdapartdirect.com` (mazdapartsdirect.com: Cloudflare never cleared from the VPN) | 200 listed, 74 new; 7 cars incl. two full Mazda 3s (~2,500 parts, ~320 diagrams each) |
+| audi | `audi.oempartsonline.com` (flowaudipartsdirect.com) | 676 listed, 350 new; first car (2026 A3, 1,498 part pages) cut off by the 2 h dev cap |
+| acura | `acura.oempartsonline.com` (acuraoempartsdirect.com) | 79 listed, 32 new; cars written |
+| porsche | `porsche.oempartsonline.com` (porscheoemwarehouse.com) | 513 listed, 248 new; 11 cars written (one transient challenge page mid-run) |
+
+  oempartsonline is the same RevolutionParts webstore as the other sites (the 2026-10-11 note that it was a
+  different platform was wrong; the redirects and picker 403 seen then no longer happen). Brand-new models
+  (2026/2027) list accessories only or no catalogue, as on the other sites.
+- **suzuki**: `www.suzukiautomotiveparts.com` works (dev run: 27 listed, 0 new) but has **no prod job**: the
+  catalogue is complete (Suzuki left the US car market after 2013).
 
 - The dev pilot job (`gyopart-dev/parts-direct-mopar`) is suspended so the site isn't scraped twice.
 
@@ -308,6 +316,14 @@ one replica — every concurrent job shares one exit IP).
   file. Image downloads were most of the traffic and came from `requests`, not a browser, and on 2026-10-29 the
   CDN's 403s came just before the exit IP was banned from every RevolutionParts site
   (`docs/issues/2026_10_29_parts_direct_cloudflare_ban_one_vpn_exit.md`). The image row keeps the page's URL.
+- Where they go (2026-10-17, ⬜ dev, not yet prod): straight to the `part-images` bucket on AIStor, at the key
+  the image row's `bucket_path` already names (`<config>/images/<name>`, the layout the original scraper used).
+  An object already there is not downloaded again. A stored image gets `saved = uploaded = true` and its BLAKE3
+  hash in `image.content_hash` (renamed from `imgcache_hash`, parts_interchange revision `0003`). Before this the
+  updater stored images only in scrape-stack's imgcache, which never expires and is not backed up, and set
+  `saved` without `uploaded`: those rows (~159k on dev) are moved into the bucket by a separate drain job.
+  Settings: `scraping.partImages` in the Helm values (endpoint, bucket, secret `part-images-credentials`); dev
+  and prod share `part-images` (same sites, same file names, only missing objects written; user, 2026-10-17).
 
 ### 3.8c Discovery (built 2026-10-11)
 

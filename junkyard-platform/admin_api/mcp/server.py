@@ -10,7 +10,7 @@ from typing import Annotated, Any, Callable, Literal
 
 from fastapi import HTTPException
 from pydantic import Field
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, literal, or_, select
 from sqlalchemy.orm import Session
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
@@ -24,7 +24,7 @@ from junkyard_common.models import Location, MappingDiscrepancy, Vehicle, VinCac
 from pipeline.pi_schema import (pi_car_table, pi_engine_table, pi_make_table, pi_model_table, pi_trim_table,
                                 pi_year_table)
 
-from ..api import catalogue, discrepancies, fixes, vehicles
+from ..api import catalogue, discrepancies, fixes, suggestions, trims, vehicles
 from ..api.common import BUCKETS, IGNORED, engines, open_discrepancies, sql_year
 from ..api.discrepancies import GroupKey, key_filter
 from . import oauth
@@ -44,6 +44,12 @@ doesn't match gets a discrepancy with a reason:
   that does cover those years. Never map to a model just because it exists in other years.
 - no_vin / decode_failed (tab "nodecode"): no usable decode, grouped by yard and the yard's own
   make/model strings. Fix with a yard rule (yard string -> catalogue make/model).
+- trim_unread (tab "trims"): not a discrepancy. These vehicles matched, but to several catalogue cars that
+  differ by trim, and their trim text (NHTSA Trim/Series, or the yard's) couldn't be read: maker-internal
+  grades ("Middle level", Kia "GL"), body words ("Styleside"). Grouped by decode make, model and that text.
+  Fix with a trim mapping: action "map" to the catalogue trim(s) it means (from the group's candidateTrims),
+  or "noise" when it says nothing about the trim. Map only when the text clearly names that trim; a wrong
+  map turns "one of these" into a confident wrong match. Several trims is fine when it could be any of them.
 
 Workflow:
 1. discrepancy_overview, then list_discrepancy_groups (most open vehicles first = highest priority).
@@ -59,16 +65,27 @@ Workflow:
   guessing one; the matcher picks among targets by year, trim and engine.
 - Narrow by series or years when only part of a decode maps to a model.
 - set_group_ignored hides a group that can never match (not a car in the catalogue's sense); say why.
-- delete_mapping only works on mappings agents made. Mappings the user made are theirs to change.
+- Trim groups: preview_trim_mapping reports how many covered vehicles end exact / narrower / unchanged /
+  wider; "wider" or a drop in exact means the mapping overrides a reading that worked: narrow it.
+- delete_mapping / delete_trim_mapping only work on mappings agents made. Mappings the user made are theirs to
+  change.
 - When unsure, stop and ask the user rather than creating a doubtful mapping.
+
+Suggesting instead of fixing: when the user asks for suggestions (or isn't there to confirm), use suggest_fix.
+It files the fix, with its preview and your rationale, for the user to approve, tweak or reject on the admin
+UI's Suggestions page, and changes nothing until they do. You can't approve suggestions. One suggestion waits
+per group at a time; a fix the user rejected for a group is never filed again. list_suggestions shows what is
+waiting and how earlier ones were reviewed (rejection reasons say what the user disagreed with).
 """
 
 SCHEME = "Bearer"
 RESOURCE_METADATA_PATH = "/.well-known/oauth-protected-resource/mcp"
 D, V = MappingDiscrepancy, Vehicle
-Tab = Literal["fixable", "gaps", "nodecode", "ignored"]
+Tab = Literal["fixable", "gaps", "nodecode", "trims", "ignored"]
 Targets = Annotated[list[fixes.Target], Field(min_length=1, description=(
     "Catalogue make + model pairs; several when the decode can be any of them"))]
+TrimMake = Annotated[str, Field(description="NHTSA make, as in the trim group key")]
+TrimText = Annotated[str, Field(description="The trim text, as in the trim group key")]
 # NHTSA's placeholders for "no value"; dropped from decodes so a record is ~20 fields, not ~140.
 _EMPTY = {"", "Not Applicable", "null", "None"}
 
@@ -160,8 +177,9 @@ def build(public_url: str) -> tuple[MCPServer, ASGIApp]:
                               samples: Annotated[int, Field(ge=0, le=30)] = 10) -> dict:
         """One group: vehicles by reason, yard and year; for decode groups the catalogue make, the years the
         catalogue has for the make and for this model (modelYears), ranked catalogue model suggestions with
-        their years, and existing mappings; for yard groups make and model suggestions. Plus recent sample
-        vehicles."""
+        their years, and existing mappings; for yard groups make and model suggestions; for trim groups the
+        catalogue trims among the vehicles' candidates (candidateTrims: how many vehicles could be each, with
+        models and years) and existing trim mappings for the text. Plus recent sample vehicles."""
         def go(eng):
             with Session(eng[0]) as s:
                 out = discrepancies.detail(s, eng[1], key, status)
@@ -182,13 +200,21 @@ def build(public_url: str) -> tuple[MCPServer, ASGIApp]:
         fields dropped). Use it to see what trims, engines or body styles a group really contains."""
         def go(eng):
             with Session(eng[0]) as s:
-                q = (select(V.id, V.vin, V.source, V.source_key, V.year, V.make, V.model, V.trim, Location.name,
-                            D.reason, VinCache.raw)
-                     .join(D, D.vehicle_id == V.id).join(Location, Location.id == V.location_id)
-                     .outerjoin(VinCache, VinCache.vin == V.vin).where(key_filter(key)))
-                q = open_discrepancies(q, status)
-                if year is not None:
-                    q = q.where((sql_year(D.nhtsa_year) if key.kind == "decode" else V.year) == year)
+                if key.kind == "trim":
+                    q = (trims._unread().add_columns(V.id, V.vin, V.source, V.source_key, V.year, V.make, V.model,
+                                                     V.trim, Location.name, literal(trims.UNREAD), VinCache.raw)
+                         .join(Location, Location.id == V.location_id)
+                         .where(*trims._group_where(key.make, key.model, key.trim)))
+                    if year is not None:
+                        q = q.where(sql_year(VinCache.model_year) == year)
+                else:
+                    q = (select(V.id, V.vin, V.source, V.source_key, V.year, V.make, V.model, V.trim, Location.name,
+                                D.reason, VinCache.raw)
+                         .join(D, D.vehicle_id == V.id).join(Location, Location.id == V.location_id)
+                         .outerjoin(VinCache, VinCache.vin == V.vin).where(key_filter(key)))
+                    q = open_discrepancies(q, status)
+                    if year is not None:
+                        q = q.where((sql_year(D.nhtsa_year) if key.kind == "decode" else V.year) == year)
                 if yard:
                     q = q.where(V.source == yard)
                 total = s.execute(select(func.count()).select_from(q.subquery())).scalar()
@@ -327,6 +353,15 @@ def build(public_url: str) -> tuple[MCPServer, ASGIApp]:
         return run(ctx, go)
 
     @server.tool()
+    def list_trim_mappings(ctx: Context, nhtsa_make: str | None = None) -> list[dict]:
+        """Trim mappings (NHTSA/yard trim text -> catalogue trims, or noise) with who made them and how many
+        active VIN-matched vehicles each covers."""
+        def go(eng):
+            rows = trims.list_trim_mappings(eng)
+            return [m for m in rows if not nhtsa_make or (m["nhtsaMake"] or "").lower() == nhtsa_make.lower()]
+        return run(ctx, go)
+
+    @server.tool()
     def list_yard_rules(ctx: Context) -> list[dict]:
         """Active yard rules (yard make/model string -> catalogue make/model)."""
         return run(ctx, lambda eng: fixes.list_rules(eng=eng))
@@ -377,6 +412,54 @@ def build(public_url: str) -> tuple[MCPServer, ASGIApp]:
         return run(ctx, lambda eng, who: fixes.remove_mapping(eng, mapping_id, created_by_prefix=oauth.AGENT_PREFIX),
                    write=True)
 
+    def trim_request(make, model, trim, action, catalogue_trims, year_from, year_to) -> trims.TrimMappingRequest:
+        try:
+            return trims.TrimMappingRequest(make=make, model=model, trim=trim, action=action,
+                                            trims=catalogue_trims or [], year_from=year_from, year_to=year_to)
+        except ValueError as exc:
+            raise ToolError(str(exc)) from None
+
+    @server.tool()
+    def preview_trim_mapping(
+            ctx: Context,
+            make: TrimMake, trim: TrimText,
+            action: Annotated[Literal["map", "noise"], Field(description="map to catalogue trims, or noise")],
+            model: Annotated[str | None, Field(description="NHTSA model from the group key; omit for every "
+                                                           "model of the make")] = None,
+            catalogue_trims: Annotated[list[str] | None, Field(description="For map: catalogue trim names, from "
+                                                                           "the group's candidateTrims")] = None,
+            year_from: int | None = None, year_to: int | None = None) -> dict:
+        """What a trim mapping would do, without writing anything: of the VIN-matched vehicles whose trim text
+        it covers, how many end exact (and were before), narrower, unchanged or wider."""
+        req = trim_request(make, model, trim, action, catalogue_trims, year_from, year_to)
+        return run(ctx, lambda eng: trims.preview_trim_mapping_for(eng, req))
+
+    @server.tool()
+    def create_trim_mapping(
+            ctx: Context,
+            make: TrimMake, trim: TrimText,
+            action: Annotated[Literal["map", "noise"], Field(description="map to catalogue trims, or noise")],
+            model: Annotated[str | None, Field(description="NHTSA model from the group key; omit for every "
+                                                           "model of the make")] = None,
+            catalogue_trims: Annotated[list[str] | None, Field(description="For map: catalogue trim names, from "
+                                                                           "the group's candidateTrims")] = None,
+            year_from: int | None = None, year_to: int | None = None) -> dict:
+        """Create a trim mapping and requeue the vehicles it covers; the worker re-matches them within seconds.
+        Returns the new id (for delete_trim_mapping) and the preview it was created under."""
+        req = trim_request(make, model, trim, action, catalogue_trims, year_from, year_to)
+
+        def go(eng, who):
+            preview = trims.preview_trim_mapping_for(eng, req)
+            return {**trims.save_trim_mapping(eng, req, who.created_by), "preview": preview}
+        return run(ctx, go, write=True)
+
+    @server.tool()
+    def delete_trim_mapping(ctx: Context, mapping_id: int) -> dict:
+        """Delete a trim mapping an agent made, and requeue every vehicle it covered."""
+        return run(ctx, lambda eng, who: trims.remove_trim_mapping(eng, mapping_id,
+                                                                   created_by_prefix=oauth.AGENT_PREFIX),
+                   write=True)
+
     def rule_request(source, raw_make, raw_model, make, model) -> fixes.RuleRequest:
         return fixes.RuleRequest(source=source, raw_make=raw_make, raw_model=raw_model, make=make, model=model)
 
@@ -421,6 +504,36 @@ def build(public_url: str) -> tuple[MCPServer, ASGIApp]:
                 s.commit()
             return {"updated": n, "status": IGNORED if ignore else "open"}
         return run(ctx, go, write=True)
+
+    # ── suggestions (filed for review; only a person approves them, in the admin UI) ──────────────────────
+
+    @server.tool()
+    def list_suggestions(
+            ctx: Context,
+            view: Annotated[Literal["pending", "reviewed", "rejected", "stale"], Field(description=(
+                "pending = waiting for review; reviewed = approved or edited; stale = the group emptied first"))]
+            = "pending",
+            kind: suggestions.Kind | None = None) -> dict:
+        """Fix suggestions with their proposal, the preview they were filed under, rationale and review outcome
+        (who, when, the reject reason, or what the user changed before approving), plus counts per view."""
+        return run(ctx, lambda eng: suggestions.list_suggestions(eng, view, kind))
+
+    @server.tool()
+    def suggest_fix(
+            ctx: Context, kind: suggestions.Kind, key: GroupKey,
+            proposal: Annotated[dict, Field(description=(
+                "Exactly the arguments the matching create tool takes, for this group. decode_mapping: make, "
+                "model, series?, year_from?, year_to?, targets [{make, model}]. trim_mapping: make, model?, trim, "
+                "action map|noise, trims [catalogue trim names], year_from?, year_to?. yard_rule: make, model?, "
+                "raw_make, raw_model, source?. ignore_group: {}."))],
+            rationale: Annotated[str, Field(min_length=1, max_length=2000, description=(
+                "Why: the evidence from the group (decodes, catalogue years, candidates) the user will check"))]) -> dict:
+        """File a fix for the user to review instead of making it. Checked like a create (targets must exist in
+        the catalogue, the fix must be for this group's decode / trim text / yard strings) and previewed; refused
+        when the preview shows it would match nothing, when the group already has a suggestion waiting, or when
+        the user rejected this same fix for it before. Writes no mapping and requeues nothing."""
+        return run(ctx, lambda eng, who: suggestions.file_suggestion(
+            eng, kind, key, proposal, rationale, model=who.client_name, filed_by=who.created_by), write=True)
 
     host = public_url.split("://", 1)[-1].split("/", 1)[0]
     security = TransportSecuritySettings(

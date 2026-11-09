@@ -31,7 +31,7 @@ from sqlalchemy.orm import Session
 
 from junkyard_common.db import get_engine
 from junkyard_common.models import MappingDiscrepancy, MappingRule, Vehicle
-from pipeline.resolution_pipeline import geocode_locations, load_mappings, resolve_vehicle
+from pipeline.resolution_pipeline import geocode_locations, load_mappings, load_trim_mappings, resolve_vehicle
 from pipeline.vin_decoder import fetch_into_cache
 
 logger = logging.getLogger("vin_resolver")
@@ -70,13 +70,15 @@ def process_batch(ji_engine, pi_engine) -> dict[str, int]:
             .order_by(MappingRule.scope, MappingRule.priority)
         ).scalars().all()
         mappings = load_mappings(session)
+        trim_mappings = load_trim_mappings(session)
         decoded = fetch_into_cache([v.vin for v in vehicles if v.vin], session)
         for vehicle in vehicles:
             vin = (vehicle.vin or "").strip().upper()
             try:
                 with session.begin_nested():
                     result = resolve_vehicle(vehicle, session, pi_engine, rules,
-                                             decoded=decoded.get(vin), commit=False, mappings=mappings)
+                                             decoded=decoded.get(vin), commit=False, mappings=mappings,
+                                             trim_mappings=trim_mappings)
             except Exception:
                 logger.exception("vehicle %s (%s): resolve failed; marking attempted", vehicle.id, vin or "no vin")
                 vehicle.resolve_attempted_at = time_now()
@@ -101,7 +103,8 @@ def requeue(ji_engine, methods: list[str]) -> int:
             update(Vehicle)
             .where(cond)
             .values(car_id_resolved=False, car_id=None, car_id_method=None, car_id_confidence=None,
-                    car_id_candidates=None, resolve_attempted_at=None)
+                    car_id_candidates=None, car_id_match_steps=None, car_id_trim_unread=None,
+                    resolve_attempted_at=None)
         ).rowcount
         s.commit()
     return n

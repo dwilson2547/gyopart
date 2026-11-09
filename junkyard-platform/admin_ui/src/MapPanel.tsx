@@ -1,24 +1,29 @@
 import { useMemo, useState } from "react";
 import { ApiError, get, post, qs } from "./api.ts";
-import type { GroupDetail, MakeOption, ModelOption, Preview } from "./types.ts";
+import type { GroupDetail, MakeOption, ModelOption, Preview, Suggestion } from "./types.ts";
 import { REASON_LABEL } from "./types.ts";
 import { Combobox } from "./Combobox.tsx";
 import type { Resolved } from "./GroupPanel.tsx";
+import { proposalFor, saveFix } from "./suggestions.ts";
 import { decodeEntities, fmtInt, useLoad, yearSpans } from "./util.tsx";
 
 type Target = { make: string; model: string };
 
 /** Map a decode group to catalogue model(s): pick (suggested chips or the searchable list), preview, confirm.
- *  Everything on the decode side comes from the group; targets can only be picked from the catalogue. */
-export function MapPanel({ d, onResolved }: { d: GroupDetail; onResolved: Resolved }) {
+ *  Everything on the decode side comes from the group; targets can only be picked from the catalogue.
+ *  `from`: tweaking a suggestion, so start from its proposal and save through its approve. */
+export function MapPanel({ d, onResolved, from }: { d: GroupDetail; onResolved: Resolved; from?: Suggestion }) {
   const k = d.key;
+  const init = proposalFor(from, "decode_mapping");
   const noModels = !d.catalogueMake || !d.makeYears;
-  const [otherMake, setOtherMake] = useState(noModels);
-  const [make, setMake] = useState<string | null>(noModels ? null : d.catalogueMake);
-  const [targets, setTargets] = useState<Target[]>([]);
-  const [yearFrom, setYearFrom] = useState<string>(d.yearMin ? String(d.yearMin) : "");
-  const [yearTo, setYearTo] = useState<string>(d.yearMax ? String(d.yearMax) : "");
-  const [anySeries, setAnySeries] = useState(false);
+  const initMake = init?.targets?.[0]?.make ?? (noModels ? null : d.catalogueMake);
+  const [otherMake, setOtherMake] = useState(noModels || initMake !== d.catalogueMake);
+  const [make, setMake] = useState<string | null>(initMake);
+  const [targets, setTargets] = useState<Target[]>(init?.targets ?? []);
+  const year0 = init ? init.year_from : d.yearMin, year1 = init ? init.year_to : d.yearMax;
+  const [yearFrom, setYearFrom] = useState<string>(year0 ? String(year0) : "");
+  const [yearTo, setYearTo] = useState<string>(year1 ? String(year1) : "");
+  const [anySeries, setAnySeries] = useState(!!init && !init.series && !!k.series);
   const [allYears, setAllYears] = useState(false);
   const [preview, setPreview] = useState<{ result: Preview; inputs: string } | null>(null);
   const [error, setError] = useState<{ field: string | null; message: string } | null>(null);
@@ -70,7 +75,7 @@ export function MapPanel({ d, onResolved }: { d: GroupDetail; onResolved: Resolv
   const confirm = async () => {
     setBusy("confirm"); setError(null);
     try {
-      const r = await post<{ created: number; requeued: number }>("/api/mappings", body());
+      const r = await saveFix("/api/mappings", "decode_mapping", body(), preview!.result, from);
       const p = preview!.result;
       onResolved(k, `Mapped ${k.make} ${k.model}: ${fmtInt(r.requeued)} cars re-matching, ${fmtInt(p.wouldMatch)} expected to match.`);
     } catch (e) { fail(e); setBusy(null); }

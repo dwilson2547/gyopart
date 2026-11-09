@@ -11,6 +11,8 @@ Stop conditions raise RunStopped with an exit code for scrape-job-manager:
 """
 from __future__ import annotations
 
+import io
+import mimetypes
 import os
 import random
 import sys
@@ -20,13 +22,14 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Optional
 from urllib.parse import urlparse
 
+import blake3
 import psycopg2
 import requests
 from bootstrap import ensure_singlethreaded_src_path
 
 ensure_singlethreaded_src_path()
 
-from cache_client import ImgCacheClient, WebCacheClient  # noqa: E402
+from cache_client import WebCacheClient  # noqa: E402
 from request_auth_client import RequestAuthClient  # noqa: E402
 from utils.CachedParser import CachedParser  # noqa: E402
 from utils.Configs import Configs  # noqa: E402
@@ -55,7 +58,12 @@ NAV_SETTLE_TIMEOUT_MS = 30_000
 IMAGE_WORKERS = 8  # background image downloads per run
 PROXY_ERRORS = ("ERR_PROXY_CONNECTION_FAILED", "ERR_TUNNEL_CONNECTION_FAILED", "ERR_PROXY_AUTH",
                 "ERR_NO_SUPPORTED_PROXIES", "ERR_MANDATORY_PROXY_CONFIGURATION_FAILED")
-INITIAL_VEHICLE_ESTIMATE_S = 30 * 60  # until this run has timed a vehicle itself
+DISCOVERY_RESERVE_S = 30 * 60  # discovery stops listing with less than this left, so the queue gets worked
+# Vehicles keep starting until this close to the deadline (no average-vehicle estimate): one cut off by
+# the deadline is released and its next run re-reads the fetched pages from webcache, whereas waiting
+# for "time for an average vehicle" left 30-45% of the 3 h window idle where one new vehicle takes
+# 1.5-2 h (Honda 58 min, Mercedes 83 min on 2026-10-15).
+MIN_START_S = 5 * 60
 # One page that times out or answers 5xx (Cloudflare's 520 on a single part) is not the site being down:
 # until 2026-10-24 it stopped the whole run, so runs died at their first flaky page out of thousands and
 # five sites ended up suspended. Retry it after these pauses, then skip it like a 404, as the original
@@ -96,8 +104,11 @@ class ImageQueue:
 
     Pages submit image URLs as they are parsed and the browser moves straight on; 8 workers download
     alongside the crawl. De-duplicated per run, so an image shared by many cars downloads once. A
-    vehicle is written with whatever has finished (saved=true) and the rest as saved=false;
-    flush_updates() later flips the ones that completed after their vehicle was written."""
+    vehicle is written with whatever has finished (saved=uploaded=true) and the rest as saved=false;
+    flush_updates() later flips the ones that completed after their vehicle was written.
+
+    download(url, name) returns the image's BLAKE3 hash when it stored the bytes, True when the object
+    was already in the bucket (hash not re-read), or False on failure."""
 
     def __init__(self, download, workers: int):
         from concurrent.futures import ThreadPoolExecutor
@@ -120,6 +131,14 @@ class ImageQueue:
             self._written_unsaved.add(name)
         return False
 
+    def content_hash(self, name: str) -> Optional[str]:
+        """The hash recorded for a finished download, if this run computed one."""
+        f = self._futures.get(name)
+        if f is not None and f.done() and not f.cancelled() and f.exception() is None:
+            r = f.result()
+            return r if isinstance(r, str) else None
+        return None
+
     def pending(self) -> int:
         return sum(1 for f in self._futures.values() if not f.done())
 
@@ -129,9 +148,14 @@ class ImageQueue:
                    and self._futures[n].exception() is None and self._futures[n].result()]
         finished = [n for n in self._written_unsaved if self._futures[n].done()]
         if done_ok:
+            hashes = [self.content_hash(n) or "" for n in done_ok]
             with conn.cursor() as cur:
-                cur.execute("UPDATE image SET saved = true WHERE manufacturer_id = %s AND name = ANY(%s)",
-                            (mfr_id, done_ok))
+                cur.execute(
+                    "UPDATE image AS i SET saved = true, uploaded = true,"
+                    " content_hash = COALESCE(NULLIF(v.h, ''), i.content_hash)"
+                    " FROM unnest(%s::text[], %s::text[]) AS v(name, h)"
+                    " WHERE i.manufacturer_id = %s AND i.name = v.name",
+                    (done_ok, hashes, mfr_id))
             conn.commit()
         self._written_unsaved.difference_update(finished)
         return len(done_ok)
@@ -251,7 +275,13 @@ class UpdaterV2:
         self.stats = RunStats()
 
         self.web_cache = WebCacheClient(os.environ["WEBCACHE_URL"])
-        self.img_cache = ImgCacheClient(os.environ["IMGCACHE_URL"])
+        # Images go straight to the part-images bucket (AIStor), the permanent, backed-up store; imgcache
+        # is not in the image path (design-v2.md §3.8b).
+        from minio import Minio
+        self.bucket = Minio(os.environ["PART_IMAGES_ENDPOINT"], access_key=os.environ["PART_IMAGES_ACCESS_KEY"],
+                            secret_key=os.environ["PART_IMAGES_SECRET_KEY"],
+                            secure=os.environ.get("PART_IMAGES_SECURE", "false").lower() == "true")
+        self.bucket_name = os.environ.get("PART_IMAGES_BUCKET", "part-images")
         self.request_auth = RequestAuthClient(os.environ["REQUEST_AUTH_URL"])
         self.parser = CachedParser(self.base_url)
         self._pw = None
@@ -262,7 +292,6 @@ class UpdaterV2:
         self._page: "Page | None" = None
         self._page_navigations = 0
         self._page_crashes = 0
-        self._vehicle_seconds: list[float] = []
         self._failed_fetches_in_row = 0
 
     # ── session ────────────────────────────────────────────────────────────────────────────────
@@ -506,8 +535,10 @@ class UpdaterV2:
         connections refused or dropped (in the first parallel run, 2,448 of 10,203 images were lost to a
         local imgcache port-forward restarting under load). Anything else fails straight away."""
         import httpx
+        import urllib3
         transient = (requests.exceptions.ProxyError, requests.exceptions.ConnectionError,
-                     httpx.ConnectError, httpx.RemoteProtocolError, httpx.ReadError, ConnectionError)
+                     httpx.ConnectError, httpx.RemoteProtocolError, httpx.ReadError, ConnectionError,
+                     urllib3.exceptions.MaxRetryError, urllib3.exceptions.ProtocolError)
         for attempt in range(1, attempts + 1):
             try:
                 return fn()
@@ -538,16 +569,37 @@ class UpdaterV2:
             permit.set_status(resp.status_code)
         return resp
 
-    def save_image(self, url: str, name: str) -> bool:
+    def _stored_hash(self, key: str):
+        """None if the object isn't in the bucket; else its BLAKE3 hash from the object metadata, or True for
+        objects stored without one (the original scraper's uploads)."""
+        from minio.error import S3Error
         try:
-            if self._with_retries("imgcache lookup", lambda: self.img_cache.lookup(url)):
-                return True
+            st = self.bucket.stat_object(self.bucket_name, key)
+        except S3Error as ex:
+            if ex.code in ("NoSuchKey", "NoSuchObject", "NotFound"):
+                return None
+            raise
+        meta = {k.lower(): v for k, v in (st.metadata or {}).items()}
+        return meta.get("x-amz-meta-blake3") or True
+
+    def save_image(self, url: str, name: str):
+        """Store one image in the part-images bucket at the key its image row's bucket_path names.
+        Returns its BLAKE3 hash (also when it was already there and stored with one, e.g. by an earlier run cut off
+        before its vehicle was written), True if it was already there without a hash, False on failure."""
+        key = f"{self.config_name}/images/{name}"
+        try:
+            stored = self._with_retries("bucket stat", lambda: self._stored_hash(key))
+            if stored is not None:
+                return stored
             proxy = vpn.proxy_url()
             proxies = {"http": proxy, "https": proxy} if proxy else None
             content = self._with_retries("image download", lambda: self._fetch_image(url, proxies))
-            self._with_retries("imgcache store", lambda: self.img_cache.store(
-                url=url, file_bytes=content, client_name=f"parts-direct-{self.config_name}", filename=name))
-            return True
+            digest = blake3.blake3(content).hexdigest()
+            ctype = mimetypes.guess_type(name)[0] or "application/octet-stream"
+            self._with_retries("bucket put", lambda: self.bucket.put_object(
+                self.bucket_name, key, io.BytesIO(content), len(content), content_type=ctype,
+                metadata={"blake3": digest}))
+            return digest
         except Exception as ex:  # noqa: BLE001 — an image failure never fails the vehicle
             print(f"image failed {url}: {ex}")
             return False
@@ -646,7 +698,7 @@ class UpdaterV2:
         print(f"discovery: listing {self.config_name} vehicles ({'forced' if self.discovery == 'force' else 'due'})",
               flush=True)
         out_of_time = lambda: bool(self.deadline) and \
-            datetime.now(timezone.utc).replace(tzinfo=None) + _seconds(INITIAL_VEHICLE_ESTIMATE_S) > self.deadline
+            datetime.now(timezone.utc).replace(tzinfo=None) + _seconds(DISCOVERY_RESERVE_S) > self.deadline
         try:
             Discovery(self, conn, mfr_id, out_of_time).run()
         except (SiteUnavailableError, InternetDownError, vpn.VpnUnavailable) as ex:
@@ -672,8 +724,7 @@ class UpdaterV2:
             return False
         if not self.deadline:
             return True
-        est = (sum(self._vehicle_seconds) / len(self._vehicle_seconds)) if self._vehicle_seconds else INITIAL_VEHICLE_ESTIMATE_S
-        if datetime.now(timezone.utc).replace(tzinfo=None) + _seconds(est) > self.deadline:
+        if datetime.now(timezone.utc).replace(tzinfo=None) + _seconds(MIN_START_S) > self.deadline:
             self.stats.stop_reason = "deadline"
             return False
         return True
@@ -748,11 +799,11 @@ class UpdaterV2:
                     self.stats.stop_reason = "queue_empty"
                     break
                 print(f"vehicle {t.id}: {t.year} {t.make} {t.model} {t.trim} {t.engine}")
-                t0 = time.monotonic()
                 try:
                     scraped = self.crawl(t)
                     for name, meta in scraped.images.items():
-                        meta["saved"] = self.images.status(name)
+                        meta["saved"] = meta["uploaded"] = self.images.status(name)
+                        meta["content_hash"] = self.images.content_hash(name)
                     ws = write_vehicle(conn, self.config_name, t, scraped)
                     conn.commit()
                     late = self.images.flush_updates(conn, mfr_id)
@@ -822,7 +873,6 @@ class UpdaterV2:
                     print(f"  failed: {type(ex).__name__}: {ex}")
                     if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
                         raise RunStopped(65, f"{consecutive_failures} vehicles failed in a row; last: {ex}")
-                self._vehicle_seconds.append(time.monotonic() - t0)
                 pause = random.uniform(*self.spacing_s)
                 time.sleep(pause)
             # Let queued images finish (within the deadline) and record them.

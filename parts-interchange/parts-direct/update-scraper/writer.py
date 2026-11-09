@@ -90,7 +90,7 @@ class ScrapedVehicle:
     diagrams: list[dict]                       # entries like engine["diagrams"]: {"diagrams": [diag, ...]}
     part_numbers: list[str]                    # engine["parts"]
     parts: dict[str, dict]                     # part_number -> parsed part page (parts.json entry)
-    images: dict[str, dict] = field(default_factory=dict)  # name -> {"url", "alt", "saved"}
+    images: dict[str, dict] = field(default_factory=dict)  # name -> {"url", "alt", "saved", "uploaded", "content_hash"}
 
 
 @dataclass
@@ -180,17 +180,20 @@ def write_vehicle(conn, config_name: str, t: Target, v: ScrapedVehicle) -> Write
         if v.images:
             rows = [
                 (name, f"{config_name}/images/{name}", meta.get("url"), meta.get("alt"),
-                 bool(meta.get("saved", False)), mfr)
+                 bool(meta.get("saved", False)), bool(meta.get("uploaded", False)), meta.get("content_hash"), mfr)
                 for name, meta in v.images.items()
             ]
             got = execute_values(
                 cur,
                 """
-                INSERT INTO image (name, bucket_path, url, alt_text, saved, manufacturer_id) VALUES %s
+                INSERT INTO image (name, bucket_path, url, alt_text, saved, uploaded, content_hash, manufacturer_id)
+                VALUES %s
                 ON CONFLICT ON CONSTRAINT uq_image_manufacturer_name DO UPDATE SET
                   url = COALESCE(EXCLUDED.url, image.url),
                   alt_text = COALESCE(EXCLUDED.alt_text, image.alt_text),
-                  saved = image.saved OR EXCLUDED.saved
+                  saved = image.saved OR EXCLUDED.saved,
+                  uploaded = image.uploaded IS TRUE OR EXCLUDED.uploaded,
+                  content_hash = COALESCE(EXCLUDED.content_hash, image.content_hash)
                 RETURNING name, id
                 """,
                 rows, fetch=True,

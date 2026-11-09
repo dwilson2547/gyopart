@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Site:     U-Pull and Save (https://www.u-pullandsave.com)
 # Platform: Nuxt.js SPA, unauthenticated public REST API
-# Strategy: year/make/model matrix → search all combos → detail fetch for new vehicleIDs only
+# Strategy: year/make/model lists → one search per (make, model) name → detail fetch for new vehicleIDs only
 # Dedup key: VIN (stored as source_key); extras["vehicle_id"] used for deactivation
 # Source identifier: "u_pull_n_save"
 
@@ -22,7 +22,7 @@ from request_auth_client import RequestAuthClient
 
 # scrape_contract.py lives one level up in the repo and next to scraper.py in the image.
 sys.path.append(str(Path(__file__).resolve().parent.parent))
-from scrape_contract import Broken, run  # noqa: E402
+from scrape_contract import Broken, run, with_retries  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -38,6 +38,13 @@ WEBCACHE_URL            = os.environ.get("WEBCACHE_URL", "http://webcache.scrape
 WEBCACHE_TIMEOUT        = float(os.environ.get("WEBCACHE_TIMEOUT", "30.0"))
 REQUEST_AUTH_SERVER_URL = os.environ.get("REQUEST_AUTH_SERVER_URL", "request-auth-server.scrapestack.local:9000")
 CACHE_MAX_AGE_SECONDS   = int(os.environ.get("CACHE_MAX_AGE_SECONDS", str(23 * 3600)))
+# The year/make/model lists are a parts-catalogue matrix (~500 combos a year). The search's year
+# only has to be one the catalogue lists that model name under: it returns every car of that make
+# and model in the yard, whatever its model year (checked 2026-11-08: Impala for 1985..2020 all
+# give the same 45 cars, 2002-2013). So each (make, model) name is searched once, at the first
+# year it appears. The lists and empty results are reused for a week; names with stock are
+# re-searched daily. A car arriving under a name that was empty can take up to a week to show.
+WEEKLY_MAX_AGE_SECONDS  = int(os.environ.get("WEEKLY_MAX_AGE_SECONDS", str(7 * 24 * 3600)))
 
 HEADERS = {
     "User-Agent": (
@@ -66,20 +73,32 @@ def _fetch_json(
     web_cache: WebCacheClient,
     request_auth: RequestAuthClient,
     url: str,
+    max_age: int = CACHE_MAX_AGE_SECONDS,
+    reuse_empty: bool = False,
 ) -> list | dict:
-    entry = web_cache.get(url, max_age=CACHE_MAX_AGE_SECONDS)
+    import json
+
+    entry = web_cache.get(url, max_age=max_age)
     if entry:
-        import json
         return json.loads(entry["content"])
+    if reuse_empty:
+        entry = web_cache.get(url, max_age=WEEKLY_MAX_AGE_SECONDS)
+        if entry and json.loads(entry["content"]) == []:
+            return []
 
     logger.debug("GET %s", url)
-    with request_auth.acquire(DOMAIN) as permit:
-        resp = http.get(url, headers=HEADERS, timeout=60)
-        permit.set_status(resp.status_code)
-        if resp.status_code == 429:
-            logger.error("429 received — aborting run")
-            raise Broken(f"429 rate limited by {SOURCE}")
-        resp.raise_for_status()
+
+    def get():
+        with request_auth.acquire(DOMAIN) as permit:
+            resp = http.get(url, headers=HEADERS, timeout=60)
+            permit.set_status(resp.status_code)
+            return resp
+
+    resp = with_retries(get, url)
+    if resp.status_code == 429:
+        logger.error("429 received — aborting run")
+        raise Broken(f"429 rate limited by {SOURCE}")
+    resp.raise_for_status()
 
     web_cache.store(url, resp.text, CLIENT_NAME)
     return resp.json()
@@ -121,48 +140,47 @@ def _get_known_vehicle_ids(db: Session) -> dict[int, str]:
     return result
 
 
-def _fetch_recent_ids(
-    http: requests.Session,
-    web_cache: WebCacheClient,
-    request_auth: RequestAuthClient,
-) -> set[int]:
-    data = _fetch_json(http, web_cache, request_auth, f"{API_BASE}/api/vehicles/recent/{STORE_ID}")
-    return {int(r["vehicleID"]) for r in data if r.get("vehicleID")}
-
-
 def _collect_all_vehicle_ids(
     http: requests.Session,
     web_cache: WebCacheClient,
     request_auth: RequestAuthClient,
 ) -> set[int]:
-    """Build year/make/model matrix and search all combos. Returns all vehicleIDs in yard."""
+    """Search each (make, model) name the catalogue lists once. Returns all vehicleIDs in yard."""
     year_max = _utcnow().year + 2
     vehicle_ids: set[int] = set()
     total_combos = 0
+    searched: set[tuple[str, str]] = set()
 
     for year in range(YEAR_MIN, year_max):
-        makes_data = _fetch_json(http, web_cache, request_auth, f"{API_BASE}/api/vehicles/make/{year}")
+        makes_data = _fetch_json(http, web_cache, request_auth, f"{API_BASE}/api/vehicles/make/{year}",
+                                 max_age=WEEKLY_MAX_AGE_SECONDS)
         for make_obj in makes_data:
             make = (make_obj.get("vehicleMake") or "").strip()
             if not make:
                 continue
-            models_data = _fetch_json(http, web_cache, request_auth, f"{API_BASE}/api/vehicles/model/{year}/{make}")
+            models_data = _fetch_json(http, web_cache, request_auth, f"{API_BASE}/api/vehicles/model/{year}/{make}",
+                                      max_age=WEEKLY_MAX_AGE_SECONDS)
             for model_obj in models_data:
                 model = (model_obj.get("trueModel") or "").strip()
                 if not model:
                     continue
                 total_combos += 1
+                key = (make.lower(), model.lower())
+                if key in searched:
+                    continue
+                searched.add(key)
                 url = (
                     f"{API_BASE}/api/vehicles/search/"
                     f"?store={STORE_ID}&year={year}&make={make}&model={model}"
                 )
-                results = _fetch_json(http, web_cache, request_auth, url)
+                results = _fetch_json(http, web_cache, request_auth, url, reuse_empty=True)
                 for r in results:
                     vid = r.get("vehicleID")
                     if vid:
                         vehicle_ids.add(int(vid))
 
-    logger.info("Matrix: %d combos → %d unique vehicleIDs", total_combos, len(vehicle_ids))
+    logger.info("Matrix: %d combos, %d searched (one per make/model) → %d unique vehicleIDs",
+                total_combos, len(searched), len(vehicle_ids))
     return vehicle_ids
 
 
@@ -293,25 +311,7 @@ def main() -> dict:
         with WebCacheClient(WEBCACHE_URL, timeout=WEBCACHE_TIMEOUT) as web_cache:
             http = requests.Session()
 
-            # Fast path: if all recent vehicleIDs are already known, skip full crawl
-            recent_ids = _fetch_recent_ids(http, web_cache, request_auth)
-            if recent_ids and recent_ids.issubset(known_vehicle_ids):
-                logger.info(
-                    "All %d recent vehicleIDs already known — skipping full crawl",
-                    len(recent_ids),
-                )
-                with Session(engine) as db:
-                    run = db.get(ScrapeRun, run_id)
-                    run.completed_at = _utcnow()
-                    run.total_in_feed = len(known_vehicle_ids)
-                    run.new_vehicles = 0
-                    run.updated_vehicles = 0
-                    run.removed_vehicles = 0
-                    run.success = True
-                    db.commit()
-                return {"items": len(known_vehicle_ids), "new": 0, "updated": 0, "removed": 0}
-
-            # Full crawl: collect all vehicleIDs across year/make/model matrix
+            # Always the full crawl: only it sees which cars have left the yard.
             current_vehicle_ids = _collect_all_vehicle_ids(http, web_cache, request_auth)
             if not current_vehicle_ids:
                 raise Broken("0 vehicleIDs across the year/make/model matrix — possible API change")

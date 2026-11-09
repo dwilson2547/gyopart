@@ -150,7 +150,8 @@ def test_full_flow_tools_and_attribution(http):
     assert {"discrepancy_overview", "list_discrepancy_groups", "get_discrepancy_group", "list_group_vehicles",
             "get_vehicle", "get_vin_decode", "catalogue_cars", "preview_mapping", "create_mapping",
             "create_yard_rule", "set_group_ignored", "delete_mapping"} <= names
-    assert not names & {"manual_match", "rescrape"}
+    assert {"list_suggestions", "suggest_fix"} <= names
+    assert not names & {"manual_match", "rescrape", "approve_suggestion"}   # approval is the user's, in the UI
     cars = call(http, tok["access_token"], "catalogue_cars", make="mercedes-benz", engine="V6")
     assert cars["total"] == 2 and {c["trim"] for c in cars["cars"]} == {"Base", "Sport"}
     models = call(http, tok["access_token"], "catalogue_models", make="Mercedes-Benz", year_from=2005, year_to=2005)

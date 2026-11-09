@@ -1,4 +1,4 @@
-dwilson-parts-interchange-common
+dwilson-parts-interchange-common>=0.4.0  # content_hash column (alembic 0003)
 fastapi>=0.111
 uvicorn[standard]>=0.29
 sqlalchemy>=2.0,<2.1  # 2.1 defaults postgresql:// to psycopg 3; only psycopg2 is installed

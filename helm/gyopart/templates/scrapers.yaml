@@ -37,6 +37,15 @@ spec:
       valueFrom: {secretKeyRef: {name: {{ $.Values.postgres.partsSecret }}, key: PARTS_PASSWORD}}
     - name: PARTS_INTERCHANGE_DATABASE_URL
       value: "postgresql://$(PARTS_USER):$(PARTS_PASSWORD)@{{ $.Values.postgres.host }}:5432/parts_interchange"
+    {{- with $s.partImages }}
+    # Images go to the part-images bucket on AIStor (design-v2.md §3.8b).
+    - {name: PART_IMAGES_ENDPOINT, value: {{ .endpoint | quote }}}
+    - {name: PART_IMAGES_BUCKET, value: {{ .bucket | quote }}}
+    - name: PART_IMAGES_ACCESS_KEY
+      valueFrom: {secretKeyRef: {name: {{ .secret }}, key: ACCESS_KEY}}
+    - name: PART_IMAGES_SECRET_KEY
+      valueFrom: {secretKeyRef: {name: {{ .secret }}, key: SECRET_KEY}}
+    {{- end }}
     {{- else }}
     - name: JUNKYARD_USER
       valueFrom: {secretKeyRef: {name: {{ $.Values.postgres.junkyardSecret }}, key: JUNKYARD_USER}}

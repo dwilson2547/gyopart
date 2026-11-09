@@ -29,11 +29,13 @@ docker compose build admin-api && docker compose push admin-api
 docker compose build && docker compose push
 ```
 
-Four images on Docker Hub:
-- `dwilson2547/gyopart-api:latest`
-- `dwilson2547/gyopart-ui:latest`
-- `dwilson2547/inventory-api:latest`
-- `dwilson2547/admin-api:latest`
+Images on Docker Hub are versioned, not `:latest`: the chart pins them in `helm/gyopart/values.yaml` (`images:`).
+- `gyopart-api`, `gyopart-ui`, `inventory-api`: release versions (`3.0.x`, git tag `v3.0.x`), built from a clean
+  checkout of the pushed commit with `GYOPART_TAG=<v> docker compose build <svc> && GYOPART_TAG=<v> docker compose push <svc>`.
+- `admin-api`, `vin-resolver`: `sha-<commit>` tags.
+
+A new version goes into `values-dev.yaml` (`images:` override) first and moves to `values.yaml` on `main` once
+proven in dev. Pushing `:latest` changes nothing that's deployed.
 
 **Scraper images** (`scraper-*` services) are the exception to "restart after push": they are pinned
 by digest in `helm/gyopart/values-dev.yaml` and `values-prod.yaml`. After pushing, run

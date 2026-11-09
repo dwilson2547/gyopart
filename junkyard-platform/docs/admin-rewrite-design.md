@@ -236,7 +236,7 @@ can start. Same pattern as nodewright and webdoc (`apps/webdoc/api/webdoc/oauth.
    the dev data (a create → re-match → delete round trip included); the user connected Claude Code through the browser
    sign-in and created the E-Class mapping with it (157 cars matched, 28 exact, the rest Base vs 4Matic® within one model).
    Prod: https://gyopart-admin.danwils.com/mcp, prod DB at 0006, admin-api sha-59f05d45036c (2026-10-16). Later (user): a
-   richer VIN mapper (trim/engine-level mappings), which will lean on this.
+   richer VIN mapper (trim/engine-level mappings), which will lean on this: designed 2026-10-27 in [matching-v2-design.md](matching-v2-design.md), with the GPU fix-suggestion agent.
 
 ## 4. Decisions (user, 2026-10-15)
 

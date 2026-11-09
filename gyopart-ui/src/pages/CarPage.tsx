@@ -1,25 +1,37 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router'
-import { ChevronLeft, ChevronRight, FolderTree, ImageOff, LayoutGrid, PackageSearch, X } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight, FolderTree, ImageOff, LayoutGrid, PackageSearch, X } from 'lucide-react'
 import { api } from '../api'
 import { CatalogueTree } from '../components/CatalogueTree'
 import { Empty, ErrorLine, Loading } from '../components/States'
 import { ZoomImage } from '../components/ZoomImage'
 import { useAsync } from '../lib/useAsync'
+import { useMediaQuery } from '../lib/useMediaQuery'
 import { useGarage, vehicleSubtitle, vehicleTitle } from '../state/garageContext'
+import { useVehiclePicker } from '../state/vehiclePickerContext'
 import type { CarDiagram, DiagramPart, PartHit, TreeCategory } from '../types'
 
 const num = (v: string | null) => (v && /^\d+$/.test(v) ? Number(v) : null)
 
 /** Workflow 2: browse a car's catalogue — tree on the left (always visible), diagrams on the right. */
 export function CarPage() {
+  // Keyed by car, so switching cars starts clean (filter text, open categories) without a reload.
+  const { carId } = useParams()
+  return <CarCatalogue key={carId} />
+}
+
+function CarCatalogue() {
   const carId = Number(useParams().carId)
+  const picker = useVehiclePicker()
   const [params, setParams] = useSearchParams()
   const subId = num(params.get('sub'))
   const diagramId = num(params.get('diagram'))
   const partId = num(params.get('part'))
   const query = params.get('q') ?? ''
   const [drawer, setDrawer] = useState(false)
+  // Tailwind's lg breakpoint. Only one tree may be mounted: each syncs its filter text into ?q=, so a
+  // hidden second copy would keep writing its stale text back (the mobile search loop).
+  const wide = useMediaQuery('(min-width: 1024px)')
 
   const { vehicles } = useGarage()
   const inGarage = vehicles.find(v => v.car_id === carId) ?? null
@@ -62,11 +74,13 @@ export function CarPage() {
   return (
     <div className="flex h-full">
       {/* Tree: a fixed column on wide screens, a drawer on narrow ones. */}
-      <aside className="hidden w-80 shrink-0 border-r border-line bg-surface lg:block" aria-label="Catalogue">
-        {treePanel}
-      </aside>
-      {drawer && (
-        <div className="fixed inset-0 z-40 lg:hidden">
+      {wide && (
+        <aside className="w-80 shrink-0 border-r border-line bg-surface" aria-label="Catalogue">
+          {treePanel}
+        </aside>
+      )}
+      {drawer && !wide && (
+        <div className="fixed inset-0 z-40">
           <div className="absolute inset-0 bg-black/50" onClick={() => setDrawer(false)} />
           <aside className="absolute inset-y-0 left-0 flex w-full max-w-sm flex-col bg-surface shadow-xl" aria-label="Catalogue">
             <div className="flex items-center justify-between border-b border-line py-1 pr-2 pl-4 font-semibold">
@@ -86,10 +100,14 @@ export function CarPage() {
             className="inline-flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1 text-sm hover:bg-hover lg:hidden">
             <FolderTree className="size-4" /> Categories
           </button>
-          <div className="min-w-0">
-            <h1 className="truncate font-semibold">{car ? vehicleTitle(car) : 'Vehicle'}</h1>
-            {car && <p className="truncate text-xs text-muted">{vehicleSubtitle(car)}</p>}
-          </div>
+          <button onClick={picker.open} aria-label="Change vehicle" title="Change vehicle"
+            className="-mx-2 flex min-w-0 items-center gap-1.5 rounded-lg px-2 py-0.5 text-left hover:bg-hover">
+            <span className="min-w-0">
+              <h1 className="truncate font-semibold">{car ? vehicleTitle(car) : 'Vehicle'}</h1>
+              {car && <p className="truncate text-xs text-muted">{vehicleSubtitle(car)}</p>}
+            </span>
+            <ChevronDown className="size-4 shrink-0 text-muted" />
+          </button>
           {crumbs && (
             <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1 text-sm text-muted sm:ml-auto">
               <span className="truncate">{crumbs.cat.label}</span>
@@ -108,9 +126,12 @@ export function CarPage() {
             <Empty icon={ImageOff} title="No diagrams for this vehicle yet."
               hint="The catalogue is still being scraped for some makes and years — check back later." />
           ) : !subId ? (
-            <Empty icon={FolderTree} title="Pick a category"
-              hint={<>Browse the categories{' '}<span className="lg:hidden">(the Categories button)</span>
-                <span className="hidden lg:inline">on the left</span>, or filter by part name or number.</>} />
+            <>
+              <Blurb />
+              <Empty icon={FolderTree} title="Pick a category"
+                hint={<>Browse the categories{' '}<span className="lg:hidden">(the Categories button)</span>
+                  <span className="hidden lg:inline">on the left</span>, or filter by part name or number.</>} />
+            </>
           ) : diagramId ? (
             <DiagramView carId={carId} subId={subId} diagramId={diagramId} partId={partId}
               onDiagram={id => set({ diagram: id, part: null })} onPart={id => navigateToPart(id, diagramId)} />
@@ -120,6 +141,17 @@ export function CarPage() {
           )}
         </div>
       </section>
+    </div>
+  )
+}
+
+/** What the name stands for, with the letters that spell it picked out. */
+function Blurb() {
+  const a = (t: string) => <span className="text-brand">{t}</span>
+  return (
+    <div className="mx-auto mt-6 max-w-md text-center">
+      <p className="text-2xl font-semibold tracking-tight">{a('G')}et {a('Y')}our {a('O')}wn {a('Part')}</p>
+      <p className="mt-1 text-sm text-muted">Part compatibility search and recycled auto parts inventory lookup</p>
     </div>
   )
 }
