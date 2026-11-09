@@ -230,7 +230,7 @@ scraping:
         midway-upull: {pool: junkyard-inventory}
     u-pull-n-save:
       image: dwilson2547/gyopart-scraper-u-pull-n-save@sha256:3f313479a51f90ef9477fc25503bb14e89d4f54442b2e3fb268bb1cf71b25667
-      timeout: 5h  # ~2.3k requests at prod request-auth's 5 s/request (dev 1 s: 79 min); 3h ran out 2026-11-08
+      timeout: 3h  # ~2.3k requests at 2 s each (request-auth domain override, 2026-11-08): ~80 min cold
       jobs:
         u-pull-n-save: {pool: junkyard-inventory}
     wegotused:
