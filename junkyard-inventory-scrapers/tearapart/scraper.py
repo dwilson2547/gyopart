@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 import os
 import re
+import time
 from datetime import datetime, timezone
 
 import requests
@@ -48,6 +49,13 @@ HEADERS = {
 }
 
 _NONCE_RE = re.compile(r'"sif_ajax_nonce"\s*:\s*"([^"]+)"')
+
+# admin-ajax answers a rejected nonce with HTTP 200 and this plain-text body (not JSON).
+_NONCE_REJECTED_BODY = "test failed!"
+
+
+class NonceRejected(Exception):
+    """The site refused the nonce; a freshly fetched one should work."""
 
 _STORE_DEFS = {
     "SALT LAKE CITY": {
@@ -91,11 +99,16 @@ def _parse_arrival_date(raw: str | None) -> datetime | None:
 
 
 def _fetch_nonce(http: requests.Session, request_auth: RequestAuthClient) -> str:
-    """Always fetches fresh — nonce valid ~12 hours, don't cache."""
-    logger.info("Fetching nonce from %s", INVENTORY_PAGE_URL)
+    """Always fetches fresh — nonce valid ~12 hours, don't cache.
+
+    /inventory/ sits behind Cloudflare and a server page cache (both report HIT), which can hand
+    out a copy whose nonce has expired. A unique query string misses both caches.
+    """
+    url = f"{INVENTORY_PAGE_URL}?_={time.time_ns()}"
+    logger.info("Fetching nonce from %s", url)
     with request_auth.acquire(DOMAIN) as permit:
         resp = http.get(
-            INVENTORY_PAGE_URL,
+            url,
             headers={**HEADERS, "Accept": "text/html,application/xhtml+xml,*/*"},
             timeout=60,
         )
@@ -145,7 +158,16 @@ def _fetch_store_inventory(
             raise Broken(f"429 rate limited by {SOURCE}")
         resp.raise_for_status()
 
-    data = resp.json()
+    if resp.text.strip() == _NONCE_REJECTED_BODY:
+        raise NonceRejected(f"nonce rejected for {store_key}")
+    try:
+        data = resp.json()
+    except ValueError:
+        logger.error(
+            "Non-JSON response for %s: status=%s content-type=%s body=%r",
+            store_key, resp.status_code, resp.headers.get("content-type"), resp.text[:300],
+        )
+        raise Broken(f"non-JSON response from sif_search_products for {store_key}: {resp.text[:100]!r}")
     if not data.get("success"):
         raise RuntimeError(f"sif_search_products failed for {store_key}: {data}")
 
@@ -309,7 +331,15 @@ def main() -> dict:
             skipped = 0
             for store_key, defn in _STORE_DEFS.items():
                 location_id = location_ids[store_key]
-                records = _fetch_store_inventory(http, web_cache, request_auth, store_key, nonce)
+                try:
+                    records = _fetch_store_inventory(http, web_cache, request_auth, store_key, nonce)
+                except NonceRejected:
+                    logger.warning("Nonce rejected for %s — fetching a fresh one and retrying", store_key)
+                    nonce = _fetch_nonce(http, request_auth)
+                    try:
+                        records = _fetch_store_inventory(http, web_cache, request_auth, store_key, nonce)
+                    except NonceRejected as exc:
+                        raise Broken(f"{exc} twice, even with a fresh nonce") from exc
                 logger.info("  %s: %d records", store_key, len(records))
                 for record in records:
                     parsed = _parse_record(record, location_id)
