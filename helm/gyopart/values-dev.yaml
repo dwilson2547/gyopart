@@ -177,7 +177,7 @@ scraping:
       jobs:
         fenix-upull: {pool: junkyard-inventory, suspend: true}
     tear-a-part:
-      image: dwilson2547/gyopart-scraper-tear-a-part@sha256:99f067199e2f8a8d10d3f69b762840a964093b07c01a8bf75ab94da7d1197a05
+      image: dwilson2547/gyopart-scraper-tear-a-part@sha256:c42f69ef7bf20f98f2a9c57b98ad306f2b21b66ea7646996c44a874fcc353544
       timeout: 1h
       jobs:
         tear-a-part: {pool: junkyard-inventory, suspend: true}
